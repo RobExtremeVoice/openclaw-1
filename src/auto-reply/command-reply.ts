@@ -230,7 +230,7 @@ export async function runCommandReply(
           `Claude JSON raw: ${JSON.stringify(parsed.parsed, null, 2)}`,
         );
       }
-      if (parsed?.text) {
+      if (typeof parsed?.text === "string") {
         logVerbose(
           `Claude JSON parsed -> ${parsed.text.slice(0, 120)}${parsed.text.length > 120 ? "…" : ""}`,
         );
@@ -259,8 +259,11 @@ export async function runCommandReply(
       console.error(
         `Command auto-reply exited with code ${code ?? "unknown"} (signal: ${signal ?? "none"})`,
       );
+      // Include any partial output or stderr in error message
+      const partialOut = trimmed ? `\n\nOutput: ${trimmed.slice(0, 500)}${trimmed.length > 500 ? "..." : ""}` : "";
+      const errorText = `⚠️ Command exited with code ${code ?? "unknown"}${signal ? ` (${signal})` : ""}${partialOut}`;
       return {
-        payload: undefined,
+        payload: { text: errorText },
         meta: {
           durationMs: Date.now() - started,
           queuedMs,
@@ -278,8 +281,9 @@ export async function runCommandReply(
       console.error(
         `Command auto-reply process killed before completion (exit code ${code ?? "unknown"})`,
       );
+      const errorText = `⚠️ Command was killed before completion (exit code ${code ?? "unknown"})`;
       return {
-        payload: undefined,
+        payload: { text: errorText },
         meta: {
           durationMs: Date.now() - started,
           queuedMs,
@@ -379,8 +383,11 @@ export async function runCommandReply(
       };
     }
     logError(`Command auto-reply failed after ${elapsed}ms: ${String(err)}`);
+    // Send error message to user so they know the command failed
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errorText = `⚠️ Command failed: ${errMsg}`;
     return {
-      payload: undefined,
+      payload: { text: errorText },
       meta: {
         durationMs: elapsed,
         queuedMs,
