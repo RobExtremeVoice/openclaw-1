@@ -100,6 +100,9 @@ export async function monitorTwilio(
   }
 }
 
+// Track all seen message SIDs to avoid re-processing
+const seenMessageSids = new Set<string>();
+
 async function handleMessages(
   messages: ListedMessage[],
   client: ReturnType<typeof createClient>,
@@ -109,6 +112,14 @@ async function handleMessages(
 ) {
   for (const m of messages) {
     if (!m.sid) continue;
+    // Skip messages we've already seen/logged
+    if (seenMessageSids.has(m.sid)) continue;
+    seenMessageSids.add(m.sid);
+    // Limit set size to prevent memory leak
+    if (seenMessageSids.size > 1000) {
+      const oldestSids = Array.from(seenMessageSids).slice(0, 500);
+      oldestSids.forEach((sid) => seenMessageSids.delete(sid));
+    }
     if (lastSeenSid && m.sid === lastSeenSid) break; // stop at previously seen
     logDebug(`[${m.sid}] ${m.from ?? "?"} -> ${m.to ?? "?"}: ${m.body ?? ""}`);
     if (m.direction !== "inbound") continue;
