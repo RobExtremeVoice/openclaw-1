@@ -43,6 +43,10 @@ export type WebConfig = {
   reconnect?: WebReconnectConfig;
 };
 
+export type TelegramConfig = {
+  allowFrom?: string[]; // @username or user IDs
+};
+
 export type GroupChatConfig = {
   requireMention?: boolean;
   mentionPatterns?: string[];
@@ -86,6 +90,7 @@ export type WarelayConfig = {
     };
   };
   web?: WebConfig;
+  telegram?: TelegramConfig;
 };
 
 // New branding path (preferred)
@@ -231,6 +236,11 @@ const WarelaySchema = z.object({
           maxAttempts: z.number().int().min(0).optional(),
         })
         .optional(),
+    })
+    .optional(),
+  telegram: z
+    .object({
+      allowFrom: z.array(z.string()).optional(),
     })
     .optional(),
 });

@@ -6,7 +6,7 @@ import { statusCommand } from "../commands/status.js";
 import { webhookCommand } from "../commands/webhook.js";
 import { loadConfig } from "../config/config.js";
 import { ensureTwilioEnv } from "../env.js";
-import { danger, info, setVerbose, setYes } from "../globals.js";
+import { danger, info, setVerbose, setYes, success } from "../globals.js";
 import { getResolvedLoggerSettings } from "../logging.js";
 import {
   loginWeb,
@@ -18,6 +18,12 @@ import {
   type WebMonitorTuning,
 } from "../provider-web.js";
 import { defaultRuntime } from "../runtime.js";
+import {
+  clearSession,
+  loginTelegram,
+  monitorTelegramProvider,
+  telegramAuthExists,
+} from "../telegram/index.js";
 import { runTwilioHeartbeatOnce } from "../twilio/heartbeat.js";
 import type { Provider } from "../utils.js";
 import { VERSION } from "../version.js";
@@ -112,23 +118,44 @@ export function buildProgram() {
 
   program
     .command("login")
-    .description("Link your personal WhatsApp via QR (web provider)")
+    .description("Link your personal WhatsApp via QR (web provider) or Telegram")
+    .option("--provider <provider>", "Provider: web | telegram", "web")
     .option("--verbose", "Verbose connection logs", false)
     .action(async (opts) => {
       setVerbose(Boolean(opts.verbose));
+      const provider = String(opts.provider ?? "web");
+      if (!["web", "telegram"].includes(provider)) {
+        defaultRuntime.error("--provider must be web or telegram");
+        defaultRuntime.exit(1);
+      }
       try {
+        if (provider === "telegram") {
+          await loginTelegram(Boolean(opts.verbose), defaultRuntime);
+          return;
+        }
         await loginWeb(Boolean(opts.verbose));
       } catch (err) {
-        defaultRuntime.error(danger(`Web login failed: ${String(err)}`));
+        defaultRuntime.error(danger(`${provider} login failed: ${String(err)}`));
         defaultRuntime.exit(1);
       }
     });
 
   program
     .command("logout")
-    .description("Clear cached WhatsApp Web credentials")
-    .action(async () => {
+    .description("Clear cached WhatsApp Web or Telegram credentials")
+    .option("--provider <provider>", "Provider: web | telegram", "web")
+    .action(async (opts) => {
+      const provider = String(opts.provider ?? "web");
+      if (!["web", "telegram"].includes(provider)) {
+        defaultRuntime.error("--provider must be web or telegram");
+        defaultRuntime.exit(1);
+      }
       try {
+        if (provider === "telegram") {
+          await clearSession();
+          console.log(success("Cleared Telegram credentials."));
+          return;
+        }
         await logoutWeb(defaultRuntime);
       } catch (err) {
         defaultRuntime.error(danger(`Logout failed: ${String(err)}`));
@@ -159,7 +186,7 @@ export function buildProgram() {
       "20",
     )
     .option("-p, --poll <seconds>", "Polling interval while waiting", "2")
-    .option("--provider <provider>", "Provider: twilio | web", "twilio")
+    .option("--provider <provider>", "Provider: twilio | web | telegram", "twilio")
     .option("--dry-run", "Print payload and skip sending", false)
     .option("--json", "Output result as JSON", false)
     .option("--verbose", "Verbose logging", false)
@@ -349,7 +376,7 @@ Examples:
   program
     .command("relay")
     .description("Auto-reply to inbound messages (auto-selects web or twilio)")
-    .option("--provider <provider>", "auto | web | twilio", "auto")
+    .option("--provider <provider>", "auto | web | twilio | telegram", "auto")
     .option("-i, --interval <seconds>", "Polling interval for twilio mode", "5")
     .option(
       "-l, --lookback <minutes>",
@@ -391,8 +418,8 @@ Examples:
       const { file: logFile, level: logLevel } = getResolvedLoggerSettings();
       defaultRuntime.log(info(`logs: ${logFile} (level ${logLevel})`));
       const providerPref = String(opts.provider ?? "auto");
-      if (!["auto", "web", "twilio"].includes(providerPref)) {
-        defaultRuntime.error("--provider must be auto, web, or twilio");
+      if (!["auto", "web", "twilio", "telegram"].includes(providerPref)) {
+        defaultRuntime.error("--provider must be auto, web, twilio, or telegram");
         defaultRuntime.exit(1);
       }
       const intervalSeconds = Number.parseInt(opts.interval, 10);
@@ -468,6 +495,12 @@ Examples:
       if (webRetryMax !== undefined) reconnect.maxMs = webRetryMax;
       if (Object.keys(reconnect).length > 0) {
         webTuning.reconnect = reconnect;
+      }
+
+      // Handle telegram explicitly (not in auto picker)
+      if (providerPref === "telegram") {
+        await monitorTelegramProvider(Boolean(opts.verbose), defaultRuntime);
+        return;
       }
 
       const provider = await pickProvider(providerPref as Provider | "auto");
@@ -591,6 +624,14 @@ Examples:
       setVerbose(Boolean(opts.verbose));
       const deps = createDefaultDeps();
       try {
+        // Show provider auth status before message listing
+        if (!opts.json) {
+          const hasTelegram = await telegramAuthExists();
+          defaultRuntime.log(
+            `Telegram: ${hasTelegram ? success("✓ logged in") : info("✗ not logged in")}`,
+          );
+          defaultRuntime.log(""); // Empty line before messages
+        }
         await statusCommand(opts, deps, defaultRuntime);
       } catch (err) {
         defaultRuntime.error(String(err));

@@ -151,6 +151,9 @@ export async function startWebhook(
 }
 
 function buildTwilioBasicAuth(env: EnvConfig) {
+  if (!env.auth || !env.accountSid) {
+    throw new Error("Twilio credentials not configured for webhook authentication");
+  }
   if ("authToken" in env.auth) {
     return Buffer.from(`${env.accountSid}:${env.auth.authToken}`).toString(
       "base64",

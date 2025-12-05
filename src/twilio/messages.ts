@@ -43,7 +43,7 @@ export async function listRecentMessages(
 ): Promise<ListedMessage[]> {
   const env = readEnv();
   const client = clientOverride ?? createClient(env);
-  const from = withWhatsAppPrefix(env.whatsappFrom);
+  const from = withWhatsAppPrefix(env.whatsappFrom!);
   const since = new Date(Date.now() - lookbackMinutes * 60_000);
 
   // Fetch inbound (to our WA number) and outbound (from our WA number), merge, sort, limit.

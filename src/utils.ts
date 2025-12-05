@@ -7,12 +7,30 @@ export async function ensureDir(dir: string) {
   await fs.promises.mkdir(dir, { recursive: true });
 }
 
-export type Provider = "twilio" | "web";
+export type Provider = "twilio" | "web" | "telegram";
 
 export function assertProvider(input: string): asserts input is Provider {
-  if (input !== "twilio" && input !== "web") {
-    throw new Error("Provider must be 'twilio' or 'web'");
+  if (input !== "twilio" && input !== "web" && input !== "telegram") {
+    throw new Error("Provider must be 'web', 'twilio', or 'telegram'");
   }
+}
+
+export type AllowFromProvider = "telegram" | "web" | "twilio";
+
+export function normalizeAllowFromEntry(
+  entry: string,
+  provider: AllowFromProvider,
+): string {
+  const trimmed = entry.trim().toLowerCase();
+  if (!trimmed) return "";
+
+  if (provider === "telegram") {
+    // Telegram uses @username format
+    return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+  }
+
+  // WhatsApp (both web and twilio) use E.164 phone numbers
+  return normalizeE164(entry);
 }
 
 export function normalizePath(p: string): string {

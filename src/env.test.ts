@@ -40,7 +40,7 @@ describe("env helpers", () => {
     const cfg = readEnv(runtime);
     expect(cfg.accountSid).toBe("AC123");
     expect(cfg.whatsappFrom).toBe("whatsapp:+1555");
-    if ("authToken" in cfg.auth) {
+    if (cfg.auth && "authToken" in cfg.auth) {
       expect(cfg.auth.authToken).toBe("token");
     } else {
       throw new Error("Expected auth token");
@@ -55,7 +55,7 @@ describe("env helpers", () => {
       TWILIO_API_SECRET: "secret",
     });
     const cfg = readEnv(runtime);
-    if ("apiKey" in cfg.auth && "apiSecret" in cfg.auth) {
+    if (cfg.auth && "apiKey" in cfg.auth && "apiSecret" in cfg.auth) {
       expect(cfg.auth.apiKey).toBe("key");
       expect(cfg.auth.apiSecret).toBe("secret");
     } else {
@@ -63,9 +63,20 @@ describe("env helpers", () => {
     }
   });
 
-  it("fails fast on invalid env", () => {
+  it("passes when no Twilio vars present (Telegram-only mode)", () => {
     setEnv({
-      TWILIO_ACCOUNT_SID: "",
+      TELEGRAM_API_ID: "12345",
+      TELEGRAM_API_HASH: "abcdef",
+    });
+    const cfg = readEnv(runtime);
+    expect(cfg.telegram).toEqual({ apiId: "12345", apiHash: "abcdef" });
+    expect(cfg.accountSid).toBeUndefined();
+    expect(cfg.auth).toBeUndefined();
+  });
+
+  it("fails when Twilio vars partially set", () => {
+    setEnv({
+      TWILIO_ACCOUNT_SID: "AC123",
       TWILIO_WHATSAPP_FROM: "",
       TWILIO_AUTH_TOKEN: undefined,
       TWILIO_API_KEY: undefined,

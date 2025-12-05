@@ -60,7 +60,7 @@ export async function monitorTwilio(
   let backoffMs = 1_000;
 
   const env = deps.readEnv(runtime);
-  const from = withWhatsAppPrefix(env.whatsappFrom);
+  const from = withWhatsAppPrefix(env.whatsappFrom!);
   const client = opts?.client ?? deps.createClient(env);
   logInfo(
     `📡 Monitoring inbound messages to ${from} (poll ${pollSeconds}s, lookback ${lookbackMinutes}m)`,

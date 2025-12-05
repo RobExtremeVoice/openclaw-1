@@ -60,7 +60,7 @@ describe("cli program", () => {
       program.parseAsync(["relay", "--provider", "bogus"], { from: "user" }),
     ).rejects.toThrow("exit");
     expect(runtime.error).toHaveBeenCalledWith(
-      "--provider must be auto, web, or twilio",
+      "--provider must be auto, web, twilio, or telegram",
     );
   });
 

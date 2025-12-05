@@ -17,7 +17,7 @@ export async function sendMessage(
 ) {
   const env = readEnv(runtime);
   const client = createClient(env);
-  const from = withWhatsAppPrefix(env.whatsappFrom);
+  const from = withWhatsAppPrefix(env.whatsappFrom!);
   const toNumber = withWhatsAppPrefix(to);
 
   try {

@@ -15,9 +15,12 @@ import { SESSION_STORE_DEFAULT } from "../config/sessions.js";
 import { danger, info, success } from "../globals.js";
 import { getChildLogger } from "../logging.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
+import { telegramAuthExists } from "../telegram/session.js";
 import type { Provider } from "../utils.js";
 import { CONFIG_DIR, ensureDir, jidToE164 } from "../utils.js";
 import { VERSION } from "../version.js";
+
+export { telegramAuthExists };
 
 export const WA_WEB_AUTH_DIR = path.join(CONFIG_DIR, "credentials");
 
@@ -212,9 +215,15 @@ export function logWebSelfId(
 }
 
 export async function pickProvider(pref: Provider | "auto"): Promise<Provider> {
-  // Auto-select web when logged in; otherwise fall back to twilio.
+  // Auto-select web when logged in; otherwise fall back to telegram or twilio.
   if (pref !== "auto") return pref;
+
+  // Priority: web > telegram > twilio
   const hasWeb = await webAuthExists();
   if (hasWeb) return "web";
+
+  const hasTelegram = await telegramAuthExists();
+  if (hasTelegram) return "telegram";
+
   return "twilio";
 }

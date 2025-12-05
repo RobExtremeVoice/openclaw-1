@@ -1,6 +1,10 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { CliDeps } from "../cli/deps.js";
-import { info, success } from "../globals.js";
+import { danger, info, success } from "../globals.js";
 import type { RuntimeEnv } from "../runtime.js";
+import { sendMediaMessage, sendTextMessage } from "../telegram/outbound.js";
+import { loadSession } from "../telegram/session.js";
 import type { Provider } from "../utils.js";
 import { sendViaIpc } from "../web/ipc.js";
 
@@ -15,6 +19,7 @@ export async function sendCommand(
     dryRun?: boolean;
     media?: string;
     serveMedia?: boolean;
+    verbose?: boolean;
   },
   deps: CliDeps,
   runtime: RuntimeEnv,
@@ -97,6 +102,98 @@ export async function sendCommand(
           2,
         ),
       );
+    }
+    return;
+  }
+
+  if (opts.provider === "telegram") {
+    if (opts.dryRun) {
+      runtime.log(
+        `[dry-run] would send via telegram -> ${opts.to}: ${opts.message}${opts.media ? ` (media ${opts.media})` : ""}`,
+      );
+      return;
+    }
+
+    // Load saved session
+    const session = await loadSession();
+    if (!session) {
+      runtime.error(
+        danger(
+          "No Telegram session found. Run: warelay login --provider telegram",
+        ),
+      );
+      throw new Error("Not logged in to Telegram");
+    }
+
+    // Create and connect client
+    const client = await deps.createTelegramClient(
+      session,
+      Boolean(opts.verbose),
+      runtime,
+    );
+
+    try {
+      await client.connect();
+
+      if (!client.connected) {
+        throw new Error("Failed to connect to Telegram");
+      }
+
+      let result;
+      if (opts.media) {
+        // Determine media type from file extension
+        const ext = opts.media.toLowerCase().split(".").pop() || "";
+        const imageExts = ["jpg", "jpeg", "png", "gif", "webp"];
+        const videoExts = ["mp4", "mov", "avi", "mkv"];
+        const audioExts = ["mp3", "wav", "ogg", "m4a"];
+
+        let type: "image" | "video" | "audio" | "document" = "document";
+        if (imageExts.includes(ext)) type = "image";
+        else if (videoExts.includes(ext)) type = "video";
+        else if (audioExts.includes(ext)) type = "audio";
+
+        // Check if media is a URL or local file
+        const isUrl = /^https?:\/\//i.test(opts.media);
+        if (isUrl) {
+          // Send URL directly
+          result = await sendMediaMessage(client, opts.to, opts.message, {
+            type,
+            url: opts.media,
+          });
+        } else {
+          // Load local file as buffer
+          const buffer = await fs.readFile(opts.media);
+          result = await sendMediaMessage(client, opts.to, opts.message, {
+            type,
+            buffer,
+            fileName: path.basename(opts.media),
+          });
+        }
+      } else {
+        result = await sendTextMessage(client, opts.to, opts.message);
+      }
+
+      if (opts.json) {
+        runtime.log(
+          JSON.stringify(
+            {
+              provider: "telegram",
+              to: opts.to,
+              messageId: result.messageId,
+              mediaUrl: opts.media ?? null,
+            },
+            null,
+            2,
+          ),
+        );
+      } else {
+        runtime.log(
+          success(`✅ Sent to ${opts.to} via Telegram (id ${result.messageId})`),
+        );
+      }
+    } finally {
+      // Always disconnect client
+      await client.disconnect();
     }
     return;
   }

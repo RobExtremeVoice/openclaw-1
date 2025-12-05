@@ -11,6 +11,8 @@ import {
   sendMessageWeb,
 } from "../providers/web/index.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
+import { createTelegramClient } from "../telegram/client.js";
+import { monitorTelegramProvider } from "../telegram/monitor.js";
 import { createClient } from "../twilio/client.js";
 import { listRecentMessages } from "../twilio/messages.js";
 import { monitorTwilio as monitorTwilioImpl } from "../twilio/monitor.js";
@@ -27,7 +29,9 @@ export type CliDeps = {
   waitForFinalStatus: typeof waitForFinalStatus;
   assertProvider: typeof assertProvider;
   createClient?: typeof createClient;
+  createTelegramClient: typeof createTelegramClient;
   monitorTwilio: typeof monitorTwilio;
+  monitorTelegramProvider: typeof monitorTelegramProvider;
   listRecentMessages: typeof listRecentMessages;
   ensurePortAvailable: typeof ensurePortAvailable;
   startWebhook: typeof startWebhook;
@@ -75,7 +79,9 @@ export function createDefaultDeps(): CliDeps {
     waitForFinalStatus,
     assertProvider,
     createClient,
+    createTelegramClient,
     monitorTwilio,
+    monitorTelegramProvider,
     listRecentMessages,
     ensurePortAvailable,
     startWebhook,
