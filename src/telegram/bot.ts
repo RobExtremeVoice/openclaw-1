@@ -203,6 +203,19 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       });
     } catch (err) {
       runtime.error?.(danger(`Telegram handler failed: ${String(err)}`));
+      // Send error message to user instead of staying silent
+      const errorMsg = String(err);
+      const isContextOverflow = /context.*overflow|too large|context window/i.test(errorMsg);
+      const userMessage = isContextOverflow
+        ? "⚠️ Context overflow - conversation too long. Starting fresh might help!"
+        : `⚠️ Something went wrong: ${errorMsg.slice(0, 200)}`;
+      try {
+        await bot.api.sendMessage(chatId, userMessage, {
+          reply_to_message_id: msg.message_id,
+        });
+      } catch {
+        // If we can't send the error message, at least we logged it
+      }
     }
   });
 

@@ -1122,35 +1122,46 @@ export async function monitorWebProvider(
           });
       };
 
-      const replyResult = await (replyResolver ?? getReplyFromConfig)(
-        {
-          Body: combinedBody,
-          From: msg.from,
-          To: msg.to,
-          MessageSid: msg.id,
-          ReplyToId: msg.replyToId,
-          ReplyToBody: msg.replyToBody,
-          ReplyToSender: msg.replyToSender,
-          MediaPath: msg.mediaPath,
-          MediaUrl: msg.mediaUrl,
-          MediaType: msg.mediaType,
-          ChatType: msg.chatType,
-          GroupSubject: msg.groupSubject,
-          GroupMembers: formatGroupMembers(
-            msg.groupParticipants,
-            groupMemberNames.get(conversationId),
-            msg.senderE164,
-          ),
-          SenderName: msg.senderName,
-          SenderE164: msg.senderE164,
-          WasMentioned: msg.wasMentioned,
-          Surface: "whatsapp",
-        },
-        {
-          onReplyStart: msg.sendComposing,
-          onToolResult: sendToolResult,
-        },
-      );
+      let replyResult: ReplyPayload | ReplyPayload[] | undefined;
+      try {
+        replyResult = await (replyResolver ?? getReplyFromConfig)(
+          {
+            Body: combinedBody,
+            From: msg.from,
+            To: msg.to,
+            MessageSid: msg.id,
+            ReplyToId: msg.replyToId,
+            ReplyToBody: msg.replyToBody,
+            ReplyToSender: msg.replyToSender,
+            MediaPath: msg.mediaPath,
+            MediaUrl: msg.mediaUrl,
+            MediaType: msg.mediaType,
+            ChatType: msg.chatType,
+            GroupSubject: msg.groupSubject,
+            GroupMembers: formatGroupMembers(
+              msg.groupParticipants,
+              groupMemberNames.get(conversationId),
+              msg.senderE164,
+            ),
+            SenderName: msg.senderName,
+            SenderE164: msg.senderE164,
+            WasMentioned: msg.wasMentioned,
+            Surface: "whatsapp",
+          },
+          {
+            onReplyStart: msg.sendComposing,
+            onToolResult: sendToolResult,
+          },
+        );
+      } catch (agentErr) {
+        const errorMsg = String(agentErr);
+        whatsappOutboundLog.error(`Agent failed: ${errorMsg}`);
+        const isContextOverflow = /context.*overflow|too large|context window/i.test(errorMsg);
+        const userMessage = isContextOverflow
+          ? "⚠️ Context overflow - conversation too long. Starting fresh might help!"
+          : `⚠️ Something went wrong: ${errorMsg.slice(0, 200)}`;
+        replyResult = { text: userMessage };
+      }
 
       const replyList = replyResult
         ? Array.isArray(replyResult)
