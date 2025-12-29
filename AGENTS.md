@@ -24,6 +24,11 @@
 - Run `pnpm test` (or `pnpm test:coverage`) before pushing when you touch logic.
 - Pure test additions/fixes generally do **not** need a changelog entry unless they alter user-facing behavior or the user asks for one.
 
+## E2E Smoke Tests (Telegram)
+- Ensure the gateway is running and the Telegram allowlist is configured (`telegram.allowFrom`) with a matching `TELEGRAM_BOT_TOKEN` in `.env`.
+- Run: `pnpm clawdis agent --message "test" --provider telegram --to <TELEGRAM_ID> --deliver`
+- Expect a reply in Telegram; check `/tmp/clawdis/clawdis-YYYY-MM-DD.log` if it fails.
+
 ## Commit & Pull Request Guidelines
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
 - Follow concise, action-oriented commit messages (e.g., `CLI: add verbose flag to send`).
