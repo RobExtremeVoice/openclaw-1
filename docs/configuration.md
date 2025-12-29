@@ -350,6 +350,38 @@ Notes:
 - Override the agent config root with `CLAWDIS_AGENT_DIR` (or `PI_CODING_AGENT_DIR`)
   if you want `models.json` stored elsewhere.
 
+#### Example: Z.ai (Anthropic-compatible) with `Authorization: Bearer ...`
+
+If your Anthropic-compatible endpoint expects `Authorization: Bearer <token>` (common for proxies),
+define a custom provider with `authHeader: true` and set the token via an env var:
+
+```json5
+{
+  agent: { model: "zai-auth/glm-4.7" },
+  models: {
+    providers: {
+      "zai-auth": {
+        baseUrl: "https://api.z.ai/api/anthropic",
+        apiKey: "ANTHROPIC_AUTH_TOKEN", // resolves from env first
+        api: "anthropic-messages",
+        authHeader: true,
+        models: [
+          {
+            id: "glm-4.7",
+            name: "GLM-4.7",
+            reasoning: true,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 204800,
+            maxTokens: 131072
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
 ### `session`
 
 Controls session scoping, idle expiry, reset triggers, and where the session store is written.
