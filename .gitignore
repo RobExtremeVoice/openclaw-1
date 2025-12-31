@@ -66,10 +66,12 @@ reproduce-*.mjs
 *-SUMMARY.md
 *-fix-summary.md
 investigation.md
+*Analysis.md
 
 # Deployment and service files (local)
 QUICK_DEPLOY.sh
 *.service
+*.timer
 ecosystem.config.cjs
 
 # Local backup files
