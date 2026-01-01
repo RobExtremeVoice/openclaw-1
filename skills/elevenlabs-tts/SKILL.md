@@ -1,14 +1,14 @@
 ---
 name: elevenlabs-tts
-description: Generate speech audio from text using ElevenLabs TTS API.
+description: Text-to-speech and speech-to-text using ElevenLabs API.
 homepage: https://elevenlabs.io/docs/api-reference/text-to-speech
-metadata: {"clawdis":{"emoji":"🔊","requires":{"bins":["curl"],"env":["ELEVENLABS_API_KEY"]}}}
+metadata: {"clawdis":{"emoji":"🔊","requires":{"bins":["curl","jq"],"env":["ELEVENLABS_API_KEY"]}}}
 ---
 
-# ElevenLabs Text-to-Speech
+# ElevenLabs TTS & STT
 
-Generate natural-sounding audio from text using ElevenLabs API.
-Free tier: 10,000 characters/month.
+Generate natural-sounding audio from text (TTS) and transcribe audio to text (STT) using ElevenLabs API.
+Free tier: 10,000 characters/month for TTS.
 
 ## Quick start
 
@@ -32,6 +32,16 @@ Free tier: 10,000 characters/month.
 - Arnold: `VR6AewLTigWG4xSOukaG` (American male)
 - Adam: `pNInz6obpgDQGcFmaJgB` (American male)
 - Sam: `yoZ06aMxZJJ28mfd3POQ` (American male)
+
+## Speech-to-Text (Transcription)
+
+Transcribe audio files using ElevenLabs Scribe model:
+
+```bash
+{baseDir}/scripts/transcribe.sh /path/to/audio.ogg
+```
+
+Outputs transcript text to stdout. Supports most audio formats (ogg, mp3, wav, m4a, etc.).
 
 ## API key
 
