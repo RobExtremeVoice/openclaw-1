@@ -45,6 +45,24 @@ struct PermissionStatusList: View {
             .font(.footnote)
             .padding(.top, 2)
             .help("Refresh status")
+
+            if (self.status[.accessibility] ?? false) == false || (self.status[.screenRecording] ?? false) == false {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Note: macOS may require restarting Clawdis after enabling Accessibility or Screen Recording.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        LaunchdManager.startClawdis()
+                    } label: {
+                        Label("Restart Clawdis", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.top, 4)
+            }
         }
     }
 
@@ -102,6 +120,7 @@ struct PermissionRow: View {
         case .screenRecording: "Screen Recording"
         case .microphone: "Microphone"
         case .speechRecognition: "Speech Recognition"
+        case .camera: "Camera"
         }
     }
 
@@ -114,6 +133,7 @@ struct PermissionRow: View {
         case .screenRecording: "Capture the screen for context or screenshots"
         case .microphone: "Allow Voice Wake and audio capture"
         case .speechRecognition: "Transcribe Voice Wake trigger phrases on-device"
+        case .camera: "Capture photos and video from the camera"
         }
     }
 
@@ -125,6 +145,7 @@ struct PermissionRow: View {
         case .screenRecording: "display"
         case .microphone: "mic"
         case .speechRecognition: "waveform"
+        case .camera: "camera"
         }
     }
 }

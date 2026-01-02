@@ -33,10 +33,17 @@ else
   echo "📦 Skipping TS build (SKIP_TSC=1)"
 fi
 
+if [[ "${SKIP_UI_BUILD:-0}" != "1" ]]; then
+  echo "🖥  Building Control UI (pnpm ui:build)"
+  (cd "$ROOT_DIR" && pnpm ui:build)
+else
+  echo "🖥  Skipping Control UI build (SKIP_UI_BUILD=1)"
+fi
+
 cd "$ROOT_DIR/apps/macos"
 
 echo "🔨 Building $PRODUCT ($BUILD_CONFIG)"
-swift build -c "$BUILD_CONFIG" --product "$PRODUCT" --build-path "$BUILD_PATH"
+swift build -c "$BUILD_CONFIG" --product "$PRODUCT" --build-path "$BUILD_PATH" -Xlinker -rpath -Xlinker @executable_path/../Frameworks
 
 BIN="$BUILD_PATH/$BUILD_CONFIG/$PRODUCT"
 echo "pkg: binary $BIN" >&2
@@ -47,81 +54,27 @@ mkdir -p "$APP_ROOT/Contents/Resources"
 mkdir -p "$APP_ROOT/Contents/Resources/Relay"
 mkdir -p "$APP_ROOT/Contents/Frameworks"
 
-echo "📄 Writing Info.plist"
-cat > "$APP_ROOT/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key>
-    <string>${BUNDLE_ID}</string>
-    <key>CFBundleShortVersionString</key>
-    <string>${APP_VERSION}</string>
-    <key>CFBundleVersion</key>
-    <string>${APP_BUILD}</string>
-    <key>CFBundleName</key>
-    <string>Clawdis</string>
-    <key>CFBundleExecutable</key>
-    <string>Clawdis</string>
-    <key>CFBundleIconFile</key>
-    <string>Clawdis</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>15.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>com.steipete.clawdis.deeplink</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>clawdis</string>
-            </array>
-        </dict>
-    </array>
-    <key>ClawdisBuildTimestamp</key>
-    <string>${BUILD_TS}</string>
-    <key>ClawdisGitCommit</key>
-    <string>${GIT_COMMIT}</string>
-    <key>SUFeedURL</key>
-    <string>${SPARKLE_FEED_URL}</string>
-    <key>SUPublicEDKey</key>
-    <string>${SPARKLE_PUBLIC_ED_KEY}</string>
-    <key>SUEnableAutomaticChecks</key>
-    <${AUTO_CHECKS}/>
-    <key>NSUserNotificationUsageDescription</key>
-    <string>Clawdis needs notification permission to show alerts for agent actions.</string>
-    <key>NSScreenCaptureDescription</key>
-    <string>Clawdis captures the screen when the agent needs screenshots for context.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>Clawdis can capture photos or short video clips when requested by the agent.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Clawdis needs the mic for Voice Wake tests and agent audio capture.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Clawdis uses speech recognition to detect your Voice Wake trigger phrase.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Clawdis needs Automation (AppleScript) permission to drive Terminal and other apps for agent actions.</string>
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoadsInWebContent</key>
-        <true/>
-        <key>NSExceptionDomains</key>
-        <dict>
-            <key>100.100.100.100</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-                <key>NSIncludesSubdomains</key>
-                <true/>
-            </dict>
-        </dict>
-    </dict>
-</dict>
-</plist>
-PLIST
+echo "📄 Copying Info.plist template"
+INFO_PLIST_SRC="$ROOT_DIR/apps/macos/Sources/Clawdis/Resources/Info.plist"
+if [ ! -f "$INFO_PLIST_SRC" ]; then
+  echo "ERROR: Info.plist template missing at $INFO_PLIST_SRC" >&2
+  exit 1
+fi
+cp "$INFO_PLIST_SRC" "$APP_ROOT/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_BUILD}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :ClawdisBuildTimestamp ${BUILD_TS}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :ClawdisGitCommit ${GIT_COMMIT}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :SUFeedURL ${SPARKLE_FEED_URL}" "$APP_ROOT/Contents/Info.plist" \
+  || /usr/libexec/PlistBuddy -c "Add :SUFeedURL string ${SPARKLE_FEED_URL}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :SUPublicEDKey ${SPARKLE_PUBLIC_ED_KEY}" "$APP_ROOT/Contents/Info.plist" \
+  || /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string ${SPARKLE_PUBLIC_ED_KEY}" "$APP_ROOT/Contents/Info.plist" || true
+if /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks ${AUTO_CHECKS}" "$APP_ROOT/Contents/Info.plist"; then
+  true
+else
+  /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool ${AUTO_CHECKS}" "$APP_ROOT/Contents/Info.plist" || true
+fi
 
 echo "🚚 Copying binary"
 cp "$BIN" "$APP_ROOT/Contents/MacOS/Clawdis"
@@ -134,11 +87,14 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
   echo "✨ Embedding Sparkle.framework"
   cp -R "$SPARKLE_FRAMEWORK" "$APP_ROOT/Contents/Frameworks/"
   chmod -R a+rX "$APP_ROOT/Contents/Frameworks/Sparkle.framework"
-  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_ROOT/Contents/MacOS/Clawdis"
 fi
 
 echo "🖼  Copying app icon"
 cp "$ROOT_DIR/apps/macos/Sources/Clawdis/Resources/Clawdis.icns" "$APP_ROOT/Contents/Resources/Clawdis.icns"
+
+echo "📦 Copying device model resources"
+rm -rf "$APP_ROOT/Contents/Resources/DeviceModels"
+cp -R "$ROOT_DIR/apps/macos/Sources/Clawdis/Resources/DeviceModels" "$APP_ROOT/Contents/Resources/DeviceModels"
 
 RELAY_DIR="$APP_ROOT/Contents/Resources/Relay"
 
@@ -162,6 +118,10 @@ if [[ "${SKIP_GATEWAY_PACKAGE:-0}" != "1" ]]; then
   echo "🎨 Copying gateway A2UI host assets"
   rm -rf "$RELAY_DIR/a2ui"
   cp -R "$ROOT_DIR/src/canvas-host/a2ui" "$RELAY_DIR/a2ui"
+
+  echo "🎛  Copying Control UI assets"
+  rm -rf "$RELAY_DIR/control-ui"
+  cp -R "$ROOT_DIR/dist/control-ui" "$RELAY_DIR/control-ui"
 
   echo "🧠 Copying bundled skills"
   rm -rf "$RELAY_DIR/skills"

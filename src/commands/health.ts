@@ -5,6 +5,7 @@ import { callGateway } from "../gateway/call.js";
 import { info } from "../globals.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { probeTelegram, type TelegramProbe } from "../telegram/probe.js";
+import { resolveTelegramToken } from "../telegram/token.js";
 import { resolveHeartbeatSeconds } from "../web/reconnect.js";
 import {
   getWebAuthAgeMs,
@@ -74,8 +75,7 @@ export async function getHealthSnapshot(
 
   const start = Date.now();
   const cappedTimeout = Math.max(1000, timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const telegramToken =
-    process.env.TELEGRAM_BOT_TOKEN ?? cfg.telegram?.botToken ?? "";
+  const { token: telegramToken } = resolveTelegramToken(cfg);
   const telegramConfigured = telegramToken.trim().length > 0;
   const telegramProxy = cfg.telegram?.proxy;
   const telegramProbe = telegramConfigured

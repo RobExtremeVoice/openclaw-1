@@ -27,5 +27,5 @@ describeLive("zai live", () => {
       .map((block) => block.text.trim())
       .join(" ");
     expect(text.length).toBeGreaterThan(0);
-  });
+  }, 20000);
 });

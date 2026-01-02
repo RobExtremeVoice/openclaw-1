@@ -27,9 +27,11 @@ import {
 } from "../agents/workspace.js";
 import { type ClawdisConfig, loadConfig } from "../config/config.js";
 import {
+  buildGroupDisplayName,
   DEFAULT_IDLE_MINUTES,
   DEFAULT_RESET_TRIGGERS,
   loadSessionStore,
+  resolveGroupSessionKey,
   resolveSessionKey,
   resolveSessionTranscriptPath,
   resolveStorePath,
@@ -37,6 +39,7 @@ import {
   saveSessionStore,
 } from "../config/sessions.js";
 import { logVerbose } from "../globals.js";
+import { registerAgentRunContext } from "../infra/agent-events.js";
 import { buildProviderSummary } from "../infra/provider-summary.js";
 import { triggerClawdisRestart } from "../infra/restart.js";
 import {
@@ -52,6 +55,7 @@ import {
   normalizeGroupActivation,
   parseActivationCommand,
 } from "./group-activation.js";
+import { stripHeartbeatToken } from "./heartbeat.js";
 import { extractModelDirective } from "./model.js";
 import { buildStatusMessage } from "./status.js";
 import type { MsgContext, TemplateContext } from "./templating.js";
@@ -158,6 +162,42 @@ export function extractQueueDirective(body?: string): {
     rawMode,
     hasDirective: !!match,
   };
+}
+
+export function extractReplyToTag(
+  text?: string,
+  currentMessageId?: string,
+): {
+  cleaned: string;
+  replyToId?: string;
+  hasTag: boolean;
+} {
+  if (!text) return { cleaned: "", hasTag: false };
+  let cleaned = text;
+  let replyToId: string | undefined;
+  let hasTag = false;
+
+  const currentMatch = cleaned.match(/\[\[reply_to_current\]\]/i);
+  if (currentMatch) {
+    cleaned = cleaned.replace(/\[\[reply_to_current\]\]/gi, " ");
+    hasTag = true;
+    if (currentMessageId?.trim()) {
+      replyToId = currentMessageId.trim();
+    }
+  }
+
+  const idMatch = cleaned.match(/\[\[reply_to:([^\]\n]+)\]\]/i);
+  if (idMatch?.[1]) {
+    cleaned = cleaned.replace(/\[\[reply_to:[^\]\n]+\]\]/gi, " ");
+    replyToId = idMatch[1].trim();
+    hasTag = true;
+  }
+
+  cleaned = cleaned
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .trim();
+  return { cleaned, replyToId, hasTag };
 }
 
 function isAbortTrigger(text?: string): boolean {
@@ -362,9 +402,9 @@ export async function getReplyFromConfig(
   let persistedModelOverride: string | undefined;
   let persistedProviderOverride: string | undefined;
 
+  const groupResolution = resolveGroupSessionKey(ctx);
   const isGroup =
-    typeof ctx.From === "string" &&
-    (ctx.From.includes("@g.us") || ctx.From.startsWith("group:"));
+    ctx.ChatType?.trim().toLowerCase() === "group" || Boolean(groupResolution);
   const triggerBodyNormalized = stripStructuralPrefixes(ctx.Body ?? "")
     .trim()
     .toLowerCase();
@@ -397,6 +437,13 @@ export async function getReplyFromConfig(
 
   sessionKey = resolveSessionKey(sessionScope, ctx, mainKey);
   sessionStore = loadSessionStore(storePath);
+  if (groupResolution?.legacyKey && groupResolution.legacyKey !== sessionKey) {
+    const legacyEntry = sessionStore[groupResolution.legacyKey];
+    if (legacyEntry && !sessionStore[sessionKey]) {
+      sessionStore[sessionKey] = legacyEntry;
+      delete sessionStore[groupResolution.legacyKey];
+    }
+  }
   const entry = sessionStore[sessionKey];
   const idleMs = idleMinutes * 60_000;
   const freshEntry = entry && Date.now() - entry.updatedAt <= idleMs;
@@ -429,7 +476,41 @@ export async function getReplyFromConfig(
     modelOverride: persistedModelOverride ?? baseEntry?.modelOverride,
     providerOverride: persistedProviderOverride ?? baseEntry?.providerOverride,
     queueMode: baseEntry?.queueMode,
+    displayName: baseEntry?.displayName,
+    chatType: baseEntry?.chatType,
+    surface: baseEntry?.surface,
+    subject: baseEntry?.subject,
+    room: baseEntry?.room,
+    space: baseEntry?.space,
   };
+  if (groupResolution?.surface) {
+    const surface = groupResolution.surface;
+    const subject = ctx.GroupSubject?.trim();
+    const space = ctx.GroupSpace?.trim();
+    const explicitRoom = ctx.GroupRoom?.trim();
+    const isRoomSurface = surface === "discord" || surface === "slack";
+    const nextRoom =
+      explicitRoom ??
+      (isRoomSurface && subject && subject.startsWith("#")
+        ? subject
+        : undefined);
+    const nextSubject = nextRoom ? undefined : subject;
+    sessionEntry.chatType = groupResolution.chatType ?? "group";
+    sessionEntry.surface = surface;
+    if (nextSubject) sessionEntry.subject = nextSubject;
+    if (nextRoom) sessionEntry.room = nextRoom;
+    if (space) sessionEntry.space = space;
+    sessionEntry.displayName = buildGroupDisplayName({
+      surface: sessionEntry.surface,
+      subject: sessionEntry.subject,
+      room: sessionEntry.room,
+      space: sessionEntry.space,
+      id: groupResolution.id,
+      key: sessionKey,
+    });
+  } else if (!sessionEntry.chatType) {
+    sessionEntry.chatType = "direct";
+  }
   sessionStore[sessionKey] = sessionEntry;
   await saveSessionStore(storePath, sessionStore);
 
@@ -467,8 +548,48 @@ export async function getReplyFromConfig(
   sessionCtx.Body = queueCleaned;
   sessionCtx.BodyStripped = queueCleaned;
 
+  const resolveGroupRequireMention = () => {
+    const surface =
+      groupResolution?.surface ?? ctx.Surface?.trim().toLowerCase();
+    const groupId = groupResolution?.id ?? ctx.From?.replace(/^group:/, "");
+    if (surface === "telegram") {
+      if (groupId) {
+        const groupConfig = cfg.telegram?.groups?.[groupId];
+        if (typeof groupConfig?.requireMention === "boolean") {
+          return groupConfig.requireMention;
+        }
+      }
+      const groupDefault = cfg.telegram?.groups?.["*"]?.requireMention;
+      if (typeof groupDefault === "boolean") return groupDefault;
+      return true;
+    }
+    if (surface === "whatsapp") {
+      if (groupId) {
+        const groupConfig = cfg.whatsapp?.groups?.[groupId];
+        if (typeof groupConfig?.requireMention === "boolean") {
+          return groupConfig.requireMention;
+        }
+      }
+      const groupDefault = cfg.whatsapp?.groups?.["*"]?.requireMention;
+      if (typeof groupDefault === "boolean") return groupDefault;
+      return true;
+    }
+    if (surface === "imessage") {
+      if (groupId) {
+        const groupConfig = cfg.imessage?.groups?.[groupId];
+        if (typeof groupConfig?.requireMention === "boolean") {
+          return groupConfig.requireMention;
+        }
+      }
+      const groupDefault = cfg.imessage?.groups?.["*"]?.requireMention;
+      if (typeof groupDefault === "boolean") return groupDefault;
+      return true;
+    }
+    return true;
+  };
+
   const defaultGroupActivation = () => {
-    const requireMention = cfg.routing?.groupChat?.requireMention;
+    const requireMention = resolveGroupRequireMention();
     return requireMention === false ? "always" : "mention";
   };
 
@@ -481,6 +602,24 @@ export async function getReplyFromConfig(
     inlineVerbose ??
     (sessionEntry?.verboseLevel as VerboseLevel | undefined) ??
     (agentCfg?.verboseDefault as VerboseLevel | undefined);
+  const resolvedBlockStreaming =
+    agentCfg?.blockStreamingDefault === "off" ? "off" : "on";
+  const blockStreamingEnabled = resolvedBlockStreaming === "on";
+  const streamedPayloadKeys = new Set<string>();
+  const pendingBlockTasks = new Set<Promise<void>>();
+  const buildPayloadKey = (payload: ReplyPayload) => {
+    const text = payload.text?.trim() ?? "";
+    const mediaList = payload.mediaUrls?.length
+      ? payload.mediaUrls
+      : payload.mediaUrl
+        ? [payload.mediaUrl]
+        : [];
+    return JSON.stringify({
+      text,
+      mediaList,
+      replyToId: payload.replyToId ?? null,
+    });
+  };
   const shouldEmitToolResult = () => {
     if (!sessionKey || !storePath) {
       return resolvedVerboseLevel === "on";
@@ -796,14 +935,27 @@ export async function getReplyFromConfig(
   const perMessageQueueMode =
     hasQueueDirective && !inlineQueueReset ? inlineQueueMode : undefined;
 
-  // Optional allowlist by origin number (E.164 without whatsapp: prefix)
-  const configuredAllowFrom = cfg.routing?.allowFrom;
+  const surface = (ctx.Surface ?? "").trim().toLowerCase();
+  const isWhatsAppSurface =
+    surface === "whatsapp" ||
+    (ctx.From ?? "").startsWith("whatsapp:") ||
+    (ctx.To ?? "").startsWith("whatsapp:");
+
+  // WhatsApp owner allowlist (E.164 without whatsapp: prefix); used for group activation only.
+  const configuredAllowFrom = isWhatsAppSurface
+    ? cfg.whatsapp?.allowFrom
+    : undefined;
   const from = (ctx.From ?? "").replace(/^whatsapp:/, "");
   const to = (ctx.To ?? "").replace(/^whatsapp:/, "");
-  const isSamePhone = from && to && from === to;
-  // If no config is present, default to self-only DM access.
+  const isEmptyConfig = Object.keys(cfg).length === 0;
+  if (isWhatsAppSurface && isEmptyConfig && from && to && from !== to) {
+    cleanupTyping();
+    return undefined;
+  }
   const defaultAllowFrom =
-    (!configuredAllowFrom || configuredAllowFrom.length === 0) && to
+    isWhatsAppSurface &&
+    (!configuredAllowFrom || configuredAllowFrom.length === 0) &&
+    to
       ? [to]
       : undefined;
   const allowFrom =
@@ -817,10 +969,12 @@ export async function getReplyFromConfig(
     : rawBodyNormalized;
   const activationCommand = parseActivationCommand(commandBodyNormalized);
   const senderE164 = normalizeE164(ctx.SenderE164 ?? "");
-  const ownerCandidates = (allowFrom ?? []).filter(
-    (entry) => entry && entry !== "*",
-  );
-  if (ownerCandidates.length === 0 && to) ownerCandidates.push(to);
+  const ownerCandidates = isWhatsAppSurface
+    ? (allowFrom ?? []).filter((entry) => entry && entry !== "*")
+    : [];
+  if (isWhatsAppSurface && ownerCandidates.length === 0 && to) {
+    ownerCandidates.push(to);
+  }
   const ownerList = ownerCandidates
     .map((entry) => normalizeE164(entry))
     .filter((entry): entry is string => Boolean(entry));
@@ -829,20 +983,6 @@ export async function getReplyFromConfig(
 
   if (!sessionEntry && abortKey) {
     abortedLastRun = ABORT_MEMORY.get(abortKey) ?? false;
-  }
-
-  // Same-phone mode (self-messaging) is always allowed
-  if (isSamePhone) {
-    logVerbose(`Allowing same-phone mode: from === to (${from})`);
-  } else if (!isGroup && Array.isArray(allowFrom) && allowFrom.length > 0) {
-    // Support "*" as wildcard to allow all senders
-    if (!allowFrom.includes("*") && !allowFrom.includes(from)) {
-      logVerbose(
-        `Skipping auto-reply: sender ${from || "<unknown>"} not in allowFrom list`,
-      );
-      cleanupTyping();
-      return undefined;
-    }
   }
 
   if (activationCommand.hasCommand) {
@@ -886,10 +1026,10 @@ export async function getReplyFromConfig(
       cleanupTyping();
       return undefined;
     }
-    triggerClawdisRestart();
+    const restartMethod = triggerClawdisRestart();
     cleanupTyping();
     return {
-      text: "⚙️ Restarting clawdis via launchctl; give me a few seconds to come back online.",
+      text: `⚙️ Restarting clawdis via ${restartMethod}; give me a few seconds to come back online.`,
     };
   }
 
@@ -908,6 +1048,10 @@ export async function getReplyFromConfig(
     const webLinked = await webAuthExists();
     const webAuthAgeMs = getWebAuthAgeMs();
     const heartbeatSeconds = resolveHeartbeatSeconds(cfg, undefined);
+    const groupActivation = isGroup
+      ? (normalizeGroupActivation(sessionEntry?.groupActivation) ??
+        defaultGroupActivation())
+      : undefined;
     const statusText = buildStatusMessage({
       agent: {
         model,
@@ -920,6 +1064,7 @@ export async function getReplyFromConfig(
       sessionKey,
       sessionScope,
       storePath,
+      groupActivation,
       resolvedThink: resolvedThinkLevel,
       resolvedVerbose: resolvedVerboseLevel,
       webLinked,
@@ -1032,12 +1177,17 @@ export async function getReplyFromConfig(
       ABORT_MEMORY.set(abortKey, false);
     }
   }
+  const messageIdHint = sessionCtx.MessageSid?.trim()
+    ? `[message_id: ${sessionCtx.MessageSid.trim()}]`
+    : "";
+  if (messageIdHint) {
+    prefixedBodyBase = `${prefixedBodyBase}\n${messageIdHint}`;
+  }
 
   // Prepend queued system events (transitions only) and (for new main sessions) a provider snapshot.
   // Token efficiency: we filter out periodic/heartbeat noise and keep the lines compact.
   const isGroupSession =
-    typeof ctx.From === "string" &&
-    (ctx.From.includes("@g.us") || ctx.From.startsWith("group:"));
+    sessionEntry?.chatType === "group" || sessionEntry?.chatType === "room";
   const isMainSession =
     !isGroupSession && sessionKey === (sessionCfg?.mainKey ?? "main");
   if (isMainSession) {
@@ -1190,11 +1340,15 @@ export async function getReplyFromConfig(
     return undefined;
   }
 
+  let didLogHeartbeatStrip = false;
   try {
     if (shouldEagerType) {
       await startTypingLoop();
     }
     const runId = crypto.randomUUID();
+    if (sessionKey) {
+      registerAgentRunContext(runId, { sessionKey });
+    }
     let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
     try {
       runResult = await runEmbeddedPiAgent({
@@ -1216,21 +1370,90 @@ export async function getReplyFromConfig(
         runId,
         onPartialReply: opts?.onPartialReply
           ? async (payload) => {
-              await startTypingOnText(payload.text);
+              let text = payload.text;
+              if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                const stripped = stripHeartbeatToken(text, { mode: "message" });
+                if (stripped.didStrip && !didLogHeartbeatStrip) {
+                  didLogHeartbeatStrip = true;
+                  logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                }
+                if (
+                  stripped.shouldSkip &&
+                  (payload.mediaUrls?.length ?? 0) === 0
+                ) {
+                  return;
+                }
+                text = stripped.text;
+              }
+              await startTypingOnText(text);
               await opts.onPartialReply?.({
-                text: payload.text,
+                text,
                 mediaUrls: payload.mediaUrls,
               });
             }
           : undefined,
+        onBlockReply:
+          blockStreamingEnabled && opts?.onBlockReply
+            ? async (payload) => {
+                let text = payload.text;
+                if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                  const stripped = stripHeartbeatToken(text, {
+                    mode: "message",
+                  });
+                  if (stripped.didStrip && !didLogHeartbeatStrip) {
+                    didLogHeartbeatStrip = true;
+                    logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                  }
+                  const hasMedia = (payload.mediaUrls?.length ?? 0) > 0;
+                  if (stripped.shouldSkip && !hasMedia) return;
+                  text = stripped.text;
+                }
+                const tagResult = extractReplyToTag(
+                  text,
+                  sessionCtx.MessageSid,
+                );
+                const cleaned = tagResult.cleaned || undefined;
+                const hasMedia = (payload.mediaUrls?.length ?? 0) > 0;
+                if (!cleaned && !hasMedia) return;
+                if (cleaned?.trim() === SILENT_REPLY_TOKEN && !hasMedia) return;
+                await startTypingOnText(cleaned);
+                const blockPayload: ReplyPayload = {
+                  text: cleaned,
+                  mediaUrls: payload.mediaUrls,
+                  mediaUrl: payload.mediaUrls?.[0],
+                  replyToId: tagResult.replyToId,
+                };
+                const task = Promise.resolve(opts.onBlockReply?.(blockPayload))
+                  .then(() => {
+                    streamedPayloadKeys.add(buildPayloadKey(blockPayload));
+                  })
+                  .catch((err) => {
+                    logVerbose(`block reply delivery failed: ${String(err)}`);
+                  });
+                pendingBlockTasks.add(task);
+                void task.finally(() => pendingBlockTasks.delete(task));
+              }
+            : undefined,
         shouldEmitToolResult,
         onToolResult: opts?.onToolResult
           ? async (payload) => {
-              await startTypingOnText(payload.text);
-              await opts.onToolResult?.({
-                text: payload.text,
-                mediaUrls: payload.mediaUrls,
-              });
+              let text = payload.text;
+              if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                const stripped = stripHeartbeatToken(text, { mode: "message" });
+                if (stripped.didStrip && !didLogHeartbeatStrip) {
+                  didLogHeartbeatStrip = true;
+                  logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                }
+                if (
+                  stripped.shouldSkip &&
+                  (payload.mediaUrls?.length ?? 0) === 0
+                ) {
+                  return;
+                }
+                text = stripped.text;
+              }
+              await startTypingOnText(text);
+              await opts.onToolResult?.({ text, mediaUrls: payload.mediaUrls });
             }
           : undefined,
       });
@@ -1261,7 +1484,54 @@ export async function getReplyFromConfig(
 
     const payloadArray = runResult.payloads ?? [];
     if (payloadArray.length === 0) return undefined;
-    const shouldSignalTyping = payloadArray.some((payload) => {
+    if (pendingBlockTasks.size > 0) {
+      await Promise.allSettled(pendingBlockTasks);
+    }
+
+    const sanitizedPayloads = opts?.isHeartbeat
+      ? payloadArray
+      : payloadArray.flatMap((payload) => {
+          const text = payload.text;
+          if (!text || !text.includes("HEARTBEAT_OK")) return [payload];
+          const stripped = stripHeartbeatToken(text, { mode: "message" });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+          }
+          const hasMedia =
+            Boolean(payload.mediaUrl) || (payload.mediaUrls?.length ?? 0) > 0;
+          if (stripped.shouldSkip && !hasMedia) return [];
+          return [{ ...payload, text: stripped.text }];
+        });
+
+    const replyTaggedPayloads: ReplyPayload[] = sanitizedPayloads
+      .map((payload) => {
+        const { cleaned, replyToId } = extractReplyToTag(
+          payload.text,
+          sessionCtx.MessageSid,
+        );
+        return {
+          ...payload,
+          text: cleaned ? cleaned : undefined,
+          replyToId: replyToId ?? payload.replyToId,
+        };
+      })
+      .filter(
+        (payload) =>
+          payload.text ||
+          payload.mediaUrl ||
+          (payload.mediaUrls && payload.mediaUrls.length > 0),
+      );
+
+    const filteredPayloads = blockStreamingEnabled
+      ? replyTaggedPayloads.filter(
+          (payload) => !streamedPayloadKeys.has(buildPayloadKey(payload)),
+        )
+      : replyTaggedPayloads;
+
+    if (filteredPayloads.length === 0) return undefined;
+
+    const shouldSignalTyping = filteredPayloads.some((payload) => {
       const trimmed = payload.text?.trim();
       if (trimmed && trimmed !== SILENT_REPLY_TOKEN) return true;
       if (payload.mediaUrl) return true;
@@ -1316,11 +1586,11 @@ export async function getReplyFromConfig(
     }
 
     // If verbose is enabled and this is a new session, prepend a session hint.
-    let finalPayloads = payloadArray;
+    let finalPayloads = filteredPayloads;
     if (resolvedVerboseLevel === "on" && isNewSession) {
       finalPayloads = [
         { text: `🧭 New session: ${sessionIdFinal}` },
-        ...payloadArray,
+        ...finalPayloads,
       ];
     }
 

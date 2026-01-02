@@ -7,6 +7,8 @@ struct DevicePresentation: Sendable {
 
 enum DeviceModelCatalog {
     private static let modelIdentifierToName: [String: String] = loadModelIdentifierToName()
+    private static let resourceBundle: Bundle? = locateResourceBundle()
+    private static let resourceSubdirectory = "DeviceModels"
 
     static func presentation(deviceFamily: String?, modelIdentifier: String?) -> DevicePresentation? {
         let family = (deviceFamily ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,13 +106,11 @@ enum DeviceModelCatalog {
     }
 
     private static func loadMapping(resourceName: String) -> [String: String] {
-        guard let url = Bundle.module.url(
+        guard let url = self.resourceBundle?.url(
             forResource: resourceName,
             withExtension: "json",
-            subdirectory: "DeviceModels")
-        else {
-            return [:]
-        }
+            subdirectory: self.resourceSubdirectory)
+        else { return [:] }
 
         do {
             let data = try Data(contentsOf: url)
@@ -121,6 +121,34 @@ enum DeviceModelCatalog {
         }
     }
 
+    private static func locateResourceBundle() -> Bundle? {
+        // Prefer main bundle (packaged app), then module bundle (SwiftPM/tests).
+        // Accessing Bundle.module in the packaged app can crash if the bundle isn't where SwiftPM expects it.
+        if let bundle = self.bundleIfContainsDeviceModels(Bundle.main) {
+            return bundle
+        }
+
+        if let bundle = self.bundleIfContainsDeviceModels(Bundle.module) {
+            return bundle
+        }
+        return nil
+    }
+
+    private static func bundleIfContainsDeviceModels(_ bundle: Bundle) -> Bundle? {
+        if bundle.url(
+            forResource: "ios-device-identifiers",
+            withExtension: "json",
+            subdirectory: self.resourceSubdirectory) != nil {
+            return bundle
+        }
+        if bundle.url(
+            forResource: "mac-device-identifiers",
+            withExtension: "json",
+            subdirectory: self.resourceSubdirectory) != nil {
+            return bundle
+        }
+        return nil
+    }
     private enum NameValue: Decodable {
         case string(String)
         case stringArray([String])

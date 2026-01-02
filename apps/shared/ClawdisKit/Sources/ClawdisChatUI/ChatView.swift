@@ -20,17 +20,19 @@ public struct ClawdisChatView: View {
         #if os(macOS)
         static let outerPaddingHorizontal: CGFloat = 6
         static let outerPaddingVertical: CGFloat = 0
-        static let stackSpacing: CGFloat = 6
+        static let composerPaddingHorizontal: CGFloat = 0
+        static let stackSpacing: CGFloat = 0
         static let messageSpacing: CGFloat = 6
-        static let messageListPaddingTop: CGFloat = 0
-        static let messageListPaddingBottom: CGFloat = 4
+        static let messageListPaddingTop: CGFloat = 12
+        static let messageListPaddingBottom: CGFloat = 16
         static let messageListPaddingHorizontal: CGFloat = 6
         #else
         static let outerPaddingHorizontal: CGFloat = 6
         static let outerPaddingVertical: CGFloat = 6
+        static let composerPaddingHorizontal: CGFloat = 6
         static let stackSpacing: CGFloat = 6
         static let messageSpacing: CGFloat = 12
-        static let messageListPaddingTop: CGFloat = 4
+        static let messageListPaddingTop: CGFloat = 10
         static let messageListPaddingBottom: CGFloat = 6
         static let messageListPaddingHorizontal: CGFloat = 8
         #endif
@@ -55,9 +57,13 @@ public struct ClawdisChatView: View {
 
             VStack(spacing: Layout.stackSpacing) {
                 self.messageList
-                ClawdisChatComposer(viewModel: self.viewModel, style: self.style)
+                    .padding(.horizontal, Layout.outerPaddingHorizontal)
+                ClawdisChatComposer(
+                    viewModel: self.viewModel,
+                    style: self.style,
+                    showsSessionSwitcher: self.showsSessionSwitcher)
+                    .padding(.horizontal, Layout.composerPaddingHorizontal)
             }
-            .padding(.horizontal, Layout.outerPaddingHorizontal)
             .padding(.vertical, Layout.outerPaddingVertical)
             .frame(maxWidth: .infinity)
             .frame(maxHeight: .infinity, alignment: .top)
@@ -76,13 +82,33 @@ public struct ClawdisChatView: View {
     private var messageList: some View {
         ZStack {
             ScrollView {
-                LazyVStack(spacing: Layout.messageSpacing) {
-                    self.messageListRows
+                #if os(macOS)
+                VStack(spacing: 0) {
+                    LazyVStack(spacing: Layout.messageSpacing) {
+                        self.messageListRows
+                    }
+
+                    Color.clear
+                        .frame(height: Layout.messageListPaddingBottom)
+                        .id(self.scrollerBottomID)
                 }
                 // Use scroll targets for stable auto-scroll without ScrollViewReader relayout glitches.
                 .scrollTargetLayout()
                 .padding(.top, Layout.messageListPaddingTop)
                 .padding(.horizontal, Layout.messageListPaddingHorizontal)
+                #else
+                LazyVStack(spacing: Layout.messageSpacing) {
+                    self.messageListRows
+
+                    Color.clear
+                        .frame(height: Layout.messageListPaddingBottom + 1)
+                        .id(self.scrollerBottomID)
+                }
+                // Use scroll targets for stable auto-scroll without ScrollViewReader relayout glitches.
+                .scrollTargetLayout()
+                .padding(.top, Layout.messageListPaddingTop)
+                .padding(.horizontal, Layout.messageListPaddingHorizontal)
+                #endif
             }
             // Keep the scroll pinned to the bottom for new messages.
             .scrollPosition(id: self.$scrollPosition, anchor: .bottom)
@@ -92,6 +118,8 @@ public struct ClawdisChatView: View {
                     .controlSize(.large)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+
+            self.messageListOverlay
         }
         // Ensure the message list claims vertical space on the first layout pass.
         .frame(maxHeight: .infinity, alignment: .top)
@@ -100,6 +128,9 @@ public struct ClawdisChatView: View {
             guard !isLoading, !self.hasPerformedInitialScroll else { return }
             self.scrollPosition = self.scrollerBottomID
             self.hasPerformedInitialScroll = true
+        }
+        .onChange(of: self.viewModel.sessionKey) { _, _ in
+            self.hasPerformedInitialScroll = false
         }
         .onChange(of: self.viewModel.messages.count) { _, _ in
             guard self.hasPerformedInitialScroll else { return }
@@ -142,10 +173,6 @@ public struct ClawdisChatView: View {
             ChatStreamingAssistantBubble(text: text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-
-        Color.clear
-            .frame(height: Layout.messageListPaddingBottom + 1)
-            .id(self.scrollerBottomID)
     }
 
     private var visibleMessages: [ClawdisChatMessage] {
@@ -158,6 +185,112 @@ public struct ClawdisChatView: View {
             base = self.viewModel.messages
         }
         return self.mergeToolResults(in: base)
+    }
+
+    @ViewBuilder
+    private var messageListOverlay: some View {
+        if self.viewModel.isLoading {
+            EmptyView()
+        } else if let error = self.activeErrorText {
+            let presentation = self.errorPresentation(for: error)
+            if self.hasVisibleMessageListContent {
+                VStack(spacing: 0) {
+                    ChatNoticeBanner(
+                        systemImage: presentation.systemImage,
+                        title: presentation.title,
+                        message: error,
+                        tint: presentation.tint,
+                        dismiss: { self.viewModel.errorText = nil },
+                        refresh: { self.viewModel.refresh() })
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                ChatNoticeCard(
+                    systemImage: presentation.systemImage,
+                    title: presentation.title,
+                    message: error,
+                    tint: presentation.tint,
+                    actionTitle: "Refresh",
+                    action: { self.viewModel.refresh() })
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else if self.showsEmptyState {
+            ChatNoticeCard(
+                systemImage: "bubble.left.and.bubble.right.fill",
+                title: self.emptyStateTitle,
+                message: self.emptyStateMessage,
+                tint: .accentColor,
+                actionTitle: nil,
+                action: nil)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var activeErrorText: String? {
+        guard let text = self.viewModel.errorText?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !text.isEmpty
+        else {
+            return nil
+        }
+        return text
+    }
+
+    private var hasVisibleMessageListContent: Bool {
+        if !self.visibleMessages.isEmpty {
+            return true
+        }
+        if let text = self.viewModel.streamingAssistantText,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return true
+        }
+        if self.viewModel.pendingRunCount > 0 {
+            return true
+        }
+        if !self.viewModel.pendingToolCalls.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    private var showsEmptyState: Bool {
+        self.viewModel.messages.isEmpty &&
+            (self.viewModel.streamingAssistantText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
+            self.viewModel.pendingRunCount == 0 &&
+            self.viewModel.pendingToolCalls.isEmpty
+    }
+
+    private var emptyStateTitle: String {
+        #if os(macOS)
+        "Web Chat"
+        #else
+        "Chat"
+        #endif
+    }
+
+    private var emptyStateMessage: String {
+        #if os(macOS)
+        "Type a message below to start.\nReturn sends • Shift-Return adds a line break."
+        #else
+        "Type a message below to start."
+        #endif
+    }
+
+    private func errorPresentation(for error: String) -> (title: String, systemImage: String, tint: Color) {
+        let lower = error.lowercased()
+        if lower.contains("not connected") || lower.contains("socket") {
+            return ("Disconnected", "wifi.slash", .orange)
+        }
+        if lower.contains("timed out") {
+            return ("Timed out", "clock.badge.exclamationmark", .orange)
+        }
+        return ("Error", "exclamationmark.triangle.fill", .orange)
     }
 
     private func mergeToolResults(in messages: [ClawdisChatMessage]) -> [ClawdisChatMessage] {
@@ -241,5 +374,103 @@ public struct ClawdisChatView: View {
             return content.text
         }
         return parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private struct ChatNoticeCard: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    let tint: Color
+    let actionTitle: String?
+    let action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(self.tint.opacity(0.16))
+                Image(systemName: self.systemImage)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(self.tint)
+            }
+            .frame(width: 52, height: 52)
+
+            Text(self.title)
+                .font(.headline)
+
+            Text(self.message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
+                .frame(maxWidth: 360)
+
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(ClawdisChatTheme.subtleCard)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)))
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+    }
+}
+
+private struct ChatNoticeBanner: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    let tint: Color
+    let dismiss: () -> Void
+    let refresh: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: self.systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(self.tint)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(self.title)
+                    .font(.caption.weight(.semibold))
+
+                Text(self.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: self.refresh) {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Refresh")
+
+            Button(action: self.dismiss) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(ClawdisChatTheme.subtleCard)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)))
     }
 }

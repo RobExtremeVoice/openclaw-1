@@ -1,10 +1,27 @@
 import Foundation
 import Network
 import Observation
-import OSLog
 import SwiftUI
 
 struct HealthSnapshot: Codable, Sendable {
+    struct Telegram: Codable, Sendable {
+        struct Probe: Codable, Sendable {
+            struct Bot: Codable, Sendable {
+                let id: Int?
+                let username: String?
+            }
+
+            let ok: Bool
+            let status: Int?
+            let error: String?
+            let elapsedMs: Double?
+            let bot: Bot?
+        }
+
+        let configured: Bool
+        let probe: Probe?
+    }
+
     struct Web: Codable, Sendable {
         struct Connect: Codable, Sendable {
             let ok: Bool
@@ -30,9 +47,11 @@ struct HealthSnapshot: Codable, Sendable {
         let recent: [SessionInfo]
     }
 
+    let ok: Bool?
     let ts: Double
     let durationMs: Double
     let web: Web
+    let telegram: Telegram?
     let heartbeatSeconds: Int?
     let sessions: Sessions
 }
@@ -95,6 +114,7 @@ final class HealthStore {
         guard !self.isRefreshing else { return }
         self.isRefreshing = true
         defer { self.isRefreshing = false }
+        let previousError = self.lastError
 
         do {
             let data = try await ControlChannel.shared.health(timeout: 15)
@@ -102,14 +122,30 @@ final class HealthStore {
                 self.snapshot = decoded
                 self.lastSuccess = Date()
                 self.lastError = nil
+                if previousError != nil {
+                    Self.logger.info("health refresh recovered")
+                }
             } else {
                 self.lastError = "health output not JSON"
                 if onDemand { self.snapshot = nil }
+                if previousError != self.lastError {
+                    Self.logger.warning("health refresh failed: output not JSON")
+                }
             }
         } catch {
-            self.lastError = error.localizedDescription
+            let desc = error.localizedDescription
+            self.lastError = desc
             if onDemand { self.snapshot = nil }
+            if previousError != desc {
+                Self.logger.error("health refresh failed \(desc, privacy: .public)")
+            }
         }
+    }
+
+    private static func isTelegramHealthy(_ snap: HealthSnapshot) -> Bool {
+        guard let tg = snap.telegram, tg.configured else { return false }
+        // If probe is missing, treat it as "configured but unknown health" (not a hard fail).
+        return tg.probe?.ok ?? true
     }
 
     var state: HealthState {
@@ -117,7 +153,10 @@ final class HealthStore {
             return .degraded(error)
         }
         guard let snap = self.snapshot else { return .unknown }
-        if !snap.web.linked { return .linkingNeeded }
+        if !snap.web.linked {
+            // WhatsApp Web linking is optional if Telegram is healthy; don't paint the whole app red.
+            return Self.isTelegramHealthy(snap) ? .degraded("Not linked") : .linkingNeeded
+        }
         if let connect = snap.web.connect, !connect.ok {
             let reason = connect.error ?? "connect failed"
             return .degraded(reason)
@@ -129,7 +168,13 @@ final class HealthStore {
         if self.isRefreshing { return "Health check running…" }
         if let error = self.lastError { return "Health check failed: \(error)" }
         guard let snap = self.snapshot else { return "Health check pending" }
-        if !snap.web.linked { return "Not linked — run clawdis login" }
+        if !snap.web.linked {
+            if let tg = snap.telegram, tg.configured {
+                let tgLabel = (tg.probe?.ok ?? true) ? "Telegram ok" : "Telegram degraded"
+                return "\(tgLabel) · Not linked — run clawdis login"
+            }
+            return "Not linked — run clawdis login"
+        }
         let auth = snap.web.authAgeMs.map { msToAge($0) } ?? "unknown"
         if let connect = snap.web.connect, !connect.ok {
             let code = connect.status.map(String.init) ?? "?"

@@ -4,8 +4,10 @@ import type { ClawdisConfig } from "../config/config.js";
 import { CONFIG_DIR } from "../utils.js";
 import {
   hasBinary,
+  isBundledSkillAllowed,
   isConfigPathTruthy,
   loadWorkspaceSkillEntries,
+  resolveBundledAllowlist,
   resolveConfigPath,
   resolveSkillConfig,
   resolveSkillsInstallPreferences,
@@ -39,16 +41,19 @@ export type SkillStatusEntry = {
   homepage?: string;
   always: boolean;
   disabled: boolean;
+  blockedByAllowlist: boolean;
   eligible: boolean;
   requirements: {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   missing: {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   configChecks: SkillStatusConfigCheck[];
   install: SkillInstallOption[];
@@ -132,6 +137,8 @@ function buildSkillStatus(
   const skillKey = resolveSkillKey(entry);
   const skillConfig = resolveSkillConfig(config, skillKey);
   const disabled = skillConfig?.enabled === false;
+  const allowBundled = resolveBundledAllowlist(config);
+  const blockedByAllowlist = !isBundledSkillAllowed(entry, allowBundled);
   const always = entry.clawdis?.always === true;
   const emoji = entry.clawdis?.emoji ?? entry.frontmatter.emoji;
   const homepageRaw =
@@ -144,8 +151,13 @@ function buildSkillStatus(
   const requiredBins = entry.clawdis?.requires?.bins ?? [];
   const requiredEnv = entry.clawdis?.requires?.env ?? [];
   const requiredConfig = entry.clawdis?.requires?.config ?? [];
+  const requiredOs = entry.clawdis?.os ?? [];
 
   const missingBins = requiredBins.filter((bin) => !hasBinary(bin));
+  const missingOs =
+    requiredOs.length > 0 && !requiredOs.includes(process.platform)
+      ? requiredOs
+      : [];
 
   const missingEnv: string[] = [];
   for (const envName of requiredEnv) {
@@ -169,14 +181,21 @@ function buildSkillStatus(
     .map((check) => check.path);
 
   const missing = always
-    ? { bins: [], env: [], config: [] }
-    : { bins: missingBins, env: missingEnv, config: missingConfig };
+    ? { bins: [], env: [], config: [], os: [] }
+    : {
+        bins: missingBins,
+        env: missingEnv,
+        config: missingConfig,
+        os: missingOs,
+      };
   const eligible =
     !disabled &&
+    !blockedByAllowlist &&
     (always ||
       (missing.bins.length === 0 &&
         missing.env.length === 0 &&
-        missing.config.length === 0));
+        missing.config.length === 0 &&
+        missing.os.length === 0));
 
   return {
     name: entry.skill.name,
@@ -190,11 +209,13 @@ function buildSkillStatus(
     homepage,
     always,
     disabled,
+    blockedByAllowlist,
     eligible,
     requirements: {
       bins: requiredBins,
       env: requiredEnv,
       config: requiredConfig,
+      os: requiredOs,
     },
     missing,
     configChecks,

@@ -46,13 +46,17 @@ import { getStatusSummary } from "../commands/status.js";
 import {
   type ClawdisConfig,
   CONFIG_PATH_CLAWDIS,
+  isNixMode,
   loadConfig,
+  migrateLegacyConfig,
   parseConfigJson5,
   readConfigFileSnapshot,
+  STATE_DIR_CLAWDIS,
   validateConfigObject,
   writeConfigFile,
 } from "../config/config.js";
 import {
+  buildGroupDisplayName,
   loadSessionStore,
   resolveStorePath,
   type SessionEntry,
@@ -73,7 +77,17 @@ import {
 } from "../discord/index.js";
 import { type DiscordProbe, probeDiscord } from "../discord/probe.js";
 import { isVerbose } from "../globals.js";
-import { onAgentEvent } from "../infra/agent-events.js";
+import {
+  monitorIMessageProvider,
+  sendMessageIMessage,
+} from "../imessage/index.js";
+import { type IMessageProbe, probeIMessage } from "../imessage/probe.js";
+import {
+  clearAgentRunContext,
+  getAgentRunContext,
+  onAgentEvent,
+  registerAgentRunContext,
+} from "../infra/agent-events.js";
 import { startGatewayBonjourAdvertiser } from "../infra/bonjour.js";
 import { startNodeBridgeServer } from "../infra/bridge/server.js";
 import { resolveCanvasHostUrl } from "../infra/canvas-host-url.js";
@@ -137,9 +151,12 @@ import { setCommandLaneConcurrency } from "../process/command-queue.js";
 import { runExec } from "../process/exec.js";
 import { monitorWebProvider, webAuthExists } from "../providers/web/index.js";
 import { defaultRuntime } from "../runtime.js";
+import { monitorSignalProvider, sendMessageSignal } from "../signal/index.js";
+import { probeSignal, type SignalProbe } from "../signal/probe.js";
 import { monitorTelegramProvider } from "../telegram/monitor.js";
 import { probeTelegram, type TelegramProbe } from "../telegram/probe.js";
 import { sendMessageTelegram } from "../telegram/send.js";
+import { resolveTelegramToken } from "../telegram/token.js";
 import { normalizeE164, resolveUserPath } from "../utils.js";
 import type { WebProviderStatus } from "../web/auto-reply.js";
 import { startWebLoginWithQr, waitForWebLogin } from "../web/login-qr.js";
@@ -281,10 +298,14 @@ const logWsControl = log.child("ws");
 const logWhatsApp = logProviders.child("whatsapp");
 const logTelegram = logProviders.child("telegram");
 const logDiscord = logProviders.child("discord");
+const logSignal = logProviders.child("signal");
+const logIMessage = logProviders.child("imessage");
 const canvasRuntime = runtimeForLogger(logCanvas);
 const whatsappRuntimeEnv = runtimeForLogger(logWhatsApp);
 const telegramRuntimeEnv = runtimeForLogger(logTelegram);
 const discordRuntimeEnv = runtimeForLogger(logDiscord);
+const signalRuntimeEnv = runtimeForLogger(logSignal);
+const imessageRuntimeEnv = runtimeForLogger(logIMessage);
 
 function resolveBonjourCliPath(): string | undefined {
   const envPath = process.env.CLAWDIS_CLI_PATH?.trim();
@@ -436,6 +457,11 @@ type GatewaySessionsDefaults = {
 type GatewaySessionRow = {
   key: string;
   kind: "direct" | "group" | "global" | "unknown";
+  displayName?: string;
+  surface?: string;
+  subject?: string;
+  room?: string;
+  space?: string;
   updatedAt: number | null;
   sessionId?: string;
   systemSent?: boolean;
@@ -610,6 +636,9 @@ function buildSnapshot(): Snapshot {
     health: emptyHealth,
     stateVersion: { presence: presenceVersion, health: healthVersion },
     uptimeMs,
+    // Surface resolved paths so UIs can display the true config location.
+    configPath: CONFIG_PATH_CLAWDIS,
+    stateDir: STATE_DIR_CLAWDIS,
   };
 }
 
@@ -630,8 +659,6 @@ type DedupeEntry = {
   payload?: unknown;
   error?: ErrorShape;
 };
-
-const getGatewayToken = () => process.env.CLAWDIS_GATEWAY_TOKEN;
 
 function formatForLog(value: unknown): string {
   try {
@@ -840,11 +867,39 @@ function loadSessionEntry(sessionKey: string) {
   return { cfg, storePath, store, entry };
 }
 
-function classifySessionKey(key: string): GatewaySessionRow["kind"] {
+function classifySessionKey(
+  key: string,
+  entry?: SessionEntry,
+): GatewaySessionRow["kind"] {
   if (key === "global") return "global";
-  if (key.startsWith("group:")) return "group";
   if (key === "unknown") return "unknown";
+  if (entry?.chatType === "group" || entry?.chatType === "room") return "group";
+  if (
+    key.startsWith("group:") ||
+    key.includes(":group:") ||
+    key.includes(":channel:")
+  ) {
+    return "group";
+  }
   return "direct";
+}
+
+function parseGroupKey(
+  key: string,
+): { surface?: string; kind?: "group" | "channel"; id?: string } | null {
+  if (key.startsWith("group:")) {
+    const raw = key.slice("group:".length);
+    return raw ? { id: raw } : null;
+  }
+  const parts = key.split(":").filter(Boolean);
+  if (parts.length >= 3) {
+    const [surface, kind, ...rest] = parts;
+    if (kind === "group" || kind === "channel") {
+      const id = rest.join(":");
+      return { surface, kind, id };
+    }
+  }
+  return null;
 }
 
 function getSessionDefaults(cfg: ClawdisConfig): GatewaySessionsDefaults {
@@ -891,9 +946,32 @@ function listSessionsFromStore(params: {
       const input = entry?.inputTokens ?? 0;
       const output = entry?.outputTokens ?? 0;
       const total = entry?.totalTokens ?? input + output;
+      const parsed = parseGroupKey(key);
+      const surface = entry?.surface ?? parsed?.surface;
+      const subject = entry?.subject;
+      const room = entry?.room;
+      const space = entry?.space;
+      const id = parsed?.id;
+      const displayName =
+        entry?.displayName ??
+        (surface
+          ? buildGroupDisplayName({
+              surface,
+              subject,
+              room,
+              space,
+              id,
+              key,
+            })
+          : undefined);
       return {
         key,
-        kind: classifySessionKey(key),
+        kind: classifySessionKey(key, entry),
+        displayName,
+        surface,
+        subject,
+        room,
+        space,
         updatedAt,
         sessionId: entry?.sessionId,
         systemSent: entry?.systemSent,
@@ -1243,6 +1321,31 @@ export async function startGatewayServer(
   port = 18789,
   opts: GatewayServerOptions = {},
 ): Promise<GatewayServer> {
+  const configSnapshot = await readConfigFileSnapshot();
+  if (configSnapshot.legacyIssues.length > 0) {
+    if (isNixMode) {
+      throw new Error(
+        "Legacy config entries detected while running in Nix mode. Update your Nix config to the latest schema and restart.",
+      );
+    }
+    const { config: migrated, changes } = migrateLegacyConfig(
+      configSnapshot.parsed,
+    );
+    if (!migrated) {
+      throw new Error(
+        'Legacy config entries detected but auto-migration failed. Run "clawdis doctor" to migrate.',
+      );
+    }
+    await writeConfigFile(migrated);
+    if (changes.length > 0) {
+      log.info(
+        `gateway: migrated legacy config entries:\n${changes
+          .map((entry) => `- ${entry}`)
+          .join("\n")}`,
+      );
+    }
+  }
+
   const cfgAtStart = loadConfig();
   const bindMode = opts.bind ?? cfgAtStart.gateway?.bind ?? "loopback";
   const bindHost = opts.host ?? resolveGatewayBindHost(bindMode);
@@ -1266,7 +1369,8 @@ export async function startGatewayServer(
     ...tailscaleOverrides,
   };
   const tailscaleMode = tailscaleConfig.mode ?? "off";
-  const token = getGatewayToken();
+  const token =
+    authConfig.token ?? process.env.CLAWDIS_GATEWAY_TOKEN ?? undefined;
   const password =
     authConfig.password ?? process.env.CLAWDIS_GATEWAY_PASSWORD ?? undefined;
   const authMode: ResolvedGatewayAuth["mode"] =
@@ -1335,7 +1439,13 @@ export async function startGatewayServer(
           wakeMode: "now" | "next-heartbeat";
           sessionKey: string;
           deliver: boolean;
-          channel: "last" | "whatsapp" | "telegram" | "discord";
+          channel:
+            | "last"
+            | "whatsapp"
+            | "telegram"
+            | "discord"
+            | "signal"
+            | "imessage";
           to?: string;
           thinking?: string;
           timeoutSeconds?: number;
@@ -1360,15 +1470,19 @@ export async function startGatewayServer(
       channelRaw === "whatsapp" ||
       channelRaw === "telegram" ||
       channelRaw === "discord" ||
+      channelRaw === "signal" ||
+      channelRaw === "imessage" ||
       channelRaw === "last"
         ? channelRaw
-        : channelRaw === undefined
-          ? "last"
-          : null;
+        : channelRaw === "imsg"
+          ? "imessage"
+          : channelRaw === undefined
+            ? "last"
+            : null;
     if (channel === null) {
       return {
         ok: false,
-        error: "channel must be last|whatsapp|telegram|discord",
+        error: "channel must be last|whatsapp|telegram|discord|signal|imessage",
       };
     }
     const toRaw = payload.to;
@@ -1419,7 +1533,13 @@ export async function startGatewayServer(
     wakeMode: "now" | "next-heartbeat";
     sessionKey: string;
     deliver: boolean;
-    channel: "last" | "whatsapp" | "telegram" | "discord";
+    channel:
+      | "last"
+      | "whatsapp"
+      | "telegram"
+      | "discord"
+      | "signal"
+      | "imessage";
     to?: string;
     thinking?: string;
     timeoutSeconds?: number;
@@ -1702,9 +1822,13 @@ export async function startGatewayServer(
   let whatsappAbort: AbortController | null = null;
   let telegramAbort: AbortController | null = null;
   let discordAbort: AbortController | null = null;
+  let signalAbort: AbortController | null = null;
+  let imessageAbort: AbortController | null = null;
   let whatsappTask: Promise<unknown> | null = null;
   let telegramTask: Promise<unknown> | null = null;
   let discordTask: Promise<unknown> | null = null;
+  let signalTask: Promise<unknown> | null = null;
+  let imessageTask: Promise<unknown> | null = null;
   let whatsappRuntime: WebProviderStatus = {
     running: false,
     connected: false,
@@ -1739,16 +1863,96 @@ export async function startGatewayServer(
     lastStopAt: null,
     lastError: null,
   };
+  let signalRuntime: {
+    running: boolean;
+    lastStartAt?: number | null;
+    lastStopAt?: number | null;
+    lastError?: string | null;
+    baseUrl?: string | null;
+  } = {
+    running: false,
+    lastStartAt: null,
+    lastStopAt: null,
+    lastError: null,
+    baseUrl: null,
+  };
+  let imessageRuntime: {
+    running: boolean;
+    lastStartAt?: number | null;
+    lastStopAt?: number | null;
+    lastError?: string | null;
+    cliPath?: string | null;
+    dbPath?: string | null;
+  } = {
+    running: false,
+    lastStartAt: null,
+    lastStopAt: null,
+    lastError: null,
+    cliPath: null,
+    dbPath: null,
+  };
   const clients = new Set<Client>();
   let seq = 0;
   // Track per-run sequence to detect out-of-order/lost agent events.
   const agentRunSeq = new Map<string, number>();
   const dedupe = new Map<string, DedupeEntry>();
-  // Map agent sessionId -> {sessionKey, clientRunId} for chat events (WS WebChat clients).
+  // Map agent runId -> pending chat runs for WebChat clients.
   const chatRunSessions = new Map<
     string,
-    { sessionKey: string; clientRunId: string }
+    Array<{ sessionKey: string; clientRunId: string }>
   >();
+  const addChatRun = (
+    sessionId: string,
+    entry: { sessionKey: string; clientRunId: string },
+  ) => {
+    const queue = chatRunSessions.get(sessionId);
+    if (queue) {
+      queue.push(entry);
+    } else {
+      chatRunSessions.set(sessionId, [entry]);
+    }
+  };
+  const peekChatRun = (sessionId: string) =>
+    chatRunSessions.get(sessionId)?.[0];
+  const shiftChatRun = (sessionId: string) => {
+    const queue = chatRunSessions.get(sessionId);
+    if (!queue || queue.length === 0) return undefined;
+    const entry = queue.shift();
+    if (!queue.length) chatRunSessions.delete(sessionId);
+    return entry;
+  };
+  const removeChatRun = (
+    sessionId: string,
+    clientRunId: string,
+    sessionKey?: string,
+  ) => {
+    const queue = chatRunSessions.get(sessionId);
+    if (!queue || queue.length === 0) return undefined;
+    const idx = queue.findIndex(
+      (entry) =>
+        entry.clientRunId === clientRunId &&
+        (sessionKey ? entry.sessionKey === sessionKey : true),
+    );
+    if (idx < 0) return undefined;
+    const [entry] = queue.splice(idx, 1);
+    if (!queue.length) chatRunSessions.delete(sessionId);
+    return entry;
+  };
+  const resolveSessionKeyForRun = (runId: string) => {
+    const cached = getAgentRunContext(runId)?.sessionKey;
+    if (cached) return cached;
+    const cfg = loadConfig();
+    const storePath = resolveStorePath(cfg.session?.store);
+    const store = loadSessionStore(storePath);
+    const found = Object.entries(store).find(
+      ([, entry]) => entry?.sessionId === runId,
+    );
+    const sessionKey = found?.[0];
+    if (sessionKey) {
+      registerAgentRunContext(runId, { sessionKey });
+    }
+    return sessionKey;
+  };
   const chatRunBuffers = new Map<string, string>();
   const chatDeltaSentAt = new Map<string, number>();
   const chatAbortControllers = new Map<
@@ -1901,20 +2105,28 @@ export async function startGatewayServer(
         running: false,
         lastError: "disabled",
       };
-      logTelegram.info("skipping provider start (telegram.enabled=false)");
+      if (isVerbose()) {
+        logTelegram.debug(
+          "telegram provider disabled (telegram.enabled=false)",
+        );
+      }
       return;
     }
-    const telegramToken =
-      process.env.TELEGRAM_BOT_TOKEN ?? cfg.telegram?.botToken ?? "";
+    const { token: telegramToken } = resolveTelegramToken(cfg, {
+      logMissingFile: (message) => logTelegram.warn(message),
+    });
     if (!telegramToken.trim()) {
       telegramRuntime = {
         ...telegramRuntime,
         running: false,
         lastError: "not configured",
       };
-      logTelegram.info(
-        "skipping provider start (no TELEGRAM_BOT_TOKEN/config)",
-      );
+      // keep quiet by default; this is a normal state
+      if (isVerbose()) {
+        logTelegram.debug(
+          "telegram provider not configured (no TELEGRAM_BOT_TOKEN)",
+        );
+      }
       return;
     }
     let telegramBotLabel = "";
@@ -1931,7 +2143,9 @@ export async function startGatewayServer(
         logTelegram.debug(`bot probe failed: ${String(err)}`);
       }
     }
-    logTelegram.info(`starting provider${telegramBotLabel}`);
+    logTelegram.info(
+      `starting provider${telegramBotLabel}${cfg.telegram ? "" : " (no telegram config; token via env)"}`,
+    );
     telegramAbort = new AbortController();
     telegramRuntime = {
       ...telegramRuntime,
@@ -1994,7 +2208,9 @@ export async function startGatewayServer(
         running: false,
         lastError: "disabled",
       };
-      logDiscord.info("skipping provider start (discord.enabled=false)");
+      if (isVerbose()) {
+        logDiscord.debug("discord provider disabled (discord.enabled=false)");
+      }
       return;
     }
     const discordToken =
@@ -2005,7 +2221,12 @@ export async function startGatewayServer(
         running: false,
         lastError: "not configured",
       };
-      logDiscord.info("skipping provider start (no DISCORD_BOT_TOKEN/config)");
+      // keep quiet by default; this is a normal state
+      if (isVerbose()) {
+        logDiscord.debug(
+          "discord provider not configured (no DISCORD_BOT_TOKEN)",
+        );
+      }
       return;
     }
     let discordBotLabel = "";
@@ -2018,7 +2239,9 @@ export async function startGatewayServer(
         logDiscord.debug(`bot probe failed: ${String(err)}`);
       }
     }
-    logDiscord.info(`starting provider${discordBotLabel}`);
+    logDiscord.info(
+      `starting provider${discordBotLabel}${cfg.discord ? "" : " (no discord config; token via env)"}`,
+    );
     discordAbort = new AbortController();
     discordRuntime = {
       ...discordRuntime,
@@ -2030,10 +2253,9 @@ export async function startGatewayServer(
       token: discordToken.trim(),
       runtime: discordRuntimeEnv,
       abortSignal: discordAbort.signal,
-      allowFrom: cfg.discord?.allowFrom,
-      guildAllowFrom: cfg.discord?.guildAllowFrom,
-      requireMention: cfg.discord?.requireMention,
+      slashCommand: cfg.discord?.slashCommand,
       mediaMaxMb: cfg.discord?.mediaMaxMb,
+      historyLimit: cfg.discord?.historyLimit,
     })
       .catch((err) => {
         discordRuntime = {
@@ -2071,10 +2293,214 @@ export async function startGatewayServer(
     };
   };
 
+  const startSignalProvider = async () => {
+    if (signalTask) return;
+    const cfg = loadConfig();
+    if (!cfg.signal) {
+      signalRuntime = {
+        ...signalRuntime,
+        running: false,
+        lastError: "not configured",
+      };
+      // keep quiet by default; this is a normal state
+      if (isVerbose()) {
+        logSignal.debug("signal provider not configured (no signal config)");
+      }
+      return;
+    }
+    if (cfg.signal?.enabled === false) {
+      signalRuntime = {
+        ...signalRuntime,
+        running: false,
+        lastError: "disabled",
+      };
+      if (isVerbose()) {
+        logSignal.debug("signal provider disabled (signal.enabled=false)");
+      }
+      return;
+    }
+    const signalCfg = cfg.signal;
+    const signalMeaningfullyConfigured = Boolean(
+      signalCfg.account?.trim() ||
+        signalCfg.httpUrl?.trim() ||
+        signalCfg.cliPath?.trim() ||
+        signalCfg.httpHost?.trim() ||
+        typeof signalCfg.httpPort === "number" ||
+        typeof signalCfg.autoStart === "boolean",
+    );
+    if (!signalMeaningfullyConfigured) {
+      signalRuntime = {
+        ...signalRuntime,
+        running: false,
+        lastError: "not configured",
+      };
+      // keep quiet by default; this is a normal state
+      if (isVerbose()) {
+        logSignal.debug(
+          "signal provider not configured (signal config present but missing required fields)",
+        );
+      }
+      return;
+    }
+    const host = cfg.signal?.httpHost?.trim() || "127.0.0.1";
+    const port = cfg.signal?.httpPort ?? 8080;
+    const baseUrl = cfg.signal?.httpUrl?.trim() || `http://${host}:${port}`;
+    logSignal.info(`starting provider (${baseUrl})`);
+    signalAbort = new AbortController();
+    signalRuntime = {
+      ...signalRuntime,
+      running: true,
+      lastStartAt: Date.now(),
+      lastError: null,
+      baseUrl,
+    };
+    const task = monitorSignalProvider({
+      baseUrl,
+      account: cfg.signal?.account,
+      cliPath: cfg.signal?.cliPath,
+      httpHost: cfg.signal?.httpHost,
+      httpPort: cfg.signal?.httpPort,
+      autoStart: cfg.signal?.autoStart,
+      receiveMode: cfg.signal?.receiveMode,
+      ignoreAttachments: cfg.signal?.ignoreAttachments,
+      ignoreStories: cfg.signal?.ignoreStories,
+      sendReadReceipts: cfg.signal?.sendReadReceipts,
+      allowFrom: cfg.signal?.allowFrom,
+      mediaMaxMb: cfg.signal?.mediaMaxMb,
+      runtime: signalRuntimeEnv,
+      abortSignal: signalAbort.signal,
+    })
+      .catch((err) => {
+        signalRuntime = {
+          ...signalRuntime,
+          lastError: formatError(err),
+        };
+        logSignal.error(`provider exited: ${formatError(err)}`);
+      })
+      .finally(() => {
+        signalAbort = null;
+        signalTask = null;
+        signalRuntime = {
+          ...signalRuntime,
+          running: false,
+          lastStopAt: Date.now(),
+        };
+      });
+    signalTask = task;
+  };
+
+  const stopSignalProvider = async () => {
+    if (!signalAbort && !signalTask) return;
+    signalAbort?.abort();
+    try {
+      await signalTask;
+    } catch {
+      // ignore
+    }
+    signalAbort = null;
+    signalTask = null;
+    signalRuntime = {
+      ...signalRuntime,
+      running: false,
+      lastStopAt: Date.now(),
+    };
+  };
+
+  const startIMessageProvider = async () => {
+    if (imessageTask) return;
+    const cfg = loadConfig();
+    if (!cfg.imessage) {
+      imessageRuntime = {
+        ...imessageRuntime,
+        running: false,
+        lastError: "not configured",
+      };
+      // keep quiet by default; this is a normal state
+      if (isVerbose()) {
+        logIMessage.debug(
+          "imessage provider not configured (no imessage config)",
+        );
+      }
+      return;
+    }
+    if (cfg.imessage?.enabled === false) {
+      imessageRuntime = {
+        ...imessageRuntime,
+        running: false,
+        lastError: "disabled",
+      };
+      if (isVerbose()) {
+        logIMessage.debug(
+          "imessage provider disabled (imessage.enabled=false)",
+        );
+      }
+      return;
+    }
+    const cliPath = cfg.imessage?.cliPath?.trim() || "imsg";
+    const dbPath = cfg.imessage?.dbPath?.trim();
+    logIMessage.info(
+      `starting provider (${cliPath}${dbPath ? ` db=${dbPath}` : ""})`,
+    );
+    imessageAbort = new AbortController();
+    imessageRuntime = {
+      ...imessageRuntime,
+      running: true,
+      lastStartAt: Date.now(),
+      lastError: null,
+      cliPath,
+      dbPath: dbPath ?? null,
+    };
+    const task = monitorIMessageProvider({
+      cliPath,
+      dbPath,
+      allowFrom: cfg.imessage?.allowFrom,
+      includeAttachments: cfg.imessage?.includeAttachments,
+      mediaMaxMb: cfg.imessage?.mediaMaxMb,
+      runtime: imessageRuntimeEnv,
+      abortSignal: imessageAbort.signal,
+    })
+      .catch((err) => {
+        imessageRuntime = {
+          ...imessageRuntime,
+          lastError: formatError(err),
+        };
+        logIMessage.error(`provider exited: ${formatError(err)}`);
+      })
+      .finally(() => {
+        imessageAbort = null;
+        imessageTask = null;
+        imessageRuntime = {
+          ...imessageRuntime,
+          running: false,
+          lastStopAt: Date.now(),
+        };
+      });
+    imessageTask = task;
+  };
+
+  const stopIMessageProvider = async () => {
+    if (!imessageAbort && !imessageTask) return;
+    imessageAbort?.abort();
+    try {
+      await imessageTask;
+    } catch {
+      // ignore
+    }
+    imessageAbort = null;
+    imessageTask = null;
+    imessageRuntime = {
+      ...imessageRuntime,
+      running: false,
+      lastStopAt: Date.now(),
+    };
+  };
+
   const startProviders = async () => {
     await startWhatsAppProvider();
     await startDiscordProvider();
     await startTelegramProvider();
+    await startSignalProvider();
+    await startIMessageProvider();
   };
 
   const broadcast = (
@@ -2590,6 +3016,12 @@ export async function startGatewayServer(
             verboseLevel: entry?.verboseLevel,
             model: entry?.model,
             contextTokens: entry?.contextTokens,
+            displayName: entry?.displayName,
+            chatType: entry?.chatType,
+            surface: entry?.surface,
+            subject: entry?.subject,
+            room: entry?.room,
+            space: entry?.space,
             lastChannel: entry?.lastChannel,
             lastTo: entry?.lastTo,
             skillsSnapshot: entry?.skillsSnapshot,
@@ -2835,13 +3267,7 @@ export async function startGatewayServer(
           chatAbortControllers.delete(runId);
           chatRunBuffers.delete(runId);
           chatDeltaSentAt.delete(runId);
-          const current = chatRunSessions.get(active.sessionId);
-          if (
-            current?.clientRunId === runId &&
-            current.sessionKey === sessionKey
-          ) {
-            chatRunSessions.delete(active.sessionId);
-          }
+          removeChatRun(active.sessionId, runId, sessionKey);
 
           const payload = {
             runId,
@@ -2959,10 +3385,7 @@ export async function startGatewayServer(
               sessionId,
               sessionKey: p.sessionKey,
             });
-            chatRunSessions.set(sessionId, {
-              sessionKey: p.sessionKey,
-              clientRunId,
-            });
+            addChatRun(sessionId, { sessionKey: p.sessionKey, clientRunId });
 
             if (store) {
               store[p.sessionKey] = sessionEntry;
@@ -3079,7 +3502,7 @@ export async function startGatewayServer(
 
         // Ensure chat UI clients refresh when this run completes (even though it wasn't started via chat.send).
         // This maps agent bus events (keyed by sessionId) to chat events (keyed by clientRunId).
-        chatRunSessions.set(sessionId, {
+        addChatRun(sessionId, {
           sessionKey,
           clientRunId: `voice-${randomUUID()}`,
         });
@@ -3125,7 +3548,10 @@ export async function startGatewayServer(
           typeof link?.channel === "string" ? link.channel.trim() : "";
         const channel = channelRaw.toLowerCase();
         const provider =
-          channel === "whatsapp" || channel === "telegram"
+          channel === "whatsapp" ||
+          channel === "telegram" ||
+          channel === "signal" ||
+          channel === "imessage"
             ? channel
             : undefined;
         const to =
@@ -3441,71 +3867,152 @@ export async function startGatewayServer(
     agentRunSeq.set(evt.runId, evt.seq);
     broadcast("agent", evt);
 
-    const chatLink = chatRunSessions.get(evt.runId);
-    if (chatLink) {
-      // Map agent bus events to chat events for WS WebChat clients.
-      // Use clientRunId so the webchat can correlate with its pending promise.
-      const { sessionKey, clientRunId } = chatLink;
-      bridgeSendToSession(sessionKey, "agent", evt);
-      const base = {
-        runId: clientRunId,
-        sessionKey,
-        seq: evt.seq,
-      };
-      if (evt.stream === "assistant" && typeof evt.data?.text === "string") {
-        chatRunBuffers.set(clientRunId, evt.data.text);
-        const now = Date.now();
-        const last = chatDeltaSentAt.get(clientRunId) ?? 0;
-        // Throttle UI delta events so slow clients don't accumulate unbounded buffers.
-        if (now - last >= 150) {
-          chatDeltaSentAt.set(clientRunId, now);
-          const payload = {
-            ...base,
-            state: "delta" as const,
-            message: {
-              role: "assistant",
-              content: [{ type: "text", text: evt.data.text }],
-              timestamp: now,
-            },
+    const chatLink = peekChatRun(evt.runId);
+    const sessionKey =
+      chatLink?.sessionKey ?? resolveSessionKeyForRun(evt.runId);
+    const jobState =
+      evt.stream === "job" && typeof evt.data?.state === "string"
+        ? evt.data.state
+        : null;
+
+    if (sessionKey) {
+      if (chatLink) {
+        // Map agent bus events to chat events for WS WebChat clients.
+        // Use clientRunId so the webchat can correlate with its pending promise.
+        const { clientRunId } = chatLink;
+        bridgeSendToSession(sessionKey, "agent", evt);
+        if (evt.stream === "assistant" && typeof evt.data?.text === "string") {
+          const base = {
+            runId: clientRunId,
+            sessionKey,
+            seq: evt.seq,
           };
-          broadcast("chat", payload, { dropIfSlow: true });
-          bridgeSendToSession(sessionKey, "chat", payload);
+          chatRunBuffers.set(clientRunId, evt.data.text);
+          const now = Date.now();
+          const last = chatDeltaSentAt.get(clientRunId) ?? 0;
+          // Throttle UI delta events so slow clients don't accumulate unbounded buffers.
+          if (now - last >= 150) {
+            chatDeltaSentAt.set(clientRunId, now);
+            const payload = {
+              ...base,
+              state: "delta" as const,
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: evt.data.text }],
+                timestamp: now,
+              },
+            };
+            broadcast("chat", payload, { dropIfSlow: true });
+            bridgeSendToSession(sessionKey, "chat", payload);
+          }
+        } else if (jobState === "done" || jobState === "error") {
+          const finished = shiftChatRun(evt.runId);
+          if (!finished) {
+            if (jobState) clearAgentRunContext(evt.runId);
+            return;
+          }
+          const { sessionKey: finishedSessionKey, clientRunId: finishedRunId } =
+            finished;
+          const base = {
+            runId: finishedRunId,
+            sessionKey: finishedSessionKey,
+            seq: evt.seq,
+          };
+          const text = chatRunBuffers.get(finishedRunId)?.trim() ?? "";
+          chatRunBuffers.delete(finishedRunId);
+          chatDeltaSentAt.delete(finishedRunId);
+          if (jobState === "done") {
+            const payload = {
+              ...base,
+              state: "final",
+              message: text
+                ? {
+                    role: "assistant",
+                    content: [{ type: "text", text }],
+                    timestamp: Date.now(),
+                  }
+                : undefined,
+            };
+            broadcast("chat", payload);
+            bridgeSendToSession(finishedSessionKey, "chat", payload);
+          } else {
+            const payload = {
+              ...base,
+              state: "error",
+              errorMessage: evt.data.error
+                ? formatForLog(evt.data.error)
+                : undefined,
+            };
+            broadcast("chat", payload);
+            bridgeSendToSession(finishedSessionKey, "chat", payload);
+          }
         }
-      } else if (
-        evt.stream === "job" &&
-        typeof evt.data?.state === "string" &&
-        (evt.data.state === "done" || evt.data.state === "error")
-      ) {
-        const text = chatRunBuffers.get(clientRunId)?.trim() ?? "";
-        chatRunBuffers.delete(clientRunId);
-        chatDeltaSentAt.delete(clientRunId);
-        if (evt.data.state === "done") {
-          const payload = {
-            ...base,
-            state: "final",
-            message: text
-              ? {
-                  role: "assistant",
-                  content: [{ type: "text", text }],
-                  timestamp: Date.now(),
-                }
-              : undefined,
+      } else {
+        const clientRunId = evt.runId;
+        bridgeSendToSession(sessionKey, "agent", evt);
+        if (evt.stream === "assistant" && typeof evt.data?.text === "string") {
+          const base = {
+            runId: clientRunId,
+            sessionKey,
+            seq: evt.seq,
           };
-          broadcast("chat", payload);
-          bridgeSendToSession(sessionKey, "chat", payload);
-        } else {
-          const payload = {
-            ...base,
-            state: "error",
-            errorMessage: evt.data.error
-              ? formatForLog(evt.data.error)
-              : undefined,
+          chatRunBuffers.set(clientRunId, evt.data.text);
+          const now = Date.now();
+          const last = chatDeltaSentAt.get(clientRunId) ?? 0;
+          if (now - last >= 150) {
+            chatDeltaSentAt.set(clientRunId, now);
+            const payload = {
+              ...base,
+              state: "delta" as const,
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: evt.data.text }],
+                timestamp: now,
+              },
+            };
+            broadcast("chat", payload, { dropIfSlow: true });
+            bridgeSendToSession(sessionKey, "chat", payload);
+          }
+        } else if (jobState === "done" || jobState === "error") {
+          const base = {
+            runId: clientRunId,
+            sessionKey,
+            seq: evt.seq,
           };
-          broadcast("chat", payload);
-          bridgeSendToSession(sessionKey, "chat", payload);
+          const text = chatRunBuffers.get(clientRunId)?.trim() ?? "";
+          chatRunBuffers.delete(clientRunId);
+          chatDeltaSentAt.delete(clientRunId);
+          if (jobState === "done") {
+            const payload = {
+              ...base,
+              state: "final",
+              message: text
+                ? {
+                    role: "assistant",
+                    content: [{ type: "text", text }],
+                    timestamp: Date.now(),
+                  }
+                : undefined,
+            };
+            broadcast("chat", payload);
+            bridgeSendToSession(sessionKey, "chat", payload);
+          } else {
+            const payload = {
+              ...base,
+              state: "error",
+              errorMessage: evt.data.error
+                ? formatForLog(evt.data.error)
+                : undefined,
+            };
+            broadcast("chat", payload);
+            bridgeSendToSession(sessionKey, "chat", payload);
+          }
         }
-        chatRunSessions.delete(evt.runId);
       }
+    }
+
+    if (jobState === "done" || jobState === "error") {
+      clearAgentRunContext(evt.runId);
     }
   });
 
@@ -3919,27 +4426,33 @@ export async function startGatewayServer(
                   ? Math.max(1000, timeoutMsRaw)
                   : 10_000;
               const cfg = loadConfig();
-              const envToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
-              const configToken = cfg.telegram?.botToken?.trim();
-              const telegramToken = envToken || configToken || "";
-              const tokenSource = envToken
-                ? "env"
-                : configToken
-                  ? "config"
-                  : "none";
+              const telegramCfg = cfg.telegram;
+              const telegramEnabled =
+                Boolean(telegramCfg) && telegramCfg?.enabled !== false;
+              const { token: telegramToken, source: tokenSource } =
+                telegramEnabled
+                  ? resolveTelegramToken(cfg)
+                  : { token: "", source: "none" as const };
               let telegramProbe: TelegramProbe | undefined;
               let lastProbeAt: number | null = null;
-              if (probe && telegramToken) {
+              if (probe && telegramToken && telegramEnabled) {
                 telegramProbe = await probeTelegram(
                   telegramToken,
                   timeoutMs,
-                  cfg.telegram?.proxy,
+                  telegramCfg?.proxy,
                 );
                 lastProbeAt = Date.now();
               }
 
-              const discordEnvToken = process.env.DISCORD_BOT_TOKEN?.trim();
-              const discordConfigToken = cfg.discord?.token?.trim();
+              const discordCfg = cfg.discord;
+              const discordEnabled =
+                Boolean(discordCfg) && discordCfg?.enabled !== false;
+              const discordEnvToken = discordEnabled
+                ? process.env.DISCORD_BOT_TOKEN?.trim()
+                : "";
+              const discordConfigToken = discordEnabled
+                ? discordCfg?.token?.trim()
+                : "";
               const discordToken = discordEnvToken || discordConfigToken || "";
               const discordTokenSource = discordEnvToken
                 ? "env"
@@ -3948,9 +4461,45 @@ export async function startGatewayServer(
                   : "none";
               let discordProbe: DiscordProbe | undefined;
               let discordLastProbeAt: number | null = null;
-              if (probe && discordToken) {
+              if (probe && discordToken && discordEnabled) {
                 discordProbe = await probeDiscord(discordToken, timeoutMs);
                 discordLastProbeAt = Date.now();
+              }
+
+              const signalCfg = cfg.signal;
+              const signalEnabled = signalCfg?.enabled !== false;
+              const signalHost = signalCfg?.httpHost?.trim() || "127.0.0.1";
+              const signalPort = signalCfg?.httpPort ?? 8080;
+              const signalBaseUrl =
+                signalCfg?.httpUrl?.trim() ||
+                `http://${signalHost}:${signalPort}`;
+              const signalConfigured =
+                Boolean(signalCfg) &&
+                signalEnabled &&
+                Boolean(
+                  signalCfg?.account?.trim() ||
+                    signalCfg?.httpUrl?.trim() ||
+                    signalCfg?.cliPath?.trim() ||
+                    signalCfg?.httpHost?.trim() ||
+                    typeof signalCfg?.httpPort === "number" ||
+                    typeof signalCfg?.autoStart === "boolean",
+                );
+              let signalProbe: SignalProbe | undefined;
+              let signalLastProbeAt: number | null = null;
+              if (probe && signalConfigured) {
+                signalProbe = await probeSignal(signalBaseUrl, timeoutMs);
+                signalLastProbeAt = Date.now();
+              }
+
+              const imessageCfg = cfg.imessage;
+              const imessageEnabled = imessageCfg?.enabled !== false;
+              const imessageConfigured =
+                Boolean(imessageCfg) && imessageEnabled;
+              let imessageProbe: IMessageProbe | undefined;
+              let imessageLastProbeAt: number | null = null;
+              if (probe && imessageConfigured) {
+                imessageProbe = await probeIMessage(timeoutMs);
+                imessageLastProbeAt = Date.now();
               }
 
               const linked = await webAuthExists();
@@ -3976,7 +4525,7 @@ export async function startGatewayServer(
                     lastError: whatsappRuntime.lastError ?? null,
                   },
                   telegram: {
-                    configured: Boolean(telegramToken),
+                    configured: telegramEnabled && Boolean(telegramToken),
                     tokenSource,
                     running: telegramRuntime.running,
                     mode: telegramRuntime.mode ?? null,
@@ -3987,7 +4536,7 @@ export async function startGatewayServer(
                     lastProbeAt,
                   },
                   discord: {
-                    configured: Boolean(discordToken),
+                    configured: discordEnabled && Boolean(discordToken),
                     tokenSource: discordTokenSource,
                     running: discordRuntime.running,
                     lastStartAt: discordRuntime.lastStartAt ?? null,
@@ -3995,6 +4544,27 @@ export async function startGatewayServer(
                     lastError: discordRuntime.lastError ?? null,
                     probe: discordProbe,
                     lastProbeAt: discordLastProbeAt,
+                  },
+                  signal: {
+                    configured: signalConfigured,
+                    baseUrl: signalBaseUrl,
+                    running: signalRuntime.running,
+                    lastStartAt: signalRuntime.lastStartAt ?? null,
+                    lastStopAt: signalRuntime.lastStopAt ?? null,
+                    lastError: signalRuntime.lastError ?? null,
+                    probe: signalProbe,
+                    lastProbeAt: signalLastProbeAt,
+                  },
+                  imessage: {
+                    configured: imessageConfigured,
+                    running: imessageRuntime.running,
+                    lastStartAt: imessageRuntime.lastStartAt ?? null,
+                    lastStopAt: imessageRuntime.lastStopAt ?? null,
+                    lastError: imessageRuntime.lastError ?? null,
+                    cliPath: imessageRuntime.cliPath ?? null,
+                    dbPath: imessageRuntime.dbPath ?? null,
+                    probe: imessageProbe,
+                    lastProbeAt: imessageLastProbeAt,
                   },
                 },
                 undefined,
@@ -4087,13 +4657,7 @@ export async function startGatewayServer(
               chatAbortControllers.delete(runId);
               chatRunBuffers.delete(runId);
               chatDeltaSentAt.delete(runId);
-              const current = chatRunSessions.get(active.sessionId);
-              if (
-                current?.clientRunId === runId &&
-                current.sessionKey === sessionKey
-              ) {
-                chatRunSessions.delete(active.sessionId);
-              }
+              removeChatRun(active.sessionId, runId, sessionKey);
 
               const payload = {
                 runId,
@@ -4218,7 +4782,7 @@ export async function startGatewayServer(
                   sessionId,
                   sessionKey: p.sessionKey,
                 });
-                chatRunSessions.set(sessionId, {
+                addChatRun(sessionId, {
                   sessionKey: p.sessionKey,
                   clientRunId,
                 });
@@ -4790,8 +5354,9 @@ export async function startGatewayServer(
               };
               const cfg = loadConfig();
               const skills = cfg.skills ? { ...cfg.skills } : {};
-              const current = skills[p.skillKey]
-                ? { ...skills[p.skillKey] }
+              const entries = skills.entries ? { ...skills.entries } : {};
+              const current = entries[p.skillKey]
+                ? { ...entries[p.skillKey] }
                 : {};
               if (typeof p.enabled === "boolean") {
                 current.enabled = p.enabled;
@@ -4812,7 +5377,8 @@ export async function startGatewayServer(
                 }
                 current.env = nextEnv;
               }
-              skills[p.skillKey] = current;
+              entries[p.skillKey] = current;
+              skills.entries = entries;
               const nextConfig: ClawdisConfig = {
                 ...cfg,
                 skills,
@@ -5853,12 +6419,17 @@ export async function startGatewayServer(
               }
               const to = params.to.trim();
               const message = params.message.trim();
-              const provider = (params.provider ?? "whatsapp").toLowerCase();
+              const providerRaw = (params.provider ?? "whatsapp").toLowerCase();
+              const provider =
+                providerRaw === "imsg" ? "imessage" : providerRaw;
               try {
                 if (provider === "telegram") {
+                  const cfg = loadConfig();
+                  const { token } = resolveTelegramToken(cfg);
                   const result = await sendMessageTelegram(to, message, {
                     mediaUrl: params.mediaUrl,
                     verbose: isVerbose(),
+                    token: token || undefined,
                   });
                   const payload = {
                     runId: idem,
@@ -5881,6 +6452,49 @@ export async function startGatewayServer(
                     runId: idem,
                     messageId: result.messageId,
                     channelId: result.channelId,
+                    provider,
+                  };
+                  dedupe.set(`send:${idem}`, {
+                    ts: Date.now(),
+                    ok: true,
+                    payload,
+                  });
+                  respond(true, payload, undefined, { provider });
+                } else if (provider === "signal") {
+                  const cfg = loadConfig();
+                  const host = cfg.signal?.httpHost?.trim() || "127.0.0.1";
+                  const port = cfg.signal?.httpPort ?? 8080;
+                  const baseUrl =
+                    cfg.signal?.httpUrl?.trim() || `http://${host}:${port}`;
+                  const result = await sendMessageSignal(to, message, {
+                    mediaUrl: params.mediaUrl,
+                    baseUrl,
+                    account: cfg.signal?.account,
+                  });
+                  const payload = {
+                    runId: idem,
+                    messageId: result.messageId,
+                    provider,
+                  };
+                  dedupe.set(`send:${idem}`, {
+                    ts: Date.now(),
+                    ok: true,
+                    payload,
+                  });
+                  respond(true, payload, undefined, { provider });
+                } else if (provider === "imessage") {
+                  const cfg = loadConfig();
+                  const result = await sendMessageIMessage(to, message, {
+                    mediaUrl: params.mediaUrl,
+                    cliPath: cfg.imessage?.cliPath,
+                    dbPath: cfg.imessage?.dbPath,
+                    maxBytes: cfg.imessage?.mediaMaxMb
+                      ? cfg.imessage.mediaMaxMb * 1024 * 1024
+                      : undefined,
+                  });
+                  const payload = {
+                    runId: idem,
+                    messageId: result.messageId,
                     provider,
                   };
                   dedupe.set(`send:${idem}`, {
@@ -5991,7 +6605,7 @@ export async function startGatewayServer(
                 const mainKey =
                   (cfg.session?.mainKey ?? "main").trim() || "main";
                 if (requestedSessionKey === mainKey) {
-                  chatRunSessions.set(sessionId, {
+                  addChatRun(sessionId, {
                     sessionKey: requestedSessionKey,
                     clientRunId: idem,
                   });
@@ -6003,9 +6617,13 @@ export async function startGatewayServer(
 
               const requestedChannelRaw =
                 typeof params.channel === "string" ? params.channel.trim() : "";
-              const requestedChannel = requestedChannelRaw
+              const requestedChannelNormalized = requestedChannelRaw
                 ? requestedChannelRaw.toLowerCase()
                 : "last";
+              const requestedChannel =
+                requestedChannelNormalized === "imsg"
+                  ? "imessage"
+                  : requestedChannelNormalized;
 
               const lastChannel = sessionEntry?.lastChannel;
               const lastTo =
@@ -6025,6 +6643,8 @@ export async function startGatewayServer(
                   requestedChannel === "whatsapp" ||
                   requestedChannel === "telegram" ||
                   requestedChannel === "discord" ||
+                  requestedChannel === "signal" ||
+                  requestedChannel === "imessage" ||
                   requestedChannel === "webchat"
                 ) {
                   return requestedChannel;
@@ -6043,7 +6663,9 @@ export async function startGatewayServer(
                 if (
                   resolvedChannel === "whatsapp" ||
                   resolvedChannel === "telegram" ||
-                  resolvedChannel === "discord"
+                  resolvedChannel === "discord" ||
+                  resolvedChannel === "signal" ||
+                  resolvedChannel === "imessage"
                 ) {
                   return lastTo || undefined;
                 }
@@ -6062,7 +6684,7 @@ export async function startGatewayServer(
                 if (explicit) return resolvedTo;
 
                 const cfg = cfgForAgent ?? loadConfig();
-                const rawAllow = cfg.routing?.allowFrom ?? [];
+                const rawAllow = cfg.whatsapp?.allowFrom ?? [];
                 if (rawAllow.includes("*")) return resolvedTo;
                 const allowFrom = rawAllow
                   .map((val) => normalizeE164(val))
@@ -6184,6 +6806,9 @@ export async function startGatewayServer(
   });
   log.info(`listening on ws://${bindHost}:${port} (PID ${process.pid})`);
   log.info(`log file: ${getResolvedLoggerSettings().file}`);
+  if (isNixMode) {
+    log.info("gateway: running in Nix mode (config managed externally)");
+  }
   let tailscaleCleanup: (() => Promise<void>) | null = null;
   if (tailscaleMode !== "off") {
     try {
@@ -6285,6 +6910,8 @@ export async function startGatewayServer(
       await stopWhatsAppProvider();
       await stopTelegramProvider();
       await stopDiscordProvider();
+      await stopSignalProvider();
+      await stopIMessageProvider();
       cron.stop();
       heartbeatRunner.stop();
       broadcast("shutdown", {
@@ -6322,7 +6949,9 @@ export async function startGatewayServer(
         await stopBrowserControlServerIfStarted().catch(() => {});
       }
       await Promise.allSettled(
-        [whatsappTask, telegramTask].filter(Boolean) as Array<Promise<unknown>>,
+        [whatsappTask, telegramTask, signalTask, imessageTask].filter(
+          Boolean,
+        ) as Array<Promise<unknown>>,
       );
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve, reject) =>

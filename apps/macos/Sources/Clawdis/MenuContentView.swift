@@ -20,6 +20,8 @@ struct MenuContent: View {
     @State private var loadingMics = false
     @State private var browserControlEnabled = true
     @AppStorage(cameraEnabledKey) private var cameraEnabled: Bool = false
+    @AppStorage(appLogLevelKey) private var appLogLevelRaw: String = AppLogLevel.default.rawValue
+    @AppStorage(debugFileLogEnabledKey) private var appFileLoggingEnabled: Bool = false
 
     init(state: AppState, updater: UpdaterProviding?) {
         self._state = Bindable(wrappedValue: state)
@@ -57,7 +59,7 @@ struct MenuContent: View {
                     get: { self.browserControlEnabled },
                     set: { enabled in
                         self.browserControlEnabled = enabled
-                        ClawdisConfigFile.setBrowserControlEnabled(enabled)
+                        Task { await self.saveBrowserControlEnabled(enabled) }
                     })) {
                 Label("Browser Control", systemImage: "globe")
             }
@@ -75,8 +77,8 @@ struct MenuContent: View {
             Toggle(isOn: self.voiceWakeBinding) {
                 Label("Voice Wake", systemImage: "mic.fill")
             }
-                .disabled(!voiceWakeSupported)
-                .opacity(voiceWakeSupported ? 1 : 0.5)
+            .disabled(!voiceWakeSupported)
+            .opacity(voiceWakeSupported ? 1 : 0.5)
             if self.showVoiceWakeMicPicker {
                 self.voiceWakeMicMenu
             }
@@ -138,8 +140,8 @@ struct MenuContent: View {
         .onChange(of: self.state.voicePushToTalkEnabled) { _, enabled in
             VoicePushToTalkHotkey.shared.setEnabled(voiceWakeSupported && enabled)
         }
-        .onAppear {
-            self.browserControlEnabled = ClawdisConfigFile.browserControlEnabled()
+        .task(id: self.state.connectionMode) {
+            await self.loadBrowserControlEnabled()
         }
     }
 
@@ -151,6 +153,35 @@ struct MenuContent: View {
             "Remote Clawdis Active"
         case .local:
             "Clawdis Active"
+        }
+    }
+
+    private func loadBrowserControlEnabled() async {
+        let root = await ConfigStore.load()
+        let browser = root["browser"] as? [String: Any]
+        let enabled = browser?["enabled"] as? Bool ?? true
+        await MainActor.run { self.browserControlEnabled = enabled }
+    }
+
+    private func saveBrowserControlEnabled(_ enabled: Bool) async {
+        let (success, _) = await MenuContent.buildAndSaveBrowserEnabled(enabled)
+
+        if !success {
+            await self.loadBrowserControlEnabled()
+        }
+    }
+
+    @MainActor
+    private static func buildAndSaveBrowserEnabled(_ enabled: Bool) async -> (Bool,()) {
+        var root = await ConfigStore.load()
+        var browser = root["browser"] as? [String: Any] ?? [:]
+        browser["enabled"] = enabled
+        root["browser"] = browser
+        do {
+            try await ConfigStore.save(root)
+            return (true, ())
+        } catch {
+            return (false, ())
         }
     }
 
@@ -173,6 +204,16 @@ struct MenuContent: View {
                 } label: {
                     Label("Send Test Heartbeat", systemImage: "waveform.path.ecg")
                 }
+                if self.state.connectionMode == .remote {
+                    Button {
+                        Task { @MainActor in
+                            let result = await DebugActions.resetGatewayTunnel()
+                            self.presentDebugResult(result, title: "Remote Tunnel")
+                        }
+                    } label: {
+                        Label("Reset Remote Tunnel", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
                 Button {
                     Task { _ = await DebugActions.toggleVerboseLoggingMain() }
                 } label: {
@@ -181,6 +222,22 @@ struct MenuContent: View {
                             ? "Verbose Logging (Main): On"
                             : "Verbose Logging (Main): Off",
                         systemImage: "text.alignleft")
+                }
+                Menu {
+                    Picker("Verbosity", selection: self.$appLogLevelRaw) {
+                        ForEach(AppLogLevel.allCases) { level in
+                            Text(level.title).tag(level.rawValue)
+                        }
+                    }
+                    Toggle(isOn: self.$appFileLoggingEnabled) {
+                        Label(
+                            self.appFileLoggingEnabled
+                                ? "File Logging: On"
+                                : "File Logging: Off",
+                            systemImage: "doc.text.magnifyingglass")
+                    }
+                } label: {
+                    Label("App Logging", systemImage: "doc.text")
                 }
                 Button {
                     DebugActions.openSessionStore()
@@ -328,6 +385,10 @@ struct MenuContent: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
         .padding(.top, 2)
     }
@@ -409,6 +470,21 @@ struct MenuContent: View {
             return "Auto-detect (\(host))"
         }
         return "System default"
+    }
+
+    @MainActor
+    private func presentDebugResult(_ result: Result<String, DebugActionError>, title: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        switch result {
+        case let .success(message):
+            alert.informativeText = message
+            alert.alertStyle = .informational
+        case let .failure(error):
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+        }
+        alert.runModal()
     }
 
     @MainActor

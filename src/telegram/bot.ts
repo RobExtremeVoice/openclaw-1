@@ -9,6 +9,7 @@ import { chunkText } from "../auto-reply/chunk.js";
 import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
+import type { ReplyToMode } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import { resolveStorePath, updateLastRoute } from "../config/sessions.js";
 import { danger, isVerbose, logVerbose } from "../globals.js";
@@ -39,6 +40,7 @@ export type TelegramBotOptions = {
   requireMention?: boolean;
   allowFrom?: Array<string | number>;
   mediaMaxMb?: number;
+  replyToMode?: ReplyToMode;
   proxyFetch?: typeof fetch;
 };
 
@@ -58,12 +60,22 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   bot.api.config.use(apiThrottler());
 
   const cfg = loadConfig();
-  const requireMention =
-    opts.requireMention ?? cfg.telegram?.requireMention ?? true;
   const allowFrom = opts.allowFrom ?? cfg.telegram?.allowFrom;
+  const replyToMode = opts.replyToMode ?? cfg.telegram?.replyToMode ?? "off";
   const mediaMaxBytes =
     (opts.mediaMaxMb ?? cfg.telegram?.mediaMaxMb ?? 5) * 1024 * 1024;
   const logger = getChildLogger({ module: "telegram-auto-reply" });
+  const resolveGroupRequireMention = (chatId: string | number) => {
+    const groupId = String(chatId);
+    const groupConfig = cfg.telegram?.groups?.[groupId];
+    if (typeof groupConfig?.requireMention === "boolean") {
+      return groupConfig.requireMention;
+    }
+    const groupDefault = cfg.telegram?.groups?.["*"]?.requireMention;
+    if (typeof groupDefault === "boolean") return groupDefault;
+    if (typeof opts.requireMention === "boolean") return opts.requireMention;
+    return true;
+  };
 
   bot.on("message", async (ctx) => {
     try {
@@ -101,14 +113,16 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       }
 
       const botUsername = ctx.me?.username?.toLowerCase();
-      if (
-        isGroup &&
-        requireMention &&
-        botUsername &&
-        !hasBotMention(msg, botUsername)
-      ) {
-        logger.info({ chatId, reason: "no-mention" }, "skipping group message");
-        return;
+      const wasMentioned =
+        Boolean(botUsername) && hasBotMention(msg, botUsername);
+      if (isGroup && resolveGroupRequireMention(chatId) && botUsername) {
+        if (!wasMentioned) {
+          logger.info(
+            { chatId, reason: "no-mention" },
+            "skipping group message",
+          );
+          return;
+        }
       }
 
       const media = await resolveMedia(
@@ -126,7 +140,9 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       ).trim();
       if (!rawBody) return;
       const replySuffix = replyTarget
-        ? `\n\n[Replying to ${replyTarget.sender}]\n${replyTarget.body}\n[/Replying]`
+        ? `\n\n[Replying to ${replyTarget.sender}${
+            replyTarget.id ? ` id:${replyTarget.id}` : ""
+          }]\n${replyTarget.body}\n[/Replying]`
         : "";
       const body = formatAgentEnvelope({
         surface: "Telegram",
@@ -150,6 +166,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         ReplyToBody: replyTarget?.body,
         ReplyToSender: replyTarget?.sender,
         Timestamp: msg.date ? msg.date * 1000 : undefined,
+        WasMentioned: isGroup && botUsername ? wasMentioned : undefined,
         MediaPath: media?.path,
         MediaType: media?.contentType,
         MediaUrl: media?.path,
@@ -181,9 +198,36 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         );
       }
 
+      let blockSendChain: Promise<void> = Promise.resolve();
+      const sendBlockReply = (payload: ReplyPayload) => {
+        if (
+          !payload?.text &&
+          !payload?.mediaUrl &&
+          !(payload?.mediaUrls?.length ?? 0)
+        ) {
+          return;
+        }
+        blockSendChain = blockSendChain
+          .then(async () => {
+            await deliverReplies({
+              replies: [payload],
+              chatId: String(chatId),
+              token: opts.token,
+              runtime,
+              bot,
+              replyToMode,
+            });
+          })
+          .catch((err) => {
+            runtime.error?.(
+              danger(`telegram block reply failed: ${String(err)}`),
+            );
+          });
+      };
+
       const replyResult = await getReplyFromConfig(
         ctxPayload,
-        { onReplyStart: sendTyping },
+        { onReplyStart: sendTyping, onBlockReply: sendBlockReply },
         cfg,
       );
       const replies = replyResult
@@ -191,6 +235,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           ? replyResult
           : [replyResult]
         : [];
+      await blockSendChain;
       if (replies.length === 0) return;
 
       await deliverReplies({
@@ -199,9 +244,10 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         token: opts.token,
         runtime,
         bot,
+        replyToMode,
       });
     } catch (err) {
-      runtime.error?.(danger(`Telegram handler failed: ${String(err)}`));
+      runtime.error?.(danger(`handler failed: ${String(err)}`));
     }
   });
 
@@ -221,13 +267,19 @@ async function deliverReplies(params: {
   token: string;
   runtime: RuntimeEnv;
   bot: Bot;
+  replyToMode: ReplyToMode;
 }) {
-  const { replies, chatId, runtime, bot } = params;
+  const { replies, chatId, runtime, bot, replyToMode } = params;
+  let hasReplied = false;
   for (const reply of replies) {
     if (!reply?.text && !reply?.mediaUrl && !(reply?.mediaUrls?.length ?? 0)) {
-      runtime.error?.(danger("Telegram reply missing text/media"));
+      runtime.error?.(danger("reply missing text/media"));
       continue;
     }
+    const replyToId =
+      replyToMode === "off"
+        ? undefined
+        : resolveTelegramReplyId(reply.replyToId);
     const mediaList = reply.mediaUrls?.length
       ? reply.mediaUrls
       : reply.mediaUrl
@@ -235,7 +287,15 @@ async function deliverReplies(params: {
         : [];
     if (mediaList.length === 0) {
       for (const chunk of chunkText(reply.text || "", 4000)) {
-        await sendTelegramText(bot, chatId, chunk, runtime);
+        await sendTelegramText(bot, chatId, chunk, runtime, {
+          replyToMessageId:
+            replyToId && (replyToMode === "all" || !hasReplied)
+              ? replyToId
+              : undefined,
+        });
+        if (replyToId && !hasReplied) {
+          hasReplied = true;
+        }
       }
       continue;
     }
@@ -247,14 +307,33 @@ async function deliverReplies(params: {
       const file = new InputFile(media.buffer, media.fileName ?? "file");
       const caption = first ? (reply.text ?? undefined) : undefined;
       first = false;
+      const replyToMessageId =
+        replyToId && (replyToMode === "all" || !hasReplied)
+          ? replyToId
+          : undefined;
       if (kind === "image") {
-        await bot.api.sendPhoto(chatId, file, { caption });
+        await bot.api.sendPhoto(chatId, file, {
+          caption,
+          reply_to_message_id: replyToMessageId,
+        });
       } else if (kind === "video") {
-        await bot.api.sendVideo(chatId, file, { caption });
+        await bot.api.sendVideo(chatId, file, {
+          caption,
+          reply_to_message_id: replyToMessageId,
+        });
       } else if (kind === "audio") {
-        await bot.api.sendAudio(chatId, file, { caption });
+        await bot.api.sendAudio(chatId, file, {
+          caption,
+          reply_to_message_id: replyToMessageId,
+        });
       } else {
-        await bot.api.sendDocument(chatId, file, { caption });
+        await bot.api.sendDocument(chatId, file, {
+          caption,
+          reply_to_message_id: replyToMessageId,
+        });
+      }
+      if (replyToId && !hasReplied) {
+        hasReplied = true;
       }
     }
   }
@@ -301,6 +380,13 @@ function hasBotMention(msg: TelegramMessage, botUsername: string) {
     if (slice.toLowerCase() === `@${botUsername}`) return true;
   }
   return false;
+}
+
+function resolveTelegramReplyId(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed;
 }
 
 async function resolveMedia(
@@ -351,10 +437,12 @@ async function sendTelegramText(
   chatId: string,
   text: string,
   runtime: RuntimeEnv,
+  opts?: { replyToMessageId?: number },
 ): Promise<number | undefined> {
   try {
     const res = await bot.api.sendMessage(chatId, text, {
       parse_mode: "Markdown",
+      reply_to_message_id: opts?.replyToMessageId,
     });
     return res.message_id;
   } catch (err) {
@@ -363,7 +451,9 @@ async function sendTelegramText(
       runtime.log?.(
         `telegram markdown parse failed; retrying without formatting: ${errText}`,
       );
-      const res = await bot.api.sendMessage(chatId, text, {});
+      const res = await bot.api.sendMessage(chatId, text, {
+        reply_to_message_id: opts?.replyToMessageId,
+      });
       return res.message_id;
     }
     throw err;

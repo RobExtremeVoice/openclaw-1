@@ -4,10 +4,10 @@ set -euo pipefail
 APP_BUNDLE="${1:-dist/Clawdis.app}"
 IDENTITY="${SIGN_IDENTITY:-}"
 TIMESTAMP_MODE="${CODESIGN_TIMESTAMP:-auto}"
-ENT_TMP_BASE=$(mktemp -t clawdis-entitlements-base)
-ENT_TMP_APP=$(mktemp -t clawdis-entitlements-app)
-ENT_TMP_APP_BASE=$(mktemp -t clawdis-entitlements-app-base)
-ENT_TMP_BUN=$(mktemp -t clawdis-entitlements-bun)
+ENT_TMP_BASE=$(mktemp -t clawdis-entitlements-base.XXXXXX)
+ENT_TMP_APP=$(mktemp -t clawdis-entitlements-app.XXXXXX)
+ENT_TMP_APP_BASE=$(mktemp -t clawdis-entitlements-app-base.XXXXXX)
+ENT_TMP_BUN=$(mktemp -t clawdis-entitlements-bun.XXXXXX)
 
 if [ ! -d "$APP_BUNDLE" ]; then
   echo "App bundle not found: $APP_BUNDLE" >&2
@@ -83,7 +83,10 @@ case "$TIMESTAMP_MODE" in
     ;;
 esac
 
-options_args=("--options" "runtime")
+options_args=()
+if [[ "$IDENTITY" != "-" ]]; then
+  options_args=("--options" "runtime")
+fi
 timestamp_args=("$timestamp_arg")
 
 cat > "$ENT_TMP_BASE" <<'PLIST'
@@ -94,6 +97,8 @@ cat > "$ENT_TMP_BASE" <<'PLIST'
     <key>com.apple.security.automation.apple-events</key>
     <true/>
     <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
     <true/>
 </dict>
 </plist>
@@ -107,6 +112,8 @@ cat > "$ENT_TMP_APP_BASE" <<'PLIST'
     <key>com.apple.security.automation.apple-events</key>
     <true/>
     <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
     <true/>
 </dict>
 </plist>
@@ -136,6 +143,8 @@ cat > "$ENT_TMP_APP" <<'PLIST'
     <true/>
     <key>com.apple.security.device.audio-input</key>
     <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
 </dict>
 </plist>
 PLIST
@@ -157,12 +166,12 @@ xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 sign_item() {
   local target="$1"
   local entitlements="$2"
-  codesign --force "${options_args[@]}" "${timestamp_args[@]}" --entitlements "$entitlements" --sign "$IDENTITY" "$target"
+  codesign --force ${options_args+"${options_args[@]}"} "${timestamp_args[@]}" --entitlements "$entitlements" --sign "$IDENTITY" "$target"
 }
 
 sign_plain_item() {
   local target="$1"
-  codesign --force "${options_args[@]}" "${timestamp_args[@]}" --sign "$IDENTITY" "$target"
+  codesign --force ${options_args+"${options_args[@]}"} "${timestamp_args[@]}" --sign "$IDENTITY" "$target"
 }
 
 # Sign main binary

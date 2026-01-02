@@ -1,7 +1,6 @@
 import ClawdisProtocol
 import Foundation
 import Observation
-import OSLog
 import SwiftUI
 
 struct ControlHeartbeatEvent: Codable {
@@ -53,18 +52,39 @@ final class ControlChannel {
         case degraded(String)
     }
 
-    private(set) var state: ConnectionState = .disconnected
+    private(set) var state: ConnectionState = .disconnected {
+        didSet {
+            CanvasManager.shared.refreshDebugStatus()
+            guard oldValue != state else { return }
+            switch state {
+            case .connected:
+                self.logger.info("control channel state -> connected")
+            case .connecting:
+                self.logger.info("control channel state -> connecting")
+            case .disconnected:
+                self.logger.info("control channel state -> disconnected")
+                self.scheduleRecovery(reason: "disconnected")
+            case let .degraded(message):
+                let detail = message.isEmpty ? "degraded" : "degraded: \(message)"
+                self.logger.info("control channel state -> \(detail, privacy: .public)")
+                self.scheduleRecovery(reason: message)
+            }
+        }
+    }
     private(set) var lastPingMs: Double?
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "control")
 
     private var eventTask: Task<Void, Never>?
+    private var recoveryTask: Task<Void, Never>?
+    private var lastRecoveryAt: Date?
 
     private init() {
         self.startEventStream()
     }
 
     func configure() async {
+        self.logger.info("control channel configure mode=local")
         self.state = .connecting
         do {
             try await GatewayConnection.shared.refresh()
@@ -83,6 +103,9 @@ final class ControlChannel {
         case let .remote(target, identity):
             do {
                 _ = (target, identity)
+                let idSet = !identity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                self.logger.info(
+                    "control channel configure mode=remote target=\(target, privacy: .public) identitySet=\(idSet, privacy: .public)")
                 _ = try await GatewayEndpointStore.shared.ensureRemoteControlTunnel()
                 await self.configure()
             } catch {
@@ -216,7 +239,52 @@ final class ControlChannel {
         }
 
         let detail = nsError.localizedDescription.isEmpty ? "unknown gateway error" : nsError.localizedDescription
-        return "Gateway error: \(detail)"
+        let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("gateway error:") { return trimmed }
+        return "Gateway error: \(trimmed)"
+    }
+
+    private func scheduleRecovery(reason: String) {
+        let now = Date()
+        if let last = self.lastRecoveryAt, now.timeIntervalSince(last) < 10 { return }
+        guard self.recoveryTask == nil else { return }
+        self.lastRecoveryAt = now
+
+        self.recoveryTask = Task { [weak self] in
+            guard let self else { return }
+            let mode = await MainActor.run { AppStateStore.shared.connectionMode }
+            guard mode != .unconfigured else {
+                self.recoveryTask = nil
+                return
+            }
+
+            let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reasonText = trimmedReason.isEmpty ? "unknown" : trimmedReason
+            self.logger.info(
+                "control channel recovery starting mode=\(String(describing: mode), privacy: .public) reason=\(reasonText, privacy: .public)")
+            if mode == .local {
+                GatewayProcessManager.shared.setActive(true)
+            }
+            if mode == .remote {
+                do {
+                    let port = try await GatewayEndpointStore.shared.ensureRemoteControlTunnel()
+                    self.logger.info("control channel recovery ensured SSH tunnel port=\(port, privacy: .public)")
+                } catch {
+                    self.logger.error(
+                        "control channel recovery tunnel failed \(error.localizedDescription, privacy: .public)")
+                }
+            }
+
+            do {
+                try await GatewayConnection.shared.refresh()
+                self.logger.info("control channel recovery finished")
+            } catch {
+                self.logger.error(
+                    "control channel recovery failed \(error.localizedDescription, privacy: .public)")
+            }
+
+            self.recoveryTask = nil
+        }
     }
 
     func sendSystemEvent(_ text: String, params: [String: AnyHashable] = [:]) async throws {

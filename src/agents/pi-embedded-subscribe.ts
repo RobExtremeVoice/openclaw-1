@@ -1,4 +1,4 @@
-import type { AgentEvent, AppMessage } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 
@@ -54,6 +54,10 @@ export function subscribeEmbeddedPiSession(params: {
   verboseLevel?: "off" | "on";
   shouldEmitToolResult?: () => boolean;
   onToolResult?: (payload: {
+    text?: string;
+    mediaUrls?: string[];
+  }) => void | Promise<void>;
+  onBlockReply?: (payload: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
@@ -234,7 +238,7 @@ export function subscribeEmbeddedPiSession(params: {
       }
 
       if (evt.type === "message_update") {
-        const msg = (evt as AgentEvent & { message: AppMessage }).message;
+        const msg = (evt as AgentEvent & { message: AgentMessage }).message;
         if (msg?.role === "assistant") {
           const assistantEvent = (
             evt as AgentEvent & { assistantMessageEvent?: unknown }
@@ -298,7 +302,7 @@ export function subscribeEmbeddedPiSession(params: {
       }
 
       if (evt.type === "message_end") {
-        const msg = (evt as AgentEvent & { message: AppMessage }).message;
+        const msg = (evt as AgentEvent & { message: AgentMessage }).message;
         if (msg?.role === "assistant") {
           const cleaned = params.enforceFinalTag
             ? stripThinkingSegments(
@@ -314,6 +318,15 @@ export function subscribeEmbeddedPiSession(params: {
               ? (extractFinalText(cleaned)?.trim() ?? cleaned)
               : cleaned;
           if (text) assistantTexts.push(text);
+          if (text && params.onBlockReply) {
+            const { text: cleanedText, mediaUrls } = splitMediaFromOutput(text);
+            if (cleanedText || (mediaUrls && mediaUrls.length > 0)) {
+              void params.onBlockReply({
+                text: cleanedText,
+                mediaUrls: mediaUrls?.length ? mediaUrls : undefined,
+              });
+            }
+          }
           deltaBuffer = "";
         }
       }

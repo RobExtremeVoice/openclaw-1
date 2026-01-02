@@ -14,6 +14,7 @@ import {
 import { drainSystemEvents } from "../infra/system-events.js";
 import {
   extractQueueDirective,
+  extractReplyToTag,
   extractThinkDirective,
   extractVerboseDirective,
   getReplyFromConfig,
@@ -96,6 +97,99 @@ describe("directive parsing", () => {
     expect(res.cleaned).toBe("please now");
   });
 
+  it("extracts reply_to_current tag", () => {
+    const res = extractReplyToTag("ok [[reply_to_current]]", "msg-1");
+    expect(res.replyToId).toBe("msg-1");
+    expect(res.cleaned).toBe("ok");
+  });
+
+  it("extracts reply_to id tag", () => {
+    const res = extractReplyToTag("see [[reply_to:12345]] now", "msg-1");
+    expect(res.replyToId).toBe("12345");
+    expect(res.cleaned).toBe("see now");
+  });
+
+  it("preserves newlines when stripping reply tags", () => {
+    const res = extractReplyToTag(
+      "line 1\nline 2 [[reply_to_current]]\n\nline 3",
+      "msg-2",
+    );
+    expect(res.replyToId).toBe("msg-2");
+    expect(res.cleaned).toBe("line 1\nline 2\n\nline 3");
+  });
+
+  it("strips reply tags and maps reply_to_current to MessageSid", async () => {
+    await withTempHome(async (home) => {
+      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+        payloads: [{ text: "hello [[reply_to_current]]" }],
+        meta: {
+          durationMs: 5,
+          agentMeta: { sessionId: "s", provider: "p", model: "m" },
+        },
+      });
+
+      const res = await getReplyFromConfig(
+        {
+          Body: "ping",
+          From: "+1004",
+          To: "+2000",
+          MessageSid: "msg-123",
+        },
+        {},
+        {
+          agent: {
+            model: "anthropic/claude-opus-4-5",
+            workspace: path.join(home, "clawd"),
+          },
+          whatsapp: { allowFrom: ["*"] },
+          session: { store: path.join(home, "sessions.json") },
+        },
+      );
+
+      const payload = Array.isArray(res) ? res[0] : res;
+      expect(payload?.text).toBe("hello");
+      expect(payload?.replyToId).toBe("msg-123");
+    });
+  });
+
+  it("prefers explicit reply_to id over reply_to_current", async () => {
+    await withTempHome(async (home) => {
+      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+        payloads: [
+          {
+            text: "hi [[reply_to_current]] [[reply_to:abc-456]]",
+          },
+        ],
+        meta: {
+          durationMs: 5,
+          agentMeta: { sessionId: "s", provider: "p", model: "m" },
+        },
+      });
+
+      const res = await getReplyFromConfig(
+        {
+          Body: "ping",
+          From: "+1004",
+          To: "+2000",
+          MessageSid: "msg-123",
+        },
+        {},
+        {
+          agent: {
+            model: "anthropic/claude-opus-4-5",
+            workspace: path.join(home, "clawd"),
+          },
+          whatsapp: { allowFrom: ["*"] },
+          session: { store: path.join(home, "sessions.json") },
+        },
+      );
+
+      const payload = Array.isArray(res) ? res[0] : res;
+      expect(payload?.text).toBe("hi");
+      expect(payload?.replyToId).toBe("abc-456");
+    });
+  });
+
   it("applies inline think and still runs agent content", async () => {
     await withTempHome(async (home) => {
       vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
@@ -118,7 +212,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: {
+          whatsapp: {
             allowFrom: ["*"],
           },
           session: { store: path.join(home, "sessions.json") },
@@ -168,7 +262,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: { allowFrom: ["*"] },
+          whatsapp: { allowFrom: ["*"] },
           session: { store: storePath },
         },
       );
@@ -195,7 +289,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: { allowFrom: ["*"] },
+          whatsapp: { allowFrom: ["*"] },
           session: { store: storePath },
         },
       );
@@ -208,7 +302,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: { allowFrom: ["*"] },
+          whatsapp: { allowFrom: ["*"] },
           session: { store: storePath },
         },
       );
@@ -264,7 +358,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: {
+          whatsapp: {
             allowFrom: ["*"],
           },
           session: { store: storePath },
@@ -325,7 +419,7 @@ describe("directive parsing", () => {
             model: "anthropic/claude-opus-4-5",
             workspace: path.join(home, "clawd"),
           },
-          routing: {
+          whatsapp: {
             allowFrom: ["*"],
           },
           session: { store: storePath },
@@ -506,7 +600,7 @@ describe("directive parsing", () => {
             workspace: path.join(home, "clawd"),
             allowedModels: ["openai/gpt-4.1-mini"],
           },
-          routing: {
+          whatsapp: {
             allowFrom: ["*"],
           },
           session: { store: storePath },

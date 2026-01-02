@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { AppMessage, ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { AgentMessage, ThinkingLevel } from "@mariozechner/pi-agent-core";
 import {
   type Api,
   type AssistantMessage,
@@ -79,6 +79,7 @@ export type EmbeddedPiRunResult = {
     text?: string;
     mediaUrl?: string;
     mediaUrls?: string[];
+    replyToId?: string;
   }>;
   meta: EmbeddedPiRunMeta;
 };
@@ -326,6 +327,10 @@ export async function runEmbeddedPiAgent(params: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
+  onBlockReply?: (payload: {
+    text?: string;
+    mediaUrls?: string[];
+  }) => void | Promise<void>;
   onToolResult?: (payload: {
     text?: string;
     mediaUrls?: string[];
@@ -433,10 +438,7 @@ export async function runEmbeddedPiAgent(params: {
           tools,
         });
 
-        const sessionManager = SessionManager.open(
-          params.sessionFile,
-          agentDir,
-        );
+        const sessionManager = SessionManager.open(params.sessionFile);
         const settingsManager = SettingsManager.create(
           resolvedWorkspace,
           agentDir,
@@ -450,8 +452,7 @@ export async function runEmbeddedPiAgent(params: {
           model,
           thinkingLevel,
           systemPrompt,
-          // TODO(steipete): Once pi-mono publishes file-magic MIME detection in `read` image payloads,
-          // remove `createClawdisCodingTools()` and use upstream `codingTools` again.
+          // Custom tool set: extra bash/process + read image sanitization.
           tools,
           sessionManager,
           settingsManager,
@@ -492,6 +493,7 @@ export async function runEmbeddedPiAgent(params: {
           verboseLevel: params.verboseLevel,
           shouldEmitToolResult: params.shouldEmitToolResult,
           onToolResult: params.onToolResult,
+          onBlockReply: params.onBlockReply,
           onPartialReply: params.onPartialReply,
           onAgentEvent: params.onAgentEvent,
           enforceFinalTag: params.enforceFinalTag,
@@ -504,7 +506,7 @@ export async function runEmbeddedPiAgent(params: {
           Math.max(1, params.timeoutMs),
         );
 
-        let messagesSnapshot: AppMessage[] = [];
+        let messagesSnapshot: AgentMessage[] = [];
         let sessionIdUsed = session.sessionId;
         const onAbort = () => {
           abortRun();
@@ -545,7 +547,7 @@ export async function runEmbeddedPiAgent(params: {
         const lastAssistant = messagesSnapshot
           .slice()
           .reverse()
-          .find((m) => (m as AppMessage)?.role === "assistant") as
+          .find((m) => (m as AgentMessage)?.role === "assistant") as
           | AssistantMessage
           | undefined;
 

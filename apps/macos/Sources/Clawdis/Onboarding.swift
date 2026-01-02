@@ -15,6 +15,13 @@ final class OnboardingController {
     private var window: NSWindow?
 
     func show() {
+        if ProcessInfo.processInfo.isNixMode {
+            // Nix mode is fully declarative; onboarding would suggest interactive setup that doesn't apply.
+            UserDefaults.standard.set(true, forKey: "clawdis.onboardingSeen")
+            UserDefaults.standard.set(currentOnboardingVersion, forKey: onboardingVersionKey)
+            AppStateStore.shared.onboardingSeen = true
+            return
+        }
         if let window {
             DockIconManager.shared.temporarilyShowDock()
             window.makeKeyAndOrderFront(nil)
@@ -61,6 +68,11 @@ struct OnboardingView: View {
     @State var anthropicAuthStatus: String?
     @State var anthropicAuthBusy = false
     @State var anthropicAuthConnected = false
+    @State var anthropicAuthVerifying = false
+    @State var anthropicAuthVerified = false
+    @State var anthropicAuthVerificationAttempted = false
+    @State var anthropicAuthVerificationFailed = false
+    @State var anthropicAuthVerifiedAt: Date?
     @State var anthropicAuthDetectedStatus: ClawdisOAuthStore.AnthropicOAuthStatus = .missingFile
     @State var anthropicAuthAutoDetectClipboard = true
     @State var anthropicAuthAutoConnectClipboard = true
@@ -73,6 +85,8 @@ struct OnboardingView: View {
     @State var preferredGatewayID: String?
     @State var gatewayDiscovery: GatewayDiscoveryModel
     @State var onboardingChatModel: ClawdisChatViewModel
+    @State var onboardingSkillsModel = SkillsSettingsModel()
+    @State var didLoadOnboardingSkills = false
     @State var localGatewayProbe: LocalGatewayProbe?
     @Bindable var state: AppState
     var permissionMonitor: PermissionMonitor

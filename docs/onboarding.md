@@ -22,6 +22,10 @@ First question: where does the **Gateway** run?
 - **Local (this Mac):** onboarding can run the Anthropic OAuth flow and write the Clawdis token store locally.
 - **Remote (over SSH/tailnet):** onboarding must not run OAuth locally, because credentials must exist on the **gateway host**.
 
+Gateway auth tip:
+- If you only use Clawdis on this Mac (loopback gateway), keep auth **Off**.
+- Use **Token** for multi-machine access or non-loopback binds.
+
 Implementation note (2025-12-19): in local mode, the macOS app bundles the Gateway and enables it via a per-user launchd LaunchAgent (no global npm install/Node requirement for the user).
 
 ## 2) Local-only: Connect Claude (Anthropic OAuth)
@@ -123,7 +127,46 @@ Daily memory lives under `memory/` in the workspace:
 If the Gateway runs on another machine, the Anthropic OAuth credentials must be created/stored on that host (where the agent runtime runs).
 
 For now, remote onboarding should:
-- explain why OAuth isn’t shown
+- explain why OAuth isn't shown
 - point the user at the credential location (`~/.clawdis/credentials/oauth.json`) and the workspace location on the gateway host
 - mention that the **bootstrap ritual happens on the gateway host** (same BOOTSTRAP/IDENTITY/USER files)
+
+### Manual credential setup
+
+On the gateway host, create `~/.clawdis/credentials/oauth.json` with this exact format:
+
+```json
+{
+  "anthropic": {
+    "access": "sk-ant-oat01-...",
+    "refresh": "sk-ant-ort01-...",
+    "expires": 1767304352803
+  }
+}
+```
+
+Set permissions: `chmod 600 ~/.clawdis/credentials/oauth.json`
+
+**Note:** Clawdis can auto-import from legacy pi-coding-agent paths (`~/.pi/agent/oauth.json`, etc.) but this does NOT work with Claude Code credentials — different file and format.
+
+### Using Claude Code credentials
+
+If Claude Code is installed on the gateway host, convert its credentials:
+
+```bash
+cat ~/.claude/.credentials.json | jq '{
+  anthropic: {
+    access: .claudeAiOauth.accessToken,
+    refresh: .claudeAiOauth.refreshToken,
+    expires: .claudeAiOauth.expiresAt
+  }
+}' > ~/.clawdis/credentials/oauth.json
+chmod 600 ~/.clawdis/credentials/oauth.json
+```
+
+| Claude Code field | Clawdis field |
+|-------------------|---------------|
+| `accessToken` | `access` |
+| `refreshToken` | `refresh` |
+| `expiresAt` | `expires` |
 <!-- {% endraw %} -->

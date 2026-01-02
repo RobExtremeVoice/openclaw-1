@@ -106,13 +106,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         guard let insertIndex = self.findInsertIndex(in: menu) else { return }
         let width = self.initialWidth(for: menu)
 
-        guard self.isControlChannelConnected else {
-            menu.insertItem(self.makeMessageItem(
-                text: self.controlChannelStatusText,
-                symbolName: "wifi.slash",
-                width: width), at: insertIndex)
-            return
-        }
+        guard self.isControlChannelConnected else { return }
 
         guard let snapshot = self.cachedSnapshot else {
             let headerItem = NSMenuItem()
@@ -195,41 +189,38 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         menu.insertItem(topSeparator, at: cursor)
         cursor += 1
 
-        guard self.isControlChannelConnected else {
-            menu.insertItem(
-                self.makeMessageItem(text: self.controlChannelStatusText, symbolName: "wifi.slash", width: width),
-                at: cursor)
+        if let gatewayEntry = self.gatewayEntry() {
+            let gatewayItem = self.makeNodeItem(entry: gatewayEntry, width: width)
+            menu.insertItem(gatewayItem, at: cursor)
             cursor += 1
-            let separator = NSMenuItem.separator()
-            separator.tag = self.nodesTag
-            menu.insertItem(separator, at: cursor)
-            return
         }
 
+        guard self.isControlChannelConnected else { return }
+
         if let error = self.nodesStore.lastError?.nonEmpty {
-            menu.insertItem(self.makeMessageItem(text: "Error: \(error)", symbolName: "exclamationmark.triangle",
-                width: width), at: cursor)
+            menu.insertItem(
+                self.makeMessageItem(
+                    text: "Error: \(error)",
+                    symbolName: "exclamationmark.triangle",
+                    width: width),
+                at: cursor)
             cursor += 1
         } else if let status = self.nodesStore.statusMessage?.nonEmpty {
-            menu.insertItem(self.makeMessageItem(text: status, symbolName: "info.circle", width: width), at: cursor)
+            menu.insertItem(
+                self.makeMessageItem(text: status, symbolName: "info.circle", width: width),
+                at: cursor)
             cursor += 1
         }
 
         if entries.isEmpty {
             let title = self.nodesStore.isLoading ? "Loading devices..." : "No devices yet"
-            menu.insertItem(self.makeMessageItem(text: title, symbolName: "circle.dashed", width: width), at: cursor)
+            menu.insertItem(
+                self.makeMessageItem(text: title, symbolName: "circle.dashed", width: width),
+                at: cursor)
             cursor += 1
         } else {
             for entry in entries.prefix(8) {
-                let item = NSMenuItem()
-                item.tag = self.nodesTag
-                item.target = self
-                item.action = #selector(self.copyNodeSummary(_:))
-                item.representedObject = NodeMenuEntryFormatter.summaryText(entry)
-                item.view = HighlightedMenuItemHostView(
-                    rootView: AnyView(NodeMenuRowView(entry: entry, width: width)),
-                    width: width)
-                item.submenu = self.buildNodeSubmenu(entry: entry, width: width)
+                let item = self.makeNodeItem(entry: entry, width: width)
                 menu.insertItem(item, at: cursor)
                 cursor += 1
             }
@@ -257,27 +248,75 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         return false
     }
 
-    private var controlChannelStatusText: String {
-        switch ControlChannel.shared.state {
-        case .connected:
-            return "Connected"
-        case .connecting:
-            return "Connecting to gateway…"
-        case let .degraded(reason):
-            if self.shouldShowConnecting { return "Connecting to gateway…" }
-            return reason.nonEmpty ?? "No connection to gateway"
-        case .disconnected:
-            return self.shouldShowConnecting ? "Connecting to gateway…" : "No connection to gateway"
+    private func gatewayEntry() -> NodeInfo? {
+        let mode = AppStateStore.shared.connectionMode
+        let isConnected = self.isControlChannelConnected
+        let port = GatewayEnvironment.gatewayPort()
+        var host: String?
+        var platform: String?
+
+        switch mode {
+        case .remote:
+            platform = "remote"
+            let target = AppStateStore.shared.remoteTarget
+            if let parsed = CommandResolver.parseSSHTarget(target) {
+                host = parsed.port == 22 ? parsed.host : "\(parsed.host):\(parsed.port)"
+            } else {
+                host = target.nonEmpty
+            }
+        case .local:
+            platform = "local"
+            host = "127.0.0.1:\(port)"
+        case .unconfigured:
+            platform = nil
+            host = nil
         }
+
+        return NodeInfo(
+            nodeId: "gateway",
+            displayName: "Gateway",
+            platform: platform,
+            version: nil,
+            deviceFamily: nil,
+            modelIdentifier: nil,
+            remoteIp: host,
+            caps: nil,
+            commands: nil,
+            permissions: nil,
+            paired: nil,
+            connected: isConnected)
     }
 
-    private var shouldShowConnecting: Bool {
-        switch GatewayProcessManager.shared.status {
-        case .starting, .running, .attachedExisting:
-            return true
-        case .stopped, .failed:
-            return false
-        }
+    private func makeNodeItem(entry: NodeInfo, width: CGFloat) -> NSMenuItem {
+        let item = NSMenuItem()
+        item.tag = self.nodesTag
+        item.target = self
+        item.action = #selector(self.copyNodeSummary(_:))
+        item.representedObject = NodeMenuEntryFormatter.summaryText(entry)
+        item.view = HighlightedMenuItemHostView(
+            rootView: AnyView(NodeMenuRowView(entry: entry, width: width)),
+            width: width)
+        item.submenu = self.buildNodeSubmenu(entry: entry, width: width)
+        return item
+    }
+
+    private func makeSessionPreviewItem(
+        sessionKey: String,
+        title: String,
+        width: CGFloat,
+        maxLines: Int) -> NSMenuItem
+    {
+        let item = NSMenuItem()
+        item.tag = self.tag
+        item.isEnabled = false
+        let view = AnyView(SessionMenuPreviewView(
+            sessionKey: sessionKey,
+            width: width,
+            maxItems: 10,
+            maxLines: maxLines,
+            title: title))
+        item.view = self.makeHostedView(rootView: view, width: width, highlighted: false)
+        return item
     }
 
     private func makeMessageItem(text: String, symbolName: String, width: CGFloat) -> NSMenuItem {
@@ -285,8 +324,9 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
             Label(text, systemImage: symbolName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 18)
                 .padding(.trailing, 12)
                 .padding(.vertical, 6)
@@ -340,6 +380,19 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
 
     private func buildSubmenu(for row: SessionRow, storePath: String) -> NSMenu {
         let menu = NSMenu()
+        let width = self.submenuWidth()
+
+        menu.addItem(self.makeSessionPreviewItem(
+            sessionKey: row.key,
+            title: "Recent messages (last 10)",
+            width: width,
+            maxLines: 3))
+
+        let morePreview = NSMenuItem(title: "More preview…", action: nil, keyEquivalent: "")
+        morePreview.submenu = self.buildPreviewSubmenu(sessionKey: row.key, width: width)
+        menu.addItem(morePreview)
+
+        menu.addItem(NSMenuItem.separator())
 
         let thinking = NSMenuItem(title: "Thinking", action: nil, keyEquivalent: "")
         thinking.submenu = self.buildThinkingMenu(for: row)
@@ -431,6 +484,16 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
             item.state = (current == level) ? .on : .off
             menu.addItem(item)
         }
+        return menu
+    }
+
+    private func buildPreviewSubmenu(sessionKey: String, width: CGFloat) -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(self.makeSessionPreviewItem(
+            sessionKey: sessionKey,
+            title: "Recent messages (expanded)",
+            width: width,
+            maxLines: 8))
         return menu
     }
 
@@ -682,6 +745,16 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
             return max(300, openWidth)
         }
         return self.currentMenuWidth(for: menu)
+    }
+
+    private func submenuWidth() -> CGFloat {
+        if let openWidth = self.menuOpenWidth {
+            return max(300, openWidth)
+        }
+        if let cached = self.lastKnownMenuWidth {
+            return max(300, cached)
+        }
+        return self.fallbackWidth
     }
 
     private func menuWindowWidth(for menu: NSMenu) -> CGFloat? {

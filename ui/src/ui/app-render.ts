@@ -23,7 +23,13 @@ import type {
   SkillStatusReport,
   StatusSummary,
 } from "./types";
-import type { CronFormState, TelegramForm } from "./ui-types";
+import type {
+  CronFormState,
+  DiscordForm,
+  IMessageForm,
+  SignalForm,
+  TelegramForm,
+} from "./ui-types";
 import { renderChat } from "./views/chat";
 import { renderConfig } from "./views/config";
 import { renderConnections } from "./views/connections";
@@ -34,7 +40,13 @@ import { renderNodes } from "./views/nodes";
 import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderSkills } from "./views/skills";
-import { loadProviders } from "./controllers/connections";
+import {
+  loadProviders,
+  updateDiscordForm,
+  updateIMessageForm,
+  updateSignalForm,
+  updateTelegramForm,
+} from "./controllers/connections";
 import { loadPresence } from "./controllers/presence";
 import { loadSessions, patchSession } from "./controllers/sessions";
 import {
@@ -95,6 +107,16 @@ export type AppViewState = {
   telegramSaving: boolean;
   telegramTokenLocked: boolean;
   telegramConfigStatus: string | null;
+  discordForm: DiscordForm;
+  discordSaving: boolean;
+  discordTokenLocked: boolean;
+  discordConfigStatus: string | null;
+  signalForm: SignalForm;
+  signalSaving: boolean;
+  signalConfigStatus: string | null;
+  imessageForm: IMessageForm;
+  imessageSaving: boolean;
+  imessageConfigStatus: string | null;
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
@@ -213,6 +235,7 @@ export function renderApp(state: AppViewState) {
               onPasswordChange: (next) => (state.password = next),
               onSessionKeyChange: (next) => {
                 state.sessionKey = next;
+                state.chatMessage = "";
                 state.applySettings({ ...state.settings, sessionKey: next });
               },
               onRefresh: () => state.loadOverview(),
@@ -234,12 +257,28 @@ export function renderApp(state: AppViewState) {
               telegramTokenLocked: state.telegramTokenLocked,
               telegramSaving: state.telegramSaving,
               telegramStatus: state.telegramConfigStatus,
+              discordForm: state.discordForm,
+              discordTokenLocked: state.discordTokenLocked,
+              discordSaving: state.discordSaving,
+              discordStatus: state.discordConfigStatus,
+              signalForm: state.signalForm,
+              signalSaving: state.signalSaving,
+              signalStatus: state.signalConfigStatus,
+              imessageForm: state.imessageForm,
+              imessageSaving: state.imessageSaving,
+              imessageStatus: state.imessageConfigStatus,
               onRefresh: (probe) => loadProviders(state, probe),
               onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
               onWhatsAppWait: () => state.handleWhatsAppWait(),
               onWhatsAppLogout: () => state.handleWhatsAppLogout(),
               onTelegramChange: (patch) => updateTelegramForm(state, patch),
               onTelegramSave: () => state.handleTelegramSave(),
+              onDiscordChange: (patch) => updateDiscordForm(state, patch),
+              onDiscordSave: () => state.handleDiscordSave(),
+              onSignalChange: (patch) => updateSignalForm(state, patch),
+              onSignalSave: () => state.handleSignalSave(),
+              onIMessageChange: (patch) => updateIMessageForm(state, patch),
+              onIMessageSave: () => state.handleIMessageSave(),
             })
           : nothing}
 
@@ -323,7 +362,11 @@ export function renderApp(state: AppViewState) {
               sessionKey: state.sessionKey,
               onSessionKeyChange: (next) => {
                 state.sessionKey = next;
+                state.chatMessage = "";
+                state.chatStream = null;
+                state.chatRunId = null;
                 state.applySettings({ ...state.settings, sessionKey: next });
+                void loadChatHistory(state);
               },
               thinkingLevel: state.chatThinkingLevel,
               loading: state.chatLoading,
@@ -334,6 +377,7 @@ export function renderApp(state: AppViewState) {
               connected: state.connected,
               canSend: state.connected && hasConnectedMobileNode,
               disabledReason: chatDisabledReason,
+              sessions: state.sessionsResult,
               onRefresh: () => loadChatHistory(state),
               onDraftChange: (next) => (state.chatMessage = next),
               onSend: () => state.handleSendChat(),

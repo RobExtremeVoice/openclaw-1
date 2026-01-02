@@ -14,7 +14,13 @@ export type CronPayload =
       thinking?: string;
       timeoutSeconds?: number;
       deliver?: boolean;
-      channel?: "last" | "whatsapp" | "telegram" | "discord";
+      channel?:
+        | "last"
+        | "whatsapp"
+        | "telegram"
+        | "discord"
+        | "signal"
+        | "imessage";
       to?: string;
       bestEffortDeliver?: boolean;
     };

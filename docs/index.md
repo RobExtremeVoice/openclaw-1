@@ -13,17 +13,17 @@ read_when:
 </p>
 
 <p align="center">
-  <strong>WhatsApp + Telegram + Discord gateway for AI agents (Pi).</strong><br>
+  <strong>WhatsApp + Telegram + Discord + iMessage gateway for AI agents (Pi).</strong><br>
   Send a message, get an agent response — from your pocket.
 </p>
 
 <p align="center">
   <a href="https://github.com/steipete/clawdis">GitHub</a> ·
   <a href="https://github.com/steipete/clawdis/releases">Releases</a> ·
-  <a href="./clawd">Clawd setup</a>
+  <a href="./clawd.md">Clawd setup</a>
 </p>
 
-CLAWDIS bridges WhatsApp (via WhatsApp Web / Baileys), Telegram (Bot API / grammY), and Discord (Bot API / discord.js) to coding agents like [Pi](https://github.com/badlogic/pi-mono).
+CLAWDIS bridges WhatsApp (via WhatsApp Web / Baileys), Telegram (Bot API / grammY), Discord (Bot API / discord.js), and iMessage (imsg CLI) to coding agents like [Pi](https://github.com/badlogic/pi-mono).
 It’s built for [Clawd](https://clawd.me), a space lobster who needed a TARDIS.
 
 ## How it works
@@ -61,6 +61,7 @@ Most operations flow through the **Gateway** (`clawdis gateway`), a single long-
 - 📱 **WhatsApp Integration** — Uses Baileys for WhatsApp Web protocol
 - ✈️ **Telegram Bot** — DMs + groups via grammY
 - 🎮 **Discord Bot** — DMs + guild channels via discord.js
+- 💬 **iMessage** — Local imsg CLI integration (macOS)
 - 🤖 **Agent bridge** — Pi (RPC mode) with tool streaming
 - 💬 **Sessions** — Direct chats collapse into shared `main` (default); groups are isolated
 - 👥 **Group Chat Support** — Mention-based by default; owner can toggle `/activation always|mention`
@@ -99,26 +100,31 @@ clawdis send --to +15555550123 --message "Hello from CLAWDIS"
 Config lives at `~/.clawdis/clawdis.json`.
 
 - If you **do nothing**, CLAWDIS uses the bundled Pi binary in RPC mode with per-sender sessions.
-- If you want to lock it down, start with `routing.allowFrom` and (for groups) mention rules.
+- If you want to lock it down, start with `whatsapp.allowFrom` and (for groups) mention rules.
 
 Example:
 
 ```json5
 {
-  routing: {
+  whatsapp: {
     allowFrom: ["+15555550123"],
-    groupChat: { requireMention: true, mentionPatterns: ["@clawd"] }
-  }
+    groups: { "*": { requireMention: true } }
+  },
+  routing: { groupChat: { mentionPatterns: ["@clawd"] } }
 }
 ```
 
 ## Docs
 
 - Start here:
+  - [FAQ](./faq.md) ← *common questions answered*
   - [Configuration](./configuration.md)
+  - [Nix mode](./nix.md)
   - [Clawd personal assistant setup](./clawd.md)
   - [Skills](./skills.md)
+  - [Skills config](./skills-config.md)
   - [Workspace templates](./templates/AGENTS.md)
+  - [RPC adapters](./rpc.md)
   - [Gateway runbook](./gateway.md)
   - [Nodes (iOS/Android)](./nodes.md)
   - [Web surfaces (Control UI)](./web.md)
@@ -129,7 +135,9 @@ Example:
   - [Control UI (browser)](./control-ui.md)
   - [Telegram](./telegram.md)
   - [Discord](./discord.md)
-  - [Group messages](./group-messages.md)
+  - [iMessage](./imessage.md)
+  - [Groups](./groups.md)
+  - [WhatsApp group messages](./group-messages.md)
   - [Media: images](./images.md)
   - [Media: audio](./audio.md)
 - Ops and safety:

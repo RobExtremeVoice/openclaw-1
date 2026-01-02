@@ -42,7 +42,7 @@ This is social engineering 101. Create distrust, encourage snooping.
 
 ```json
 {
-  "routing": {
+  "whatsapp": {
     "allowFrom": ["+15555550123"]
   }
 }
@@ -54,9 +54,13 @@ Only allow specific phone numbers to trigger your AI. Never use `["*"]` in produ
 
 ```json
 {
+  "whatsapp": {
+    "groups": {
+      "*": { "requireMention": true }
+    }
+  },
   "routing": {
     "groupChat": {
-      "requireMention": true,
       "mentionPatterns": ["@clawd", "@mybot"]
     }
   }

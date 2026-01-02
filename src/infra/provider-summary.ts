@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { type ClawdisConfig, loadConfig } from "../config/config.js";
+import { resolveTelegramToken } from "../telegram/token.js";
 import { normalizeE164 } from "../utils.js";
 import {
   getWebAuthAgeMs,
@@ -34,17 +35,50 @@ export async function buildProviderSummary(
   if (!telegramEnabled) {
     lines.push(chalk.cyan("Telegram: disabled"));
   } else {
-    const telegramToken =
-      process.env.TELEGRAM_BOT_TOKEN ?? effective.telegram?.botToken;
+    const { token: telegramToken } = resolveTelegramToken(effective);
+    const telegramConfigured = Boolean(telegramToken?.trim());
     lines.push(
-      telegramToken
+      telegramConfigured
         ? chalk.green("Telegram: configured")
         : chalk.cyan("Telegram: not configured"),
     );
   }
 
-  const allowFrom = effective.routing?.allowFrom?.length
-    ? effective.routing.allowFrom.map(normalizeE164).filter(Boolean)
+  const signalEnabled = effective.signal?.enabled !== false;
+  if (!signalEnabled) {
+    lines.push(chalk.cyan("Signal: disabled"));
+  } else {
+    const signalConfigured =
+      Boolean(effective.signal) &&
+      Boolean(
+        effective.signal?.account?.trim() ||
+          effective.signal?.httpUrl?.trim() ||
+          effective.signal?.cliPath?.trim() ||
+          effective.signal?.httpHost?.trim() ||
+          typeof effective.signal?.httpPort === "number" ||
+          typeof effective.signal?.autoStart === "boolean",
+      );
+    lines.push(
+      signalConfigured
+        ? chalk.green("Signal: configured")
+        : chalk.cyan("Signal: not configured"),
+    );
+  }
+
+  const imessageEnabled = effective.imessage?.enabled !== false;
+  if (!imessageEnabled) {
+    lines.push(chalk.cyan("iMessage: disabled"));
+  } else {
+    const imessageConfigured = Boolean(effective.imessage);
+    lines.push(
+      imessageConfigured
+        ? chalk.green("iMessage: configured")
+        : chalk.cyan("iMessage: not configured"),
+    );
+  }
+
+  const allowFrom = effective.whatsapp?.allowFrom?.length
+    ? effective.whatsapp.allowFrom.map(normalizeE164).filter(Boolean)
     : [];
   if (allowFrom.length) {
     lines.push(chalk.cyan(`AllowFrom: ${allowFrom.join(", ")}`));

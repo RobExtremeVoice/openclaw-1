@@ -4,6 +4,7 @@ import { fetch as realFetch } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let testPort = 0;
+let cdpBaseUrl = "";
 let reachable = false;
 let cfgAttachOnly = false;
 let createTargetId: string | null = null;
@@ -33,6 +34,7 @@ const pwMocks = vi.hoisted(() => ({
   pressKeyViaPlaywright: vi.fn(async () => {}),
   resizeViewportViaPlaywright: vi.fn(async () => {}),
   selectOptionViaPlaywright: vi.fn(async () => {}),
+  setInputFilesViaPlaywright: vi.fn(async () => {}),
   snapshotAiViaPlaywright: vi.fn(async () => ({ snapshot: "ok" })),
   takeScreenshotViaPlaywright: vi.fn(async () => ({
     buffer: Buffer.from("png"),
@@ -76,6 +78,7 @@ vi.mock("../config/config.js", () => ({
 
 const launchCalls = vi.hoisted(() => [] as Array<{ port: number }>);
 vi.mock("./chrome.js", () => ({
+  isChromeCdpReady: vi.fn(async () => reachable),
   isChromeReachable: vi.fn(async () => reachable),
   launchClawdChrome: vi.fn(async (resolved: { cdpPort: number }) => {
     launchCalls.push({ port: resolved.cdpPort });
@@ -89,6 +92,7 @@ vi.mock("./chrome.js", () => ({
       proc,
     };
   }),
+  resolveClawdUserDataDir: vi.fn(() => "/tmp/clawd"),
   stopClawdChrome: vi.fn(async () => {
     reachable = false;
   }),
@@ -96,6 +100,7 @@ vi.mock("./chrome.js", () => ({
 
 vi.mock("./cdp.js", () => ({
   createTargetViaCdp: cdpMocks.createTargetViaCdp,
+  normalizeCdpWsUrl: vi.fn((wsUrl: string) => wsUrl),
   snapshotAria: cdpMocks.snapshotAria,
 }));
 
@@ -156,6 +161,7 @@ describe("browser control server", () => {
     for (const fn of Object.values(cdpMocks)) fn.mockClear();
 
     testPort = await getFreePort();
+    cdpBaseUrl = `http://127.0.0.1:${testPort + 1}`;
 
     // Minimal CDP JSON endpoints used by the server.
     let putNewCalls = 0;
@@ -290,7 +296,7 @@ describe("browser control server", () => {
     expect(snapAi.ok).toBe(true);
     expect(snapAi.format).toBe("ai");
     expect(pwMocks.snapshotAiViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
     });
 
@@ -302,7 +308,7 @@ describe("browser control server", () => {
     expect(nav.ok).toBe(true);
     expect(typeof nav.targetId).toBe("string");
     expect(pwMocks.navigateViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       url: "https://example.com",
     });
@@ -319,7 +325,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(click.ok).toBe(true);
     expect(pwMocks.clickViaPlaywright).toHaveBeenNthCalledWith(1, {
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       ref: "1",
       doubleClick: false,
@@ -348,7 +354,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(type.ok).toBe(true);
     expect(pwMocks.typeViaPlaywright).toHaveBeenNthCalledWith(1, {
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       ref: "1",
       text: "",
@@ -363,7 +369,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(press.ok).toBe(true);
     expect(pwMocks.pressKeyViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       key: "Enter",
     });
@@ -375,7 +381,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(hover.ok).toBe(true);
     expect(pwMocks.hoverViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       ref: "2",
     });
@@ -387,7 +393,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(drag.ok).toBe(true);
     expect(pwMocks.dragViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       startRef: "3",
       endRef: "4",
@@ -400,7 +406,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(select.ok).toBe(true);
     expect(pwMocks.selectOptionViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       ref: "5",
       values: ["a", "b"],
@@ -416,7 +422,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(fill.ok).toBe(true);
     expect(pwMocks.fillFormViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       fields: [{ ref: "6", type: "textbox", value: "hello" }],
     });
@@ -428,7 +434,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(resize.ok).toBe(true);
     expect(pwMocks.resizeViewportViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       width: 800,
       height: 600,
@@ -441,7 +447,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(wait.ok).toBe(true);
     expect(pwMocks.waitForViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       timeMs: 5,
       text: undefined,
@@ -456,7 +462,7 @@ describe("browser control server", () => {
     expect(evalRes.ok).toBe(true);
     expect(evalRes.result).toBe("ok");
     expect(pwMocks.evaluateViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       fn: "() => 1",
       ref: undefined,
@@ -469,10 +475,59 @@ describe("browser control server", () => {
     }).then((r) => r.json());
     expect(upload).toMatchObject({ ok: true });
     expect(pwMocks.armFileUploadViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       paths: ["/tmp/a.txt"],
       timeoutMs: 1234,
+    });
+
+    const uploadWithRef = await realFetch(`${base}/hooks/file-chooser`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: ["/tmp/b.txt"], ref: "e12" }),
+    }).then((r) => r.json());
+    expect(uploadWithRef).toMatchObject({ ok: true });
+    expect(pwMocks.armFileUploadViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: cdpBaseUrl,
+      targetId: "abcd1234",
+      paths: ["/tmp/b.txt"],
+      timeoutMs: undefined,
+    });
+    expect(pwMocks.clickViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: cdpBaseUrl,
+      targetId: "abcd1234",
+      ref: "e12",
+    });
+
+    const uploadWithInputRef = await realFetch(`${base}/hooks/file-chooser`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: ["/tmp/c.txt"], inputRef: "e99" }),
+    }).then((r) => r.json());
+    expect(uploadWithInputRef).toMatchObject({ ok: true });
+    expect(pwMocks.setInputFilesViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: cdpBaseUrl,
+      targetId: "abcd1234",
+      inputRef: "e99",
+      element: undefined,
+      paths: ["/tmp/c.txt"],
+    });
+
+    const uploadWithElement = await realFetch(`${base}/hooks/file-chooser`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        paths: ["/tmp/d.txt"],
+        element: "input[type=file]",
+      }),
+    }).then((r) => r.json());
+    expect(uploadWithElement).toMatchObject({ ok: true });
+    expect(pwMocks.setInputFilesViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: cdpBaseUrl,
+      targetId: "abcd1234",
+      inputRef: undefined,
+      element: "input[type=file]",
+      paths: ["/tmp/d.txt"],
     });
 
     const dialog = await realFetch(`${base}/hooks/dialog`, {
@@ -482,7 +537,7 @@ describe("browser control server", () => {
     }).then((r) => r.json());
     expect(dialog).toMatchObject({ ok: true });
     expect(pwMocks.armDialogViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       accept: true,
       promptText: undefined,
@@ -495,7 +550,7 @@ describe("browser control server", () => {
     expect(consoleRes.ok).toBe(true);
     expect(Array.isArray(consoleRes.messages)).toBe(true);
     expect(pwMocks.getConsoleMessagesViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       level: "error",
     });
@@ -516,7 +571,7 @@ describe("browser control server", () => {
     expect(shot.ok).toBe(true);
     expect(typeof shot.path).toBe("string");
     expect(pwMocks.takeScreenshotViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
       ref: undefined,
       element: "body",
@@ -531,7 +586,7 @@ describe("browser control server", () => {
     }).then((r) => r.json())) as { ok: boolean };
     expect(close.ok).toBe(true);
     expect(pwMocks.closePageViaPlaywright).toHaveBeenCalledWith({
-      cdpPort: testPort + 1,
+      cdpUrl: cdpBaseUrl,
       targetId: "abcd1234",
     });
 

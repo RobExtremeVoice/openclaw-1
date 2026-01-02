@@ -116,7 +116,7 @@ function buildMentionConfig(cfg: ReturnType<typeof loadConfig>): MentionConfig {
         }
       })
       .filter((r): r is RegExp => Boolean(r)) ?? [];
-  return { mentionRegexes, allowFrom: cfg.routing?.allowFrom };
+  return { mentionRegexes, allowFrom: cfg.whatsapp?.allowFrom };
 }
 
 function isBotMentioned(
@@ -336,7 +336,10 @@ export async function runWebHeartbeatOnce(opts: {
     const hasMedia = Boolean(
       replyPayload.mediaUrl || (replyPayload.mediaUrls?.length ?? 0) > 0,
     );
-    const stripped = stripHeartbeatToken(replyPayload.text);
+    const stripped = stripHeartbeatToken(replyPayload.text, {
+      mode: "heartbeat",
+      maxAckChars: 30,
+    });
     if (stripped.shouldSkip && !hasMedia) {
       // Don't let heartbeats keep sessions alive: restore previous updatedAt so idle expiry still works.
       const storePath = resolveStorePath(cfg.session?.store);
@@ -409,7 +412,10 @@ function getSessionRecipients(cfg: ReturnType<typeof loadConfig>) {
   const storePath = resolveStorePath(cfg.session?.store);
   const store = loadSessionStore(storePath);
   const isGroupKey = (key: string) =>
-    key.startsWith("group:") || key.includes("@g.us");
+    key.startsWith("group:") ||
+    key.includes(":group:") ||
+    key.includes(":channel:") ||
+    key.includes("@g.us");
   const isCronKey = (key: string) => key.startsWith("cron:");
 
   const recipients = Object.entries(store)
@@ -442,8 +448,8 @@ export function resolveHeartbeatRecipients(
 
   const sessionRecipients = getSessionRecipients(cfg);
   const allowFrom =
-    Array.isArray(cfg.routing?.allowFrom) && cfg.routing.allowFrom.length > 0
-      ? cfg.routing.allowFrom.filter((v) => v !== "*").map(normalizeE164)
+    Array.isArray(cfg.whatsapp?.allowFrom) && cfg.whatsapp.allowFrom.length > 0
+      ? cfg.whatsapp.allowFrom.filter((v) => v !== "*").map(normalizeE164)
       : [];
 
   const unique = (list: string[]) => [...new Set(list.filter(Boolean))];
@@ -806,13 +812,23 @@ export async function monitorWebProvider(
       .join(", ");
   };
 
+  const resolveGroupRequireMentionFor = (conversationId: string) => {
+    const groupConfig = cfg.whatsapp?.groups?.[conversationId];
+    if (typeof groupConfig?.requireMention === "boolean") {
+      return groupConfig.requireMention;
+    }
+    const groupDefault = cfg.whatsapp?.groups?.["*"]?.requireMention;
+    if (typeof groupDefault === "boolean") return groupDefault;
+    return true;
+  };
+
   const resolveGroupActivationFor = (conversationId: string) => {
     const key = conversationId.startsWith("group:")
       ? conversationId
-      : `group:${conversationId}`;
+      : `whatsapp:group:${conversationId}`;
     const store = loadSessionStore(sessionStorePath);
     const entry = store[key];
-    const requireMention = cfg.routing?.groupChat?.requireMention;
+    const requireMention = resolveGroupRequireMentionFor(conversationId);
     const defaultActivation = requireMention === false ? "always" : "mention";
     return (
       normalizeGroupActivation(entry?.groupActivation) ?? defaultActivation
@@ -905,14 +921,15 @@ export async function monitorWebProvider(
     const formatReplyContext = (msg: WebInboundMsg) => {
       if (!msg.replyToBody) return null;
       const sender = msg.replyToSender ?? "unknown sender";
-      return `[Replying to ${sender}]\n${msg.replyToBody}\n[/Replying]`;
+      const idPart = msg.replyToId ? ` id:${msg.replyToId}` : "";
+      return `[Replying to ${sender}${idPart}]\n${msg.replyToBody}\n[/Replying]`;
     };
 
     const buildLine = (msg: WebInboundMsg) => {
       // Build message prefix: explicit config > default based on allowFrom
       let messagePrefix = cfg.messages?.messagePrefix;
       if (messagePrefix === undefined) {
-        const hasAllowFrom = (cfg.routing?.allowFrom?.length ?? 0) > 0;
+        const hasAllowFrom = (cfg.whatsapp?.allowFrom?.length ?? 0) > 0;
         messagePrefix = hasAllowFrom ? "" : "[clawdis]";
       }
       const prefixStr = messagePrefix ? `${messagePrefix} ` : "";
@@ -1033,6 +1050,7 @@ export async function monitorWebProvider(
       }
 
       const responsePrefix = cfg.messages?.responsePrefix;
+      let didLogHeartbeatStrip = false;
       let didSendReply = false;
       let toolSendChain: Promise<void> = Promise.resolve();
       const sendToolResult = (payload: ReplyPayload) => {
@@ -1045,6 +1063,20 @@ export async function monitorWebProvider(
         }
         if (isSilentReply(payload)) return;
         const toolPayload: ReplyPayload = { ...payload };
+        if (toolPayload.text?.includes(HEARTBEAT_TOKEN)) {
+          const stripped = stripHeartbeatToken(toolPayload.text, {
+            mode: "message",
+          });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from web reply");
+          }
+          const hasMedia = Boolean(
+            toolPayload.mediaUrl || (toolPayload.mediaUrls?.length ?? 0) > 0,
+          );
+          if (stripped.shouldSkip && !hasMedia) return;
+          toolPayload.text = stripped.text;
+        }
         if (
           responsePrefix &&
           toolPayload.text &&
@@ -1078,6 +1110,50 @@ export async function monitorWebProvider(
             );
           });
       };
+      const sendBlockReply = (payload: ReplyPayload) => {
+        if (
+          !payload?.text &&
+          !payload?.mediaUrl &&
+          !(payload?.mediaUrls?.length ?? 0)
+        ) {
+          return;
+        }
+        if (isSilentReply(payload)) return;
+        const blockPayload: ReplyPayload = { ...payload };
+        if (
+          responsePrefix &&
+          blockPayload.text &&
+          blockPayload.text.trim() !== HEARTBEAT_TOKEN &&
+          !blockPayload.text.startsWith(responsePrefix)
+        ) {
+          blockPayload.text = `${responsePrefix} ${blockPayload.text}`;
+        }
+        toolSendChain = toolSendChain
+          .then(async () => {
+            await deliverWebReply({
+              replyResult: blockPayload,
+              msg,
+              maxMediaBytes,
+              replyLogger,
+              connectionId,
+              skipLog: true,
+            });
+            didSendReply = true;
+            if (blockPayload.text) {
+              recentlySent.add(blockPayload.text);
+              recentlySent.add(combinedBody);
+              if (recentlySent.size > MAX_RECENT_MESSAGES) {
+                const firstKey = recentlySent.values().next().value;
+                if (firstKey) recentlySent.delete(firstKey);
+              }
+            }
+          })
+          .catch((err) => {
+            whatsappOutboundLog.error(
+              `Failed sending web block update to ${msg.from ?? conversationId}: ${formatError(err)}`,
+            );
+          });
+      };
 
       const replyResult = await (replyResolver ?? getReplyFromConfig)(
         {
@@ -1106,6 +1182,7 @@ export async function monitorWebProvider(
         {
           onReplyStart: msg.sendComposing,
           onToolResult: sendToolResult,
+          onBlockReply: sendBlockReply,
         },
       );
 
@@ -1133,6 +1210,20 @@ export async function monitorWebProvider(
       await toolSendChain;
 
       for (const replyPayload of sendableReplies) {
+        if (replyPayload.text?.includes(HEARTBEAT_TOKEN)) {
+          const stripped = stripHeartbeatToken(replyPayload.text, {
+            mode: "message",
+          });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from web reply");
+          }
+          const hasMedia = Boolean(
+            replyPayload.mediaUrl || (replyPayload.mediaUrls?.length ?? 0) > 0,
+          );
+          if (stripped.shouldSkip && !hasMedia) continue;
+          replyPayload.text = stripped.text;
+        }
         if (
           responsePrefix &&
           replyPayload.text &&

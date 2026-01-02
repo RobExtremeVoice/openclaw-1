@@ -19,6 +19,20 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - **CLI / macOS app** talk to the gateway; no direct Baileys use.
 - **Active listener** is required for outbound sends; otherwise send fails fast.
 
+## Getting a phone number
+
+WhatsApp requires a real mobile number for verification. VoIP and virtual numbers are usually blocked.
+
+**Recommended approaches:**
+- **Local eSIM** from your country's mobile carrier (most reliable)
+  - Austria: [hot.at](https://www.hot.at)
+  - UK: [giffgaff](https://www.giffgaff.com) — free SIM, no contract
+- **Prepaid SIM** — cheap, just needs to receive one SMS for verification
+
+**Avoid:** TextNow, Google Voice, most "free SMS" services — WhatsApp blocks these aggressively.
+
+**Tip:** The number only needs to receive one verification SMS. After that, WhatsApp Web sessions persist via `creds.json`.
+
 ## Login + credentials
 - Login command: `clawdis login` (QR via Linked Devices).
 - Credentials stored in `~/.clawdis/credentials/creds.json`.
@@ -31,8 +45,8 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - Inbox listeners are detached on shutdown to avoid accumulating event handlers in tests/restarts.
 - Status/broadcast chats are ignored.
 - Direct chats use E.164; groups use group JID.
-- **Allowlist**: `routing.allowFrom` enforced for direct chats only.
-  - If `routing.allowFrom` is empty, default allowlist = self number (self-chat mode).
+- **Allowlist**: `whatsapp.allowFrom` enforced for direct chats only.
+  - If `whatsapp.allowFrom` is empty, default allowlist = self number (self-chat mode).
 - **Self-chat mode**: avoids auto read receipts and ignores mention JIDs.
 - Read receipts sent for non-self-chat DMs.
 
@@ -40,7 +54,7 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - `Body` is the current message body with envelope.
 - Quoted reply context is **always appended**:
   ```
-  [Replying to +1555]
+  [Replying to +1555 id:ABC123]
   <quoted text or <media:...>>
   [/Replying]
   ```
@@ -52,12 +66,12 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
   - `<media:image|video|audio|document|sticker>`
 
 ## Groups
-- Groups map to `group:<jid>` sessions.
+- Groups map to `whatsapp:group:<jid>` sessions.
 - Activation modes:
   - `mention` (default): requires @mention or regex match.
   - `always`: always triggers.
 - `/activation mention|always` is owner-only.
-- Owner = `routing.allowFrom` (or self E.164 if unset).
+- Owner = `whatsapp.allowFrom` (or self E.164 if unset).
 - **History injection**:
   - Recent messages (default 50) inserted under:
     `[Chat messages since your last reply - for context]`
@@ -67,8 +81,8 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - Group metadata cached 5 min (subject + participants).
 
 ## Reply delivery (threading)
-- Outbound replies are sent as **native replies** (quoted message).
-- Model does not need IDs for threading; gateway attaches quote.
+- WhatsApp Web sends standard messages (no quoted reply threading in the current gateway).
+- Reply tags are ignored on this surface.
 
 ## Outbound send (text + media)
 - Uses active web listener; error if gateway not running.
@@ -98,7 +112,8 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - Logged-out => stop and require re-link.
 
 ## Config quick map
-- `routing.allowFrom` (DM allowlist).
+- `whatsapp.allowFrom` (DM allowlist).
+- `whatsapp.groups` (group mention gating defaults/overrides)
 - `routing.groupChat.mentionPatterns`
 - `routing.groupChat.historyLimit`
 - `messages.messagePrefix` (inbound prefix)

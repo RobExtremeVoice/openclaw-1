@@ -111,7 +111,7 @@ describe("partial reply gating", () => {
     const replyResolver = vi.fn().mockResolvedValue({ text: "final reply" });
 
     const mockConfig: ClawdisConfig = {
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
     };
@@ -158,7 +158,7 @@ describe("partial reply gating", () => {
     const replyResolver = vi.fn().mockResolvedValue(undefined);
 
     const mockConfig: ClawdisConfig = {
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       session: { store: store.storePath, mainKey: "main" },
@@ -1005,6 +1005,55 @@ describe("web auto-reply", () => {
     expect(payload.Body).toContain("[from: Bob (+222)]");
   });
 
+  it("allows group messages when whatsapp groups default disables mention gating", async () => {
+    const sendMedia = vi.fn();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const sendComposing = vi.fn();
+    const resolver = vi.fn().mockResolvedValue({ text: "ok" });
+
+    setLoadConfigMock(() => ({
+      whatsapp: {
+        allowFrom: ["*"],
+        groups: { "*": { requireMention: false } },
+      },
+      routing: { groupChat: { mentionPatterns: ["@clawd"] } },
+    }));
+
+    let capturedOnMessage:
+      | ((msg: import("./inbound.js").WebInboundMessage) => Promise<void>)
+      | undefined;
+    const listenerFactory = async (opts: {
+      onMessage: (
+        msg: import("./inbound.js").WebInboundMessage,
+      ) => Promise<void>;
+    }) => {
+      capturedOnMessage = opts.onMessage;
+      return { close: vi.fn() };
+    };
+
+    await monitorWebProvider(false, listenerFactory, false, resolver);
+    expect(capturedOnMessage).toBeDefined();
+
+    await capturedOnMessage?.({
+      body: "hello group",
+      from: "123@g.us",
+      conversationId: "123@g.us",
+      chatId: "123@g.us",
+      chatType: "group",
+      to: "+2",
+      id: "g-default-off",
+      senderE164: "+111",
+      senderName: "Alice",
+      selfE164: "+999",
+      sendComposing,
+      reply,
+      sendMedia,
+    });
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    resetLoadConfigMock();
+  });
+
   it("supports always-on group activation with silent token and preserves history", async () => {
     const sendMedia = vi.fn();
     const reply = vi.fn().mockResolvedValue(undefined);
@@ -1015,7 +1064,7 @@ describe("web auto-reply", () => {
       .mockResolvedValueOnce({ text: "ok" });
 
     const { storePath, cleanup } = await makeSessionStore({
-      "group:123@g.us": {
+      "whatsapp:group:123@g.us": {
         sessionId: "g-1",
         updatedAt: Date.now(),
         groupActivation: "always",
@@ -1097,11 +1146,13 @@ describe("web auto-reply", () => {
     const resolver = vi.fn().mockResolvedValue({ text: "ok" });
 
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         // Self-chat heuristic: allowFrom includes selfE164.
         allowFrom: ["+999"],
+        groups: { "*": { requireMention: true } },
+      },
+      routing: {
         groupChat: {
-          requireMention: true,
           mentionPatterns: ["\\bclawd\\b"],
         },
       },
@@ -1247,7 +1298,7 @@ describe("web auto-reply", () => {
   it("prefixes body with same-phone marker when from === to", async () => {
     // Enable messagePrefix for same-phone mode testing
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       messages: {
@@ -1366,13 +1417,13 @@ describe("web auto-reply", () => {
     expect(callArg.ReplyToId).toBe("q1");
     expect(callArg.ReplyToBody).toBe("original");
     expect(callArg.ReplyToSender).toBe("+1999");
-    expect(callArg.Body).toContain("[Replying to +1999]");
+    expect(callArg.Body).toContain("[Replying to +1999 id:q1]");
     expect(callArg.Body).toContain("original");
   });
 
   it("applies responsePrefix to regular replies", async () => {
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       messages: {
@@ -1415,9 +1466,9 @@ describe("web auto-reply", () => {
     resetLoadConfigMock();
   });
 
-  it("skips responsePrefix for HEARTBEAT_OK responses", async () => {
+  it("does not deliver HEARTBEAT_OK responses", async () => {
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       messages: {
@@ -1456,14 +1507,13 @@ describe("web auto-reply", () => {
       sendMedia: vi.fn(),
     });
 
-    // HEARTBEAT_OK should NOT have prefix - clawdis needs exact match
-    expect(reply).toHaveBeenCalledWith(HEARTBEAT_TOKEN);
+    expect(reply).not.toHaveBeenCalled();
     resetLoadConfigMock();
   });
 
   it("does not double-prefix if responsePrefix already present", async () => {
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       messages: {
@@ -1509,7 +1559,7 @@ describe("web auto-reply", () => {
 
   it("sends tool summaries immediately with responsePrefix", async () => {
     setLoadConfigMock(() => ({
-      routing: {
+      whatsapp: {
         allowFrom: ["*"],
       },
       messages: {

@@ -1,5 +1,4 @@
 import Observation
-import OSLog
 
 @MainActor
 @Observable
@@ -25,7 +24,11 @@ final class TalkModeController {
         self.phase = phase
         TalkOverlayController.shared.updatePhase(phase)
         let effectivePhase = self.isPaused ? "paused" : phase.rawValue
-        Task { await GatewayConnection.shared.talkMode(enabled: AppStateStore.shared.talkEnabled, phase: effectivePhase) }
+        Task {
+            await GatewayConnection.shared.talkMode(
+                enabled: AppStateStore.shared.talkEnabled,
+                phase: effectivePhase)
+        }
     }
 
     func updateLevel(_ level: Double) {
@@ -38,7 +41,11 @@ final class TalkModeController {
         self.isPaused = paused
         TalkOverlayController.shared.updatePaused(paused)
         let effectivePhase = paused ? "paused" : self.phase.rawValue
-        Task { await GatewayConnection.shared.talkMode(enabled: AppStateStore.shared.talkEnabled, phase: effectivePhase) }
+        Task {
+            await GatewayConnection.shared.talkMode(
+                enabled: AppStateStore.shared.talkEnabled,
+                phase: effectivePhase)
+        }
         Task { await TalkModeRuntime.shared.setPaused(paused) }
     }
 

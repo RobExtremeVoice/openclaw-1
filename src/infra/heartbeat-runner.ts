@@ -15,11 +15,13 @@ import {
   saveSessionStore,
 } from "../config/sessions.js";
 import { sendMessageDiscord } from "../discord/send.js";
+import { sendMessageIMessage } from "../imessage/send.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createSubsystemLogger } from "../logging.js";
 import { getQueueSize } from "../process/command-queue.js";
 import { webAuthExists } from "../providers/web/index.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
+import { sendMessageSignal } from "../signal/send.js";
 import { sendMessageTelegram } from "../telegram/send.js";
 import { normalizeE164 } from "../utils.js";
 import { getActiveWebListener } from "../web/active-listener.js";
@@ -36,10 +38,12 @@ export type HeartbeatTarget =
   | "whatsapp"
   | "telegram"
   | "discord"
+  | "signal"
+  | "imessage"
   | "none";
 
 export type HeartbeatDeliveryTarget = {
-  channel: "whatsapp" | "telegram" | "discord" | "none";
+  channel: "whatsapp" | "telegram" | "discord" | "signal" | "imessage" | "none";
   to?: string;
   reason?: string;
 };
@@ -49,6 +53,8 @@ type HeartbeatDeps = {
   sendWhatsApp?: typeof sendMessageWhatsApp;
   sendTelegram?: typeof sendMessageTelegram;
   sendDiscord?: typeof sendMessageDiscord;
+  sendSignal?: typeof sendMessageSignal;
+  sendIMessage?: typeof sendMessageIMessage;
   getQueueSize?: (lane?: string) => number;
   nowMs?: () => number;
   webAuthExists?: () => Promise<boolean>;
@@ -177,6 +183,8 @@ export function resolveHeartbeatDeliveryTarget(params: {
     rawTarget === "whatsapp" ||
     rawTarget === "telegram" ||
     rawTarget === "discord" ||
+    rawTarget === "signal" ||
+    rawTarget === "imessage" ||
     rawTarget === "none" ||
     rawTarget === "last"
       ? rawTarget
@@ -197,10 +205,20 @@ export function resolveHeartbeatDeliveryTarget(params: {
       : undefined;
   const lastTo = typeof entry?.lastTo === "string" ? entry.lastTo.trim() : "";
 
-  const channel: "whatsapp" | "telegram" | "discord" | undefined =
+  const channel:
+    | "whatsapp"
+    | "telegram"
+    | "discord"
+    | "signal"
+    | "imessage"
+    | undefined =
     target === "last"
       ? lastChannel
-      : target === "whatsapp" || target === "telegram" || target === "discord"
+      : target === "whatsapp" ||
+          target === "telegram" ||
+          target === "discord" ||
+          target === "signal" ||
+          target === "imessage"
         ? target
         : undefined;
 
@@ -217,7 +235,7 @@ export function resolveHeartbeatDeliveryTarget(params: {
     return { channel, to };
   }
 
-  const rawAllow = cfg.routing?.allowFrom ?? [];
+  const rawAllow = cfg.whatsapp?.allowFrom ?? [];
   if (rawAllow.includes("*")) return { channel, to };
   const allowFrom = rawAllow
     .map((val) => normalizeE164(val))
@@ -248,7 +266,10 @@ function normalizeHeartbeatReply(
   payload: ReplyPayload,
   responsePrefix?: string,
 ) {
-  const stripped = stripHeartbeatToken(payload.text);
+  const stripped = stripHeartbeatToken(payload.text, {
+    mode: "heartbeat",
+    maxAckChars: 30,
+  });
   const hasMedia = Boolean(
     payload.mediaUrl || (payload.mediaUrls?.length ?? 0) > 0,
   );
@@ -267,12 +288,19 @@ function normalizeHeartbeatReply(
 }
 
 async function deliverHeartbeatReply(params: {
-  channel: "whatsapp" | "telegram" | "discord";
+  channel: "whatsapp" | "telegram" | "discord" | "signal" | "imessage";
   to: string;
   text: string;
   mediaUrls: string[];
   deps: Required<
-    Pick<HeartbeatDeps, "sendWhatsApp" | "sendTelegram" | "sendDiscord">
+    Pick<
+      HeartbeatDeps,
+      | "sendWhatsApp"
+      | "sendTelegram"
+      | "sendDiscord"
+      | "sendSignal"
+      | "sendIMessage"
+    >
   >;
 }) {
   const { channel, to, text, mediaUrls, deps } = params;
@@ -288,6 +316,38 @@ async function deliverHeartbeatReply(params: {
       const caption = first ? text : "";
       first = false;
       await deps.sendWhatsApp(to, caption, { verbose: false, mediaUrl: url });
+    }
+    return;
+  }
+
+  if (channel === "signal") {
+    if (mediaUrls.length === 0) {
+      for (const chunk of chunkText(text, 4000)) {
+        await deps.sendSignal(to, chunk);
+      }
+      return;
+    }
+    let first = true;
+    for (const url of mediaUrls) {
+      const caption = first ? text : "";
+      first = false;
+      await deps.sendSignal(to, caption, { mediaUrl: url });
+    }
+    return;
+  }
+
+  if (channel === "imessage") {
+    if (mediaUrls.length === 0) {
+      for (const chunk of chunkText(text, 4000)) {
+        await deps.sendIMessage(to, chunk);
+      }
+      return;
+    }
+    let first = true;
+    for (const url of mediaUrls) {
+      const caption = first ? text : "";
+      first = false;
+      await deps.sendIMessage(to, caption, { mediaUrl: url });
     }
     return;
   }
@@ -341,7 +401,7 @@ export async function runHeartbeatOnce(opts: {
   const startedAt = opts.deps?.nowMs?.() ?? Date.now();
   const { entry, sessionKey, storePath } = resolveHeartbeatSession(cfg);
   const previousUpdatedAt = entry?.updatedAt;
-  const allowFrom = cfg.routing?.allowFrom ?? [];
+  const allowFrom = cfg.whatsapp?.allowFrom ?? [];
   const sender = resolveHeartbeatSender({
     allowFrom,
     lastTo: entry?.lastTo,
@@ -437,6 +497,8 @@ export async function runHeartbeatOnce(opts: {
       sendWhatsApp: opts.deps?.sendWhatsApp ?? sendMessageWhatsApp,
       sendTelegram: opts.deps?.sendTelegram ?? sendMessageTelegram,
       sendDiscord: opts.deps?.sendDiscord ?? sendMessageDiscord,
+      sendSignal: opts.deps?.sendSignal ?? sendMessageSignal,
+      sendIMessage: opts.deps?.sendIMessage ?? sendMessageIMessage,
     };
     await deliverHeartbeatReply({
       channel: delivery.channel,

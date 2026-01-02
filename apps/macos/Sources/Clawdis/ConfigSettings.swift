@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct ConfigSettings: View {
     private let isPreview = ProcessInfo.processInfo.isPreview
+    private let isNixMode = ProcessInfo.processInfo.isNixMode
     private let state = AppStateStore.shared
     private let labelColumnWidth: CGFloat = 120
     private static let browserAttachOnlyHelp =
@@ -36,6 +37,20 @@ struct ConfigSettings: View {
     @State private var talkApiKey: String = ""
     @State private var gatewayApiKeyFound = false
 
+    private struct ConfigDraft {
+        let configModel: String
+        let customModel: String
+        let heartbeatMinutes: Int?
+        let heartbeatBody: String
+        let browserEnabled: Bool
+        let browserControlUrl: String
+        let browserColorHex: String
+        let browserAttachOnly: Bool
+        let talkVoiceId: String
+        let talkApiKey: String
+        let talkInterruptOnSpeech: Bool
+    }
+
     var body: some View {
         ScrollView { self.content }
             .onChange(of: self.modelCatalogPath) { _, _ in
@@ -48,7 +63,7 @@ struct ConfigSettings: View {
                 guard !self.hasLoaded else { return }
                 guard !self.isPreview else { return }
                 self.hasLoaded = true
-                self.loadConfig()
+                await self.loadConfig()
                 await self.loadModels()
                 await self.refreshGatewayTalkApiKey()
                 self.allowAutosave = true
@@ -59,9 +74,13 @@ struct ConfigSettings: View {
         VStack(alignment: .leading, spacing: 14) {
             self.header
             self.agentSection
+                .disabled(self.isNixMode)
             self.heartbeatSection
+                .disabled(self.isNixMode)
             self.talkSection
+                .disabled(self.isNixMode)
             self.browserSection
+                .disabled(self.isNixMode)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,7 +93,9 @@ struct ConfigSettings: View {
     private var header: some View {
         Text("Clawdis CLI config")
             .font(.title3.weight(.semibold))
-        Text("Edit ~/.clawdis/clawdis.json (agent / session / routing / messages).")
+        Text(self.isNixMode
+            ? "This tab is read-only in Nix mode. Edit config via Nix and rebuild."
+            : "Edit ~/.clawdis/clawdis.json (agent / session / routing / messages).")
             .font(.callout)
             .foregroundStyle(.secondary)
     }
@@ -313,7 +334,7 @@ struct ConfigSettings: View {
                                 .frame(maxWidth: .infinity)
                                 .disabled(self.hasEnvApiKey)
                                 .onChange(of: self.talkApiKey) { _, _ in self.autosaveConfig() }
-                            if !self.hasEnvApiKey && !self.talkApiKey.isEmpty {
+                            if !self.hasEnvApiKey, !self.talkApiKey.isEmpty {
                                 Button("Clear") {
                                     self.talkApiKey = ""
                                     self.autosaveConfig()
@@ -325,7 +346,9 @@ struct ConfigSettings: View {
                             Text("Using ELEVENLABS_API_KEY from the environment.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                        } else if self.gatewayApiKeyFound && self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        } else if self.gatewayApiKeyFound,
+                                  self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        {
                             Text("Using API key from the gateway profile.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -362,8 +385,8 @@ struct ConfigSettings: View {
         .padding(.top, 2)
     }
 
-    private func loadConfig() {
-        let parsed = self.loadConfigDict()
+    private func loadConfig() async {
+        let parsed = await ConfigStore.load()
         let agent = parsed["agent"] as? [String: Any]
         let heartbeatMinutes = agent?["heartbeatMinutes"] as? Int
         let heartbeatBody = agent?["heartbeatBody"] as? String
@@ -413,7 +436,7 @@ struct ConfigSettings: View {
     }
 
     private func autosaveConfig() {
-        guard self.allowAutosave else { return }
+        guard self.allowAutosave, !self.isNixMode else { return }
         Task { await self.saveConfig() }
     }
 
@@ -422,55 +445,90 @@ struct ConfigSettings: View {
         self.configSaving = true
         defer { self.configSaving = false }
 
-        var root = self.loadConfigDict()
+        let configModel = self.configModel
+        let customModel = self.customModel
+        let heartbeatMinutes = self.heartbeatMinutes
+        let heartbeatBody = self.heartbeatBody
+        let browserEnabled = self.browserEnabled
+        let browserControlUrl = self.browserControlUrl
+        let browserColorHex = self.browserColorHex
+        let browserAttachOnly = self.browserAttachOnly
+        let talkVoiceId = self.talkVoiceId
+        let talkApiKey = self.talkApiKey
+        let talkInterruptOnSpeech = self.talkInterruptOnSpeech
+
+        let draft = ConfigDraft(
+            configModel: configModel,
+            customModel: customModel,
+            heartbeatMinutes: heartbeatMinutes,
+            heartbeatBody: heartbeatBody,
+            browserEnabled: browserEnabled,
+            browserControlUrl: browserControlUrl,
+            browserColorHex: browserColorHex,
+            browserAttachOnly: browserAttachOnly,
+            talkVoiceId: talkVoiceId,
+            talkApiKey: talkApiKey,
+            talkInterruptOnSpeech: talkInterruptOnSpeech)
+
+        let errorMessage = await ConfigSettings.buildAndSaveConfig(draft)
+
+        if let errorMessage {
+            self.modelError = errorMessage
+        }
+    }
+
+    @MainActor
+    private static func buildAndSaveConfig(_ draft: ConfigDraft) async -> String? {
+        var root = await ConfigStore.load()
         var agent = root["agent"] as? [String: Any] ?? [:]
         var browser = root["browser"] as? [String: Any] ?? [:]
         var talk = root["talk"] as? [String: Any] ?? [:]
 
-        let chosenModel = (self.configModel == "__custom__" ? self.customModel : self.configModel)
+        let chosenModel = (draft.configModel == "__custom__" ? draft.customModel : draft.configModel)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModel = chosenModel
         if !trimmedModel.isEmpty { agent["model"] = trimmedModel }
 
-        if let heartbeatMinutes {
+        if let heartbeatMinutes = draft.heartbeatMinutes {
             agent["heartbeatMinutes"] = heartbeatMinutes
         }
 
-        let trimmedBody = self.heartbeatBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = draft.heartbeatBody.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedBody.isEmpty {
             agent["heartbeatBody"] = trimmedBody
         }
 
         root["agent"] = agent
 
-        browser["enabled"] = self.browserEnabled
-        let trimmedUrl = self.browserControlUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        browser["enabled"] = draft.browserEnabled
+        let trimmedUrl = draft.browserControlUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedUrl.isEmpty { browser["controlUrl"] = trimmedUrl }
-        let trimmedColor = self.browserColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedColor = draft.browserColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedColor.isEmpty { browser["color"] = trimmedColor }
-        browser["attachOnly"] = self.browserAttachOnly
+        browser["attachOnly"] = draft.browserAttachOnly
         root["browser"] = browser
 
-        let trimmedVoice = self.talkVoiceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedVoice = draft.talkVoiceId.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedVoice.isEmpty {
             talk.removeValue(forKey: "voiceId")
         } else {
             talk["voiceId"] = trimmedVoice
         }
-        let trimmedApiKey = self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedApiKey = draft.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedApiKey.isEmpty {
             talk.removeValue(forKey: "apiKey")
         } else {
             talk["apiKey"] = trimmedApiKey
         }
-        talk["interruptOnSpeech"] = self.talkInterruptOnSpeech
+        talk["interruptOnSpeech"] = draft.talkInterruptOnSpeech
         root["talk"] = talk
 
-        ClawdisConfigFile.saveDict(root)
-    }
-
-    private func loadConfigDict() -> [String: Any] {
-        ClawdisConfigFile.loadDict()
+        do {
+            try await ConfigStore.save(root)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     private var browserColor: Color {

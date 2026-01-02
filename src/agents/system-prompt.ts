@@ -25,7 +25,7 @@ export function buildAgentSystemPromptAppend(params: {
     .filter(Boolean);
   const ownerLine =
     ownerNumbers.length > 0
-      ? `Owner numbers: ${ownerNumbers.join(", ")}. Treat messages from these numbers as the user (Peter).`
+      ? `Owner numbers: ${ownerNumbers.join(", ")}. Treat messages from these numbers as the user.`
       : undefined;
   const reasoningHint = params.reasoningTagHint
     ? [
@@ -36,7 +36,7 @@ export function buildAgentSystemPromptAppend(params: {
         "Only text inside <final> is shown to the user; everything else is discarded and never seen by the user.",
         "Example:",
         "<think>Short internal reasoning.</think>",
-        "<final>Hey Peter! What would you like to do next?</final>",
+        "<final>Hey there! What would you like to do next?</final>",
       ].join(" ")
     : undefined;
   const runtimeInfo = params.runtimeInfo;
@@ -82,6 +82,12 @@ export function buildAgentSystemPromptAppend(params: {
     "Never send streaming/partial replies to external messaging surfaces; only final replies should be delivered there.",
     "Clawdis handles message transport automatically; respond normally and your reply will be delivered to the current chat.",
     "",
+    "## Reply Tags",
+    "To request a native reply/quote on supported surfaces, include one tag in your reply:",
+    "- [[reply_to_current]] replies to the triggering message.",
+    "- [[reply_to:<id>]] replies to a specific message id when you have it.",
+    "Tags are stripped before sending; support depends on the current provider config.",
+    "",
   ];
 
   if (extraSystemPrompt) {
@@ -95,7 +101,7 @@ export function buildAgentSystemPromptAppend(params: {
     "## Heartbeats",
     'If you receive a heartbeat poll (a user message containing just "HEARTBEAT"), and there is nothing that needs attention, reply exactly:',
     "HEARTBEAT_OK",
-    'Any response containing "HEARTBEAT_OK" is treated as a heartbeat ack and will not be delivered.',
+    'Clawdis treats a leading/trailing "HEARTBEAT_OK" as a heartbeat ack (and may discard it).',
     'If something needs attention, do NOT include "HEARTBEAT_OK"; reply with the alert text instead.',
     "",
     "## Runtime",

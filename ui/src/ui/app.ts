@@ -26,13 +26,22 @@ import type {
   SkillStatusReport,
   StatusSummary,
 } from "./types";
-import type { CronFormState, TelegramForm } from "./ui-types";
+import type {
+  CronFormState,
+  DiscordForm,
+  IMessageForm,
+  SignalForm,
+  TelegramForm,
+} from "./ui-types";
 import { loadChatHistory, sendChat, handleChatEvent } from "./controllers/chat";
 import { loadNodes } from "./controllers/nodes";
 import { loadConfig } from "./controllers/config";
 import {
   loadProviders,
   logoutWhatsApp,
+  saveDiscordConfig,
+  saveIMessageConfig,
+  saveSignalConfig,
   saveTelegramConfig,
   startWhatsAppLogin,
   waitWhatsAppLogin,
@@ -126,6 +135,52 @@ export class ClawdisApp extends LitElement {
   @state() telegramSaving = false;
   @state() telegramTokenLocked = false;
   @state() telegramConfigStatus: string | null = null;
+  @state() discordForm: DiscordForm = {
+    enabled: true,
+    token: "",
+    allowFrom: "",
+    groupEnabled: false,
+    groupChannels: "",
+    mediaMaxMb: "",
+    historyLimit: "",
+    enableReactions: true,
+    slashEnabled: false,
+    slashName: "",
+    slashSessionPrefix: "",
+    slashEphemeral: true,
+  };
+  @state() discordSaving = false;
+  @state() discordTokenLocked = false;
+  @state() discordConfigStatus: string | null = null;
+  @state() signalForm: SignalForm = {
+    enabled: true,
+    account: "",
+    httpUrl: "",
+    httpHost: "",
+    httpPort: "",
+    cliPath: "",
+    autoStart: true,
+    receiveMode: "",
+    ignoreAttachments: false,
+    ignoreStories: false,
+    sendReadReceipts: false,
+    allowFrom: "",
+    mediaMaxMb: "",
+  };
+  @state() signalSaving = false;
+  @state() signalConfigStatus: string | null = null;
+  @state() imessageForm: IMessageForm = {
+    enabled: true,
+    cliPath: "",
+    dbPath: "",
+    service: "auto",
+    region: "",
+    allowFrom: "",
+    includeAttachments: false,
+    mediaMaxMb: "",
+  };
+  @state() imessageSaving = false;
+  @state() imessageConfigStatus: string | null = null;
 
   @state() presenceLoading = false;
   @state() presenceEntries: PresenceEntry[] = [];
@@ -168,6 +223,7 @@ export class ClawdisApp extends LitElement {
 
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;
+  private chatScrollTimeout: number | null = null;
   private nodesPollInterval: number | null = null;
   basePath = "";
   private popStateHandler = () => this.onPopState();
@@ -185,6 +241,7 @@ export class ClawdisApp extends LitElement {
     this.syncThemeWithSettings();
     this.attachThemeListener();
     window.addEventListener("popstate", this.popStateHandler);
+    this.applySettingsFromUrl();
     this.connect();
     this.startNodesPolling();
   }
@@ -202,6 +259,7 @@ export class ClawdisApp extends LitElement {
       (changed.has("chatMessages") ||
         changed.has("chatStream") ||
         changed.has("chatLoading") ||
+        changed.has("chatMessage") ||
         changed.has("tab"))
     ) {
       this.scheduleChatScroll();
@@ -241,11 +299,21 @@ export class ClawdisApp extends LitElement {
 
   private scheduleChatScroll() {
     if (this.chatScrollFrame) cancelAnimationFrame(this.chatScrollFrame);
+    if (this.chatScrollTimeout != null) {
+      clearTimeout(this.chatScrollTimeout);
+      this.chatScrollTimeout = null;
+    }
     this.chatScrollFrame = requestAnimationFrame(() => {
       this.chatScrollFrame = null;
       const container = this.querySelector(".chat-thread") as HTMLElement | null;
       if (!container) return;
       container.scrollTop = container.scrollHeight;
+      this.chatScrollTimeout = window.setTimeout(() => {
+        this.chatScrollTimeout = null;
+        const latest = this.querySelector(".chat-thread") as HTMLElement | null;
+        if (!latest) return;
+        latest.scrollTop = latest.scrollHeight;
+      }, 120);
     });
   }
 
@@ -322,6 +390,20 @@ export class ClawdisApp extends LitElement {
     }
   }
 
+  private applySettingsFromUrl() {
+    if (!window.location.search) return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token")?.trim();
+    if (!token) return;
+    if (!this.settings.token) {
+      this.applySettings({ ...this.settings, token });
+    }
+    params.delete("token");
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState({}, "", url.toString());
+  }
+
   setTab(next: Tab) {
     if (this.tab !== next) this.tab = next;
     void this.refreshActiveTab();
@@ -351,7 +433,7 @@ export class ClawdisApp extends LitElement {
     if (this.tab === "skills") await loadSkills(this);
     if (this.tab === "nodes") await loadNodes(this);
     if (this.tab === "chat") {
-      await loadChatHistory(this);
+      await Promise.all([loadChatHistory(this), loadSessions(this)]);
       this.scheduleChatScroll();
     }
     if (this.tab === "config") await loadConfig(this);
@@ -478,6 +560,24 @@ export class ClawdisApp extends LitElement {
 
   async handleTelegramSave() {
     await saveTelegramConfig(this);
+    await loadConfig(this);
+    await loadProviders(this, true);
+  }
+
+  async handleDiscordSave() {
+    await saveDiscordConfig(this);
+    await loadConfig(this);
+    await loadProviders(this, true);
+  }
+
+  async handleSignalSave() {
+    await saveSignalConfig(this);
+    await loadConfig(this);
+    await loadProviders(this, true);
+  }
+
+  async handleIMessageSave() {
+    await saveIMessageConfig(this);
     await loadConfig(this);
     await loadProviders(this, true);
   }

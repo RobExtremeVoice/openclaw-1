@@ -135,6 +135,7 @@ final class MacNodeModeCoordinator {
 
         let capsSet = Set(caps)
         if capsSet.contains(ClawdisCapability.camera.rawValue) {
+            commands.append(ClawdisCameraCommand.list.rawValue)
             commands.append(ClawdisCameraCommand.snap.rawValue)
             commands.append(ClawdisCameraCommand.clip.rawValue)
         }
@@ -228,29 +229,32 @@ final class MacNodeModeCoordinator {
         _ stream: AsyncStream<NWConnection.State>,
         timeoutSeconds: Double) async throws
     {
-        try await AsyncTimeout.withTimeout(seconds: timeoutSeconds, onTimeout: {
-            NSError(domain: "Bridge", code: 22, userInfo: [
-                NSLocalizedDescriptionKey: "operation timed out",
-            ])
-        }) {
-            for await state in stream {
-                switch state {
-                case .ready:
-                    return
-                case let .failed(err):
-                    throw err
-                case .cancelled:
-                    throw NSError(domain: "Bridge", code: 20, userInfo: [
-                        NSLocalizedDescriptionKey: "Connection cancelled",
-                    ])
-                default:
-                    continue
+        try await AsyncTimeout.withTimeout(
+            seconds: timeoutSeconds,
+            onTimeout: {
+                NSError(domain: "Bridge", code: 22, userInfo: [
+                    NSLocalizedDescriptionKey: "operation timed out",
+                ])
+            },
+            operation: {
+                for await state in stream {
+                    switch state {
+                    case .ready:
+                        return
+                    case let .failed(err):
+                        throw err
+                    case .cancelled:
+                        throw NSError(domain: "Bridge", code: 20, userInfo: [
+                            NSLocalizedDescriptionKey: "Connection cancelled",
+                        ])
+                    default:
+                        continue
+                    }
                 }
-            }
-            throw NSError(domain: "Bridge", code: 21, userInfo: [
-                NSLocalizedDescriptionKey: "Connection closed",
-            ])
-        }
+                throw NSError(domain: "Bridge", code: 21, userInfo: [
+                    NSLocalizedDescriptionKey: "Connection closed",
+                ])
+            })
     }
 
     private func resolveBridgeEndpoint(timeoutSeconds: Double) async -> NWEndpoint? {

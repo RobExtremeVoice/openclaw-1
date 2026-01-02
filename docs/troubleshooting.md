@@ -22,15 +22,15 @@ The agent was interrupted mid-response.
 
 ### Messages Not Triggering
 
-**Check 1:** Is the sender in `routing.allowFrom`?
+**Check 1:** Is the sender in `whatsapp.allowFrom`?
 ```bash
-cat ~/.clawdis/clawdis.json | jq '.routing.allowFrom'
+cat ~/.clawdis/clawdis.json | jq '.whatsapp.allowFrom'
 ```
 
 **Check 2:** For group chats, is mention required?
 ```bash
-# The message must contain a pattern from mentionPatterns
-cat ~/.clawdis/clawdis.json | jq '.routing.groupChat'
+# The message must match mentionPatterns or explicit mentions; defaults live in whatsapp.groups
+cat ~/.clawdis/clawdis.json | jq '.routing.groupChat, .whatsapp.groups'
 ```
 
 **Check 3:** Check the logs
@@ -133,6 +133,35 @@ CLAWDIS keeps conversation history in memory.
   }
 }
 ```
+
+## macOS Specific Issues
+
+### App Crashes when Granting Permissions (Speech/Mic)
+
+If the app disappears or shows "Abort trap 6" when you click "Allow" on a privacy prompt:
+
+**Fix 1: Reset TCC Cache**
+```bash
+tccutil reset All com.steipete.clawdis.debug
+```
+
+**Fix 2: Force New Bundle ID**
+If resetting doesn't work, change the `BUNDLE_ID` in `scripts/package-mac-app.sh` (e.g., add a `.test` suffix) and rebuild. This forces macOS to treat it as a new app.
+
+### Gateway stuck on "Starting..."
+
+The app connects to a local gateway on port `18789`. If it stays stuck:
+
+**Fix 1: Kill Zombie Processes**
+Another process might be holding the port.
+```bash
+lsof -nP -i :18789
+# Kill any matching PIDs
+kill -9 <PID>
+```
+
+**Fix 2: Check embedded gateway**
+Ensure the gateway relay was properly bundled. Run `./scripts/package-mac-app.sh` and ensure `bun` is installed.
 
 ## Debug Mode
 

@@ -27,6 +27,7 @@ export type ClawdisSkillMetadata = {
   primaryEnv?: string;
   emoji?: string;
   homepage?: string;
+  os?: string[];
   requires?: {
     bins?: string[];
     anyBins?: string[];
@@ -38,7 +39,7 @@ export type ClawdisSkillMetadata = {
 
 export type SkillsInstallPreferences = {
   preferBrew: boolean;
-  nodeManager: "npm" | "pnpm" | "yarn";
+  nodeManager: "npm" | "pnpm" | "yarn" | "bun";
 };
 
 type ParsedSkillFrontmatter = Record<string, string>;
@@ -174,16 +175,23 @@ const DEFAULT_CONFIG_VALUES: Record<string, boolean> = {
 export function resolveSkillsInstallPreferences(
   config?: ClawdisConfig,
 ): SkillsInstallPreferences {
-  const raw = config?.skillsInstall;
+  const raw = config?.skills?.install;
   const preferBrew = raw?.preferBrew ?? true;
   const managerRaw =
     typeof raw?.nodeManager === "string" ? raw.nodeManager.trim() : "";
   const manager = managerRaw.toLowerCase();
   const nodeManager =
-    manager === "pnpm" || manager === "yarn" || manager === "npm"
+    manager === "pnpm" ||
+    manager === "yarn" ||
+    manager === "bun" ||
+    manager === "npm"
       ? (manager as SkillsInstallPreferences["nodeManager"])
       : "npm";
   return { preferBrew, nodeManager };
+}
+
+export function resolveRuntimePlatform(): string {
+  return process.platform;
 }
 
 export function resolveConfigPath(
@@ -214,11 +222,32 @@ export function resolveSkillConfig(
   config: ClawdisConfig | undefined,
   skillKey: string,
 ): SkillConfig | undefined {
-  const skills = config?.skills;
+  const skills = config?.skills?.entries;
   if (!skills || typeof skills !== "object") return undefined;
   const entry = (skills as Record<string, SkillConfig | undefined>)[skillKey];
   if (!entry || typeof entry !== "object") return undefined;
   return entry;
+}
+
+function normalizeAllowlist(input: unknown): string[] | undefined {
+  if (!input) return undefined;
+  if (!Array.isArray(input)) return undefined;
+  const normalized = input.map((entry) => String(entry).trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function isBundledSkill(entry: SkillEntry): boolean {
+  return entry.skill.source === "clawdis-bundled";
+}
+
+export function isBundledSkillAllowed(
+  entry: SkillEntry,
+  allowlist?: string[],
+): boolean {
+  if (!allowlist || allowlist.length === 0) return true;
+  if (!isBundledSkill(entry)) return true;
+  const key = resolveSkillKey(entry.skill, entry);
+  return allowlist.includes(key) || allowlist.includes(entry.skill.name);
 }
 
 export function hasBinary(bin: string): boolean {
@@ -257,6 +286,7 @@ function resolveClawdisMetadata(
     const install = installRaw
       .map((entry) => parseInstallSpec(entry))
       .filter((entry): entry is SkillInstallSpec => Boolean(entry));
+    const osRaw = normalizeStringList(clawdisObj.os);
     return {
       always:
         typeof clawdisObj.always === "boolean" ? clawdisObj.always : undefined,
@@ -274,6 +304,7 @@ function resolveClawdisMetadata(
         typeof clawdisObj.primaryEnv === "string"
           ? clawdisObj.primaryEnv
           : undefined,
+      os: osRaw.length > 0 ? osRaw : undefined,
       requires: requiresRaw
         ? {
             bins: normalizeStringList(requiresRaw.bins),
@@ -300,8 +331,14 @@ function shouldIncludeSkill(params: {
   const { entry, config } = params;
   const skillKey = resolveSkillKey(entry.skill, entry);
   const skillConfig = resolveSkillConfig(config, skillKey);
+  const allowBundled = normalizeAllowlist(config?.skills?.allowBundled);
+  const osList = entry.clawdis?.os ?? [];
 
   if (skillConfig?.enabled === false) return false;
+  if (!isBundledSkillAllowed(entry, allowBundled)) return false;
+  if (osList.length > 0 && !osList.includes(resolveRuntimePlatform())) {
+    return false;
+  }
   if (entry.clawdis?.always === true) {
     return true;
   }
@@ -449,7 +486,7 @@ function loadSkillEntries(
     opts?.managedSkillsDir ?? path.join(CONFIG_DIR, "skills");
   const workspaceSkillsDir = path.join(workspaceDir, "skills");
   const bundledSkillsDir = opts?.bundledSkillsDir ?? resolveBundledSkillsDir();
-  const extraDirsRaw = opts?.config?.skillsLoad?.extraDirs ?? [];
+  const extraDirsRaw = opts?.config?.skills?.load?.extraDirs ?? [];
   const extraDirs = extraDirsRaw
     .map((d) => (typeof d === "string" ? d.trim() : ""))
     .filter(Boolean);
@@ -554,4 +591,9 @@ export function filterWorkspaceSkillEntries(
   config?: ClawdisConfig,
 ): SkillEntry[] {
   return filterSkillEntries(entries, config);
+}
+export function resolveBundledAllowlist(
+  config?: ClawdisConfig,
+): string[] | undefined {
+  return normalizeAllowlist(config?.skills?.allowBundled);
 }

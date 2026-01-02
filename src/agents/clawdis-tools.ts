@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-ai";
-import { type TSchema, Type } from "@sinclair/typebox";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import { Type } from "@sinclair/typebox";
 import {
   browserCloseTab,
   browserFocusTab,
@@ -41,11 +41,13 @@ import {
 } from "../cli/nodes-screen.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
 import { loadConfig } from "../config/config.js";
+import { reactMessageDiscord } from "../discord/send.js";
 import { callGateway } from "../gateway/call.js";
-import { detectMime } from "../media/mime.js";
+import { detectMime, imageMimeFromFormat } from "../media/mime.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
 
-type AnyAgentTool = AgentTool<TSchema, unknown>;
+// biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-agent-core uses a different module instance.
+type AnyAgentTool = AgentTool<any, unknown>;
 
 const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18789";
 
@@ -483,6 +485,9 @@ const BrowserToolSchema = Type.Union([
     action: Type.Literal("upload"),
     controlUrl: Type.Optional(Type.String()),
     paths: Type.Array(Type.String()),
+    ref: Type.Optional(Type.String()),
+    inputRef: Type.Optional(Type.String()),
+    element: Type.Optional(Type.String()),
     targetId: Type.Optional(Type.String()),
     timeoutMs: Type.Optional(Type.Number()),
   }),
@@ -625,6 +630,9 @@ function createBrowserTool(): AnyAgentTool {
             ? params.paths.map((p) => String(p))
             : [];
           if (paths.length === 0) throw new Error("paths required");
+          const ref = readStringParam(params, "ref");
+          const inputRef = readStringParam(params, "inputRef");
+          const element = readStringParam(params, "element");
           const targetId =
             typeof params.targetId === "string"
               ? params.targetId.trim()
@@ -637,6 +645,9 @@ function createBrowserTool(): AnyAgentTool {
           return jsonResult(
             await browserArmFileChooser(baseUrl, {
               paths,
+              ref,
+              inputRef,
+              element,
               targetId,
               timeoutMs,
             }),
@@ -735,6 +746,7 @@ const CanvasToolSchema = Type.Union([
     ),
     maxWidth: Type.Optional(Type.Number()),
     quality: Type.Optional(Type.Number()),
+    delayMs: Type.Optional(Type.Number()),
   }),
   Type.Object({
     action: Type.Literal("a2ui_push"),
@@ -863,8 +875,7 @@ function createCanvasTool(): AnyAgentTool {
             ext: payload.format === "jpeg" ? "jpg" : payload.format,
           });
           await writeBase64ToFile(filePath, payload.base64);
-          const mimeType =
-            payload.format === "jpeg" ? "image/jpeg" : "image/png";
+          const mimeType = imageMimeFromFormat(payload.format) ?? "image/png";
           return await imageResult({
             label: "canvas:snapshot",
             path: filePath,
@@ -967,6 +978,15 @@ const NodesToolSchema = Type.Union([
     ),
     maxWidth: Type.Optional(Type.Number()),
     quality: Type.Optional(Type.Number()),
+    delayMs: Type.Optional(Type.Number()),
+    deviceId: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    action: Type.Literal("camera_list"),
+    gatewayUrl: Type.Optional(Type.String()),
+    gatewayToken: Type.Optional(Type.String()),
+    timeoutMs: Type.Optional(Type.Number()),
+    node: Type.String(),
   }),
   Type.Object({
     action: Type.Literal("camera_clip"),
@@ -980,6 +1000,7 @@ const NodesToolSchema = Type.Union([
     duration: Type.Optional(Type.String()),
     durationMs: Type.Optional(Type.Number()),
     includeAudio: Type.Optional(Type.Boolean()),
+    deviceId: Type.Optional(Type.String()),
   }),
   Type.Object({
     action: Type.Literal("screen_record"),
@@ -1103,6 +1124,15 @@ function createNodesTool(): AnyAgentTool {
             Number.isFinite(params.quality)
               ? params.quality
               : undefined;
+          const delayMs =
+            typeof params.delayMs === "number" &&
+            Number.isFinite(params.delayMs)
+              ? params.delayMs
+              : undefined;
+          const deviceId =
+            typeof params.deviceId === "string" && params.deviceId.trim()
+              ? params.deviceId.trim()
+              : undefined;
 
           const content: AgentToolResult<unknown>["content"] = [];
           const details: Array<Record<string, unknown>> = [];
@@ -1116,21 +1146,38 @@ function createNodesTool(): AnyAgentTool {
                 maxWidth,
                 quality,
                 format: "jpg",
+                delayMs,
+                deviceId,
               },
               idempotencyKey: crypto.randomUUID(),
             })) as { payload?: unknown };
             const payload = parseCameraSnapPayload(raw?.payload);
+            const normalizedFormat = payload.format.toLowerCase();
+            if (
+              normalizedFormat !== "jpg" &&
+              normalizedFormat !== "jpeg" &&
+              normalizedFormat !== "png"
+            ) {
+              throw new Error(
+                `unsupported camera.snap format: ${payload.format}`,
+              );
+            }
+
+            const isJpeg =
+              normalizedFormat === "jpg" || normalizedFormat === "jpeg";
             const filePath = cameraTempPath({
               kind: "snap",
               facing,
-              ext: payload.format === "jpeg" ? "jpg" : payload.format,
+              ext: isJpeg ? "jpg" : "png",
             });
             await writeBase64ToFile(filePath, payload.base64);
             content.push({ type: "text", text: `MEDIA:${filePath}` });
             content.push({
               type: "image",
               data: payload.base64,
-              mimeType: payload.format === "jpeg" ? "image/jpeg" : "image/png",
+              mimeType:
+                imageMimeFromFormat(payload.format) ??
+                (isJpeg ? "image/jpeg" : "image/png"),
             });
             details.push({
               facing,
@@ -1142,6 +1189,21 @@ function createNodesTool(): AnyAgentTool {
 
           const result: AgentToolResult<unknown> = { content, details };
           return await sanitizeToolResultImages(result, "nodes:camera_snap");
+        }
+        case "camera_list": {
+          const node = readStringParam(params, "node", { required: true });
+          const nodeId = await resolveNodeId(gatewayOpts, node);
+          const raw = (await callGatewayTool("node.invoke", gatewayOpts, {
+            nodeId,
+            command: "camera.list",
+            params: {},
+            idempotencyKey: crypto.randomUUID(),
+          })) as { payload?: unknown };
+          const payload =
+            raw && typeof raw.payload === "object" && raw.payload !== null
+              ? raw.payload
+              : {};
+          return jsonResult(payload);
         }
         case "camera_clip": {
           const node = readStringParam(params, "node", { required: true });
@@ -1164,6 +1226,10 @@ function createNodesTool(): AnyAgentTool {
             typeof params.includeAudio === "boolean"
               ? params.includeAudio
               : true;
+          const deviceId =
+            typeof params.deviceId === "string" && params.deviceId.trim()
+              ? params.deviceId.trim()
+              : undefined;
           const raw = (await callGatewayTool("node.invoke", gatewayOpts, {
             nodeId,
             command: "camera.clip",
@@ -1172,6 +1238,7 @@ function createNodesTool(): AnyAgentTool {
               durationMs,
               includeAudio,
               format: "mp4",
+              deviceId,
             },
             idempotencyKey: crypto.randomUUID(),
           })) as { payload?: unknown };
@@ -1412,6 +1479,48 @@ const GatewayToolSchema = Type.Union([
   }),
 ]);
 
+const DiscordToolSchema = Type.Union([
+  Type.Object({
+    action: Type.Literal("react"),
+    channelId: Type.String(),
+    messageId: Type.String(),
+    emoji: Type.String(),
+  }),
+]);
+
+function createDiscordTool(): AnyAgentTool {
+  return {
+    label: "Clawdis Discord",
+    name: "clawdis_discord",
+    description:
+      "React to Discord messages. Controlled by discord.enableReactions (default: true).",
+    parameters: DiscordToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const action = readStringParam(params, "action", { required: true });
+      if (action !== "react") throw new Error(`Unknown action: ${action}`);
+
+      const cfg = loadConfig();
+      if (cfg.discord?.enableReactions === false) {
+        throw new Error(
+          "Discord reactions are disabled (set discord.enableReactions=true).",
+        );
+      }
+
+      const channelId = readStringParam(params, "channelId", {
+        required: true,
+      });
+      const messageId = readStringParam(params, "messageId", {
+        required: true,
+      });
+      const emoji = readStringParam(params, "emoji", { required: true });
+
+      await reactMessageDiscord(channelId, messageId, emoji);
+      return jsonResult({ ok: true });
+    },
+  };
+}
+
 function createGatewayTool(): AnyAgentTool {
   return {
     label: "Clawdis Gateway",
@@ -1460,6 +1569,7 @@ export function createClawdisTools(): AnyAgentTool[] {
     createCanvasTool(),
     createNodesTool(),
     createCronTool(),
+    createDiscordTool(),
     createGatewayTool(),
   ];
 }
