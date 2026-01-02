@@ -2,7 +2,7 @@
 import { Buffer } from "node:buffer";
 
 import { apiThrottler } from "@grammyjs/transformer-throttler";
-import type { ApiClientOptions, Message } from "grammy";
+import type { ApiClientOptions, Context, Message } from "grammy";
 import { Bot, InputFile, webhookCallback } from "grammy";
 
 import { chunkText } from "../auto-reply/chunk.js";
@@ -10,6 +10,20 @@ import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
 import { loadConfig } from "../config/config.js";
+import {
+  detectDeepResearchIntent,
+  extractTopicFromMessage,
+  normalizeDeepResearchTopic,
+  createExecuteButton,
+  createRetryButton,
+  parseCallbackData,
+  CALLBACK_PREFIX,
+  CallbackActions,
+  executeDeepResearch,
+  deliverResults,
+  truncateForTelegram,
+  messages,
+} from "../deep-research/index.js";
 import { resolveStorePath, updateLastRoute } from "../config/sessions.js";
 import { danger, isVerbose, logVerbose } from "../globals.js";
 import { formatErrorMessage } from "../infra/errors.js";
@@ -23,6 +37,7 @@ import { startLivenessProbe, type LivenessProbeOptions } from "./liveness-probe.
 
 const PARSE_ERR_RE =
   /can't parse entities|parse entities|find end of the entity/i;
+const deepResearchInFlight = new Set<number>();
 
 type TelegramMessage = Message.CommonMessage;
 
@@ -110,6 +125,10 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         !hasBotMention(msg, botUsername)
       ) {
         logger.info({ chatId, reason: "no-mention" }, "skipping group message");
+        return;
+      }
+
+      if (await handleDeepResearchMessage(ctx, cfg, chatId, runtime)) {
         return;
       }
 
@@ -207,6 +226,14 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     }
   });
 
+  // Deep Research button callback handler
+  bot.on("callback_query:data", async (ctx, next) => {
+    const handled = await handleDeepResearchCallback(ctx, runtime);
+    if (!handled && next) {
+      await next();
+    }
+  });
+
   // Start liveness probe if enabled
   if (opts.livenessProbe !== false) {
     const livenessOpts =
@@ -222,6 +249,159 @@ export function createTelegramWebhookCallback(
   path = "/telegram-webhook",
 ) {
   return { path, handler: webhookCallback(bot, "http") };
+}
+
+async function handleDeepResearchMessage(
+  ctx: Context,
+  cfg: ReturnType<typeof loadConfig>,
+  chatId: number,
+  runtime: RuntimeEnv,
+): Promise<boolean> {
+  if (cfg.deepResearch?.enabled === false) return false;
+
+  const messageText = ctx.message?.text || ctx.message?.caption || "";
+  if (!messageText) return false;
+
+  if (!detectDeepResearchIntent(messageText, cfg.deepResearch?.keywords)) {
+    return false;
+  }
+
+  const extractedTopic = extractTopicFromMessage(
+    messageText,
+    cfg.deepResearch?.keywords,
+  );
+  const normalized = normalizeDeepResearchTopic(extractedTopic);
+  if (!normalized) {
+    await ctx.reply(messages.invalidTopic());
+    return true;
+  }
+
+  const { topic, truncated } = normalized;
+  const userId = ctx.from?.id;
+
+  if (truncated) {
+    logVerbose(
+      `[deep-research] Topic truncated for ${userId} in chat ${chatId}`,
+    );
+  }
+  logVerbose(
+    `[deep-research] Intent detected from ${userId} in chat ${chatId}: "${topic}"`,
+  );
+
+  await ctx.reply(messages.acknowledgment(topic), {
+    reply_markup: createExecuteButton(topic, userId),
+  });
+
+  return true;
+}
+
+async function handleDeepResearchCallback(
+  ctx: Context,
+  runtime: RuntimeEnv,
+): Promise<boolean> {
+  const data = ctx.callbackQuery?.data;
+  if (!data || !data.startsWith(CALLBACK_PREFIX)) {
+    return false;
+  }
+
+  const parsed = parseCallbackData(data);
+  if (!parsed) {
+    await ctx.answerCallbackQuery({ text: messages.callbackInvalid() });
+    return true;
+  }
+
+  const { action, topic, ownerId } = parsed;
+  const callerId = ctx.from?.id;
+
+  if (ownerId && callerId && ownerId !== callerId) {
+    await ctx.answerCallbackQuery({ text: messages.callbackUnauthorized() });
+    return true;
+  }
+
+  if (action !== CallbackActions.EXECUTE && action !== CallbackActions.RETRY) {
+    await ctx.answerCallbackQuery({ text: messages.callbackInvalid() });
+    return true;
+  }
+
+  if (callerId && deepResearchInFlight.has(callerId)) {
+    await ctx.answerCallbackQuery({ text: messages.callbackBusy() });
+    return true;
+  }
+
+  const normalized = normalizeDeepResearchTopic(topic);
+  if (!normalized) {
+    await ctx.answerCallbackQuery({ text: messages.callbackInvalid() });
+    return true;
+  }
+
+  const normalizedTopic = normalized.topic;
+  if (normalized.truncated) {
+    logVerbose(
+      `[deep-research] Callback topic truncated for ${callerId}: "${normalizedTopic}"`,
+    );
+  }
+
+  await ctx.answerCallbackQuery({ text: messages.callbackAcknowledgment() });
+  await ctx.reply(messages.startExecution());
+
+  try {
+    if (callerId) {
+      deepResearchInFlight.add(callerId);
+    }
+
+    logVerbose(
+      `[deep-research] Starting execution for topic: "${normalizedTopic}"`,
+    );
+    const executeResult = await executeDeepResearch({ topic: normalizedTopic });
+
+    const deliveryContext = {
+      sendMessage: async (text: string) => {
+        try {
+          await ctx.reply(truncateForTelegram(text), {
+            parse_mode: "Markdown",
+          });
+        } catch {
+          await ctx.reply(truncateForTelegram(text));
+        }
+      },
+      sendError: async (text: string) => {
+        await ctx.reply(text, {
+          reply_markup: createRetryButton(normalizedTopic, ownerId ?? callerId),
+        });
+      },
+    };
+
+    const success = await deliverResults(executeResult, deliveryContext);
+
+    if (success) {
+      logVerbose(
+        `[deep-research] Completed successfully for topic: "${normalizedTopic}"`,
+      );
+    } else {
+      logVerbose(`[deep-research] Failed for topic: "${normalizedTopic}"`);
+    }
+  } catch (error) {
+    runtime.error?.(
+      danger(`[deep-research] Unexpected error: ${String(error)}`),
+    );
+    await ctx.reply(
+      messages.error(
+        error instanceof Error ? error.message : "Unexpected error",
+      ),
+      {
+        reply_markup: createRetryButton(
+          normalizedTopic,
+          ownerId ?? callerId,
+        ),
+      },
+    );
+  } finally {
+    if (callerId) {
+      deepResearchInFlight.delete(callerId);
+    }
+  }
+
+  return true;
 }
 
 async function deliverReplies(params: {
