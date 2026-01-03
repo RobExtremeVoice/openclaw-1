@@ -1,30 +1,21 @@
 /**
- * Deep Research command parsing
+ * Deep Research command parsing - KISS: Keep It Simple, Stupid
+ * No @username mention handling - we don't need that complexity
  */
 
 export type DeepResearchCommand = {
   topic: string;
 };
 
-const DEEP_COMMAND_RE = /^\/deep(?:@([a-z0-9_]+))?(?:[\s:,-]+([\s\S]+))?$/i;
+const DEEP_COMMAND_RE = /^\/deep\s*(.*)$/s;
 
 export function parseDeepResearchCommand(
   message: string,
-  botUsername?: string,
 ): DeepResearchCommand | null {
   const trimmed = message.trim();
   const match = DEEP_COMMAND_RE.exec(trimmed);
   if (!match) return null;
 
-  const mentioned = match[1];
-  if (
-    mentioned &&
-    botUsername &&
-    mentioned.toLowerCase() !== botUsername.toLowerCase()
-  ) {
-    return null;
-  }
-
-  const topic = (match[2] ?? "").trim();
+  const topic = match[1]?.trim() ?? "";
   return { topic };
 }
