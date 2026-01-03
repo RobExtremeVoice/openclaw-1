@@ -40,9 +40,10 @@ export function serveAcpGw(opts: AcpGwOptions = {}): void {
   }
 
   // Empty string means disabled, undefined means use default
-  const storePath = opts.sessionStorePath === ""
-    ? null
-    : resolveStorePath(opts.sessionStorePath ?? DEFAULT_SESSION_STORE);
+  const storePath =
+    opts.sessionStorePath === ""
+      ? null
+      : resolveStorePath(opts.sessionStorePath ?? DEFAULT_SESSION_STORE);
   if (storePath) {
     initSessionStore(storePath);
     log(`session store: ${storePath}`);
@@ -76,7 +77,7 @@ export function serveAcpGw(opts: AcpGwOptions = {}): void {
       onClose: (code, reason) => {
         log(`gateway disconnected: ${code} ${reason}`);
         agent?.handleGatewayDisconnect(`${code}: ${reason}`);
-        
+
         // Attempt reconnection for non-fatal closes
         if (code !== 1000 && code !== 1001) {
           scheduleReconnect();
@@ -91,13 +92,17 @@ export function serveAcpGw(opts: AcpGwOptions = {}): void {
   const scheduleReconnect = (): void => {
     if (reconnectTimer) return;
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      log(`max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`);
+      log(
+        `max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`,
+      );
       return;
     }
 
     reconnectAttempts++;
     const delay = RECONNECT_DELAY_MS * reconnectAttempts;
-    log(`scheduling reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    log(
+      `scheduling reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`,
+    );
 
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -141,7 +146,10 @@ function parseArgs(args: string[]): AcpGwOptions {
     const arg = args[i];
     if ((arg === "--gateway-url" || arg === "--url") && args[i + 1]) {
       opts.gatewayUrl = args[++i];
-    } else if ((arg === "--gateway-token" || arg === "--token") && args[i + 1]) {
+    } else if (
+      (arg === "--gateway-token" || arg === "--token") &&
+      args[i + 1]
+    ) {
       opts.gatewayToken = args[++i];
     } else if (
       (arg === "--gateway-password" || arg === "--password") &&

@@ -29,19 +29,19 @@ let storePath: string | null = null;
  */
 export function initSessionStore(sessionStorePath?: string): void {
   if (!sessionStorePath) return;
-  
+
   storePath = sessionStorePath;
-  
+
   // Ensure directory exists
   const dir = path.dirname(storePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  
+
   // Load existing sessions (clears any in-memory sessions first)
   sessions.clear();
   runIdToSessionId.clear();
-  
+
   if (fs.existsSync(storePath)) {
     try {
       const data = fs.readFileSync(storePath, "utf8");
@@ -65,7 +65,7 @@ export function initSessionStore(sessionStorePath?: string): void {
  */
 function saveSessionStore(): void {
   if (!storePath) return;
-  
+
   const persisted: PersistedSession[] = [];
   for (const session of sessions.values()) {
     persisted.push({
@@ -75,7 +75,7 @@ function saveSessionStore(): void {
       createdAt: session.createdAt,
     });
   }
-  
+
   try {
     fs.writeFileSync(storePath, JSON.stringify(persisted, null, 2));
   } catch {
@@ -90,7 +90,7 @@ export function createSession(cwd: string): AcpGwSession {
   const sessionId = crypto.randomUUID();
   const session: AcpGwSession = {
     sessionId,
-    sessionKey: `acp:${sessionId}`,  // Use acp: prefix for session isolation
+    sessionKey: `acp:${sessionId}`, // Use acp: prefix for session isolation
     cwd,
     createdAt: Date.now(),
     abortController: null,

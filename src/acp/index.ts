@@ -4,12 +4,16 @@
  * Gateway-backed ACP server for IDE integration.
  */
 
-export { AcpGwAgent } from "./translator.js";
 export { serveAcpGw } from "./server.js";
 export {
-  createSession,
-  getSession,
-  deleteSession,
   cancelActiveRun,
+  createSession,
+  deleteSession,
+  getSession,
 } from "./session.js";
-export { type AcpGwOptions, type AcpGwSession, ACP_GW_AGENT_INFO } from "./types.js";
+export { AcpGwAgent } from "./translator.js";
+export {
+  ACP_GW_AGENT_INFO,
+  type AcpGwOptions,
+  type AcpGwSession,
+} from "./types.js";

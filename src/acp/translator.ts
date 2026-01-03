@@ -29,8 +29,14 @@ import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { EventFrame } from "../gateway/protocol/index.js";
 
 // ACP StopReason type (inlined to avoid subpath import issues)
-type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
-import { GatewayClient } from "../gateway/client.js";
+type StopReason =
+  | "end_turn"
+  | "max_tokens"
+  | "max_turn_requests"
+  | "refusal"
+  | "cancelled";
+
+import type { GatewayClient } from "../gateway/client.js";
 import {
   cancelActiveRun,
   clearActiveRun,
@@ -47,9 +53,7 @@ import { ACP_GW_AGENT_INFO, type AcpGwOptions } from "./types.js";
 export class AcpGwAgent implements Agent {
   private connection: AgentSideConnection;
   private gateway: GatewayClient;
-  private opts: AcpGwOptions;
   private log: (msg: string) => void;
-  private connected = false;
   private pendingPrompts = new Map<
     string,
     {
@@ -106,7 +110,7 @@ export class AcpGwAgent implements Agent {
   handleGatewayDisconnect(reason: string): void {
     this.connected = false;
     this.log(`gateway disconnected: ${reason}`);
-    
+
     // Reject all pending prompts
     for (const [sessionId, pending] of this.pendingPrompts) {
       this.log(`rejecting pending prompt for session ${sessionId}`);
@@ -120,8 +124,10 @@ export class AcpGwAgent implements Agent {
    * Handle Gateway events, mapping to ACP session updates.
    */
   async handleGatewayEvent(evt: EventFrame): Promise<void> {
-    this.log(`event: ${evt.event} payload=${JSON.stringify(evt.payload).slice(0, 200)}`);
-    
+    this.log(
+      `event: ${evt.event} payload=${JSON.stringify(evt.payload).slice(0, 200)}`,
+    );
+
     // Agent events contain streaming data
     if (evt.event === "agent") {
       await this.handleAgentEvent(evt);
@@ -187,9 +193,9 @@ export class AcpGwAgent implements Agent {
     const sessionKey = payload.sessionKey as string | undefined;
     const state = payload.state as string | undefined;
     const messageData = payload.message as Record<string, unknown> | undefined;
-    
+
     this.log(`handleChatEvent: sessionKey=${sessionKey} state=${state}`);
-    
+
     if (!sessionKey) return;
 
     // Find the pending prompt for this sessionKey
@@ -198,29 +204,36 @@ export class AcpGwAgent implements Agent {
       this.log(`handleChatEvent: no pending for sessionKey=${sessionKey}`);
       return;
     }
-    
+
     const { sessionId } = pending;
 
     // Handle streaming text (delta state)
     // Gateway sends cumulative text, so we track what we've sent and only send the diff
     if (state === "delta" && messageData) {
-      const content = messageData.content as Array<{type: string; text?: string}> | undefined;
-      const fullText = content?.find(c => c.type === "text")?.text ?? "";
+      const content = messageData.content as
+        | Array<{ type: string; text?: string }>
+        | undefined;
+      const fullText = content?.find((c) => c.type === "text")?.text ?? "";
       // Get the actual pending from the map to ensure we're modifying the right object
       const actualPending = this.pendingPrompts.get(sessionId);
       const sentSoFar = actualPending?.sentTextLength ?? 0;
       const sentText = actualPending?.sentText ?? "";
-      
+
       if (fullText.length > sentSoFar && actualPending) {
         const newText = fullText.slice(sentSoFar);
-        
+
         // Workaround: Gateway sometimes sends duplicated text (full response appears twice)
         // Detect if the "new" text is actually a repeat of what we already sent
-        if (sentText.length > 0 && newText.startsWith(sentText.slice(0, Math.min(20, sentText.length)))) {
-          this.log(`skipping duplicate: newText starts with already-sent content`);
+        if (
+          sentText.length > 0 &&
+          newText.startsWith(sentText.slice(0, Math.min(20, sentText.length)))
+        ) {
+          this.log(
+            `skipping duplicate: newText starts with already-sent content`,
+          );
           return;
         }
-        
+
         actualPending.sentTextLength = fullText.length;
         actualPending.sentText = fullText;
         this.log(`streaming delta: +${newText.length} chars`);
@@ -235,7 +248,12 @@ export class AcpGwAgent implements Agent {
       return;
     }
 
-    if (state === "final" || state === "done" || state === "error" || state === "aborted") {
+    if (
+      state === "final" ||
+      state === "done" ||
+      state === "error" ||
+      state === "aborted"
+    ) {
       // Prompt completed
       this.log(`chat completed: state=${state} sessionId=${sessionId}`);
       this.pendingPrompts.delete(sessionId);
@@ -253,13 +271,21 @@ export class AcpGwAgent implements Agent {
     }
   }
 
-  private findPendingBySessionKey(
-    sessionKey: string,
-  ): { sessionId: string; resolve: (r: PromptResponse) => void; sentTextLength?: number } | undefined {
-    this.log(`findPending: looking for sessionKey=${sessionKey}, pendingCount=${this.pendingPrompts.size}`);
+  private findPendingBySessionKey(sessionKey: string):
+    | {
+        sessionId: string;
+        resolve: (r: PromptResponse) => void;
+        sentTextLength?: number;
+      }
+    | undefined {
+    this.log(
+      `findPending: looking for sessionKey=${sessionKey}, pendingCount=${this.pendingPrompts.size}`,
+    );
     for (const [sessionId, pending] of this.pendingPrompts) {
       const session = getSession(sessionId);
-      this.log(`  checking sessionId=${sessionId} -> session.sessionKey=${session?.sessionKey}`);
+      this.log(
+        `  checking sessionId=${sessionId} -> session.sessionKey=${session?.sessionKey}`,
+      );
       if (session?.sessionKey === sessionKey) {
         return pending;
       }
@@ -357,12 +383,14 @@ export class AcpGwAgent implements Agent {
 
     const userText = this.extractTextFromPrompt(params.prompt);
     const attachments = this.extractAttachmentsFromPrompt(params.prompt);
-    
+
     // Prepend working directory context
     const cwdContext = `[Working directory: ${session.cwd}]\n\n`;
     const message = cwdContext + userText;
 
-    this.log(`prompt: ${session.sessionId} -> "${userText.slice(0, 50)}..." (${attachments.length} attachments)`);
+    this.log(
+      `prompt: ${session.sessionId} -> "${userText.slice(0, 50)}..." (${attachments.length} attachments)`,
+    );
 
     return new Promise<PromptResponse>((resolve, reject) => {
       this.pendingPrompts.set(params.sessionId, {
@@ -445,8 +473,12 @@ export class AcpGwAgent implements Agent {
   private extractAttachmentsFromPrompt(
     prompt: ContentBlock[],
   ): Array<{ type: string; mimeType: string; content: string }> {
-    const attachments: Array<{ type: string; mimeType: string; content: string }> = [];
-    
+    const attachments: Array<{
+      type: string;
+      mimeType: string;
+      content: string;
+    }> = [];
+
     for (const block of prompt) {
       if ("type" in block && block.type === "image") {
         const imageBlock = block as ImageContent & { type: "image" };
@@ -459,7 +491,7 @@ export class AcpGwAgent implements Agent {
         }
       }
     }
-    
+
     return attachments;
   }
 }

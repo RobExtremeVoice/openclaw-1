@@ -36,11 +36,11 @@ import {
   type SessionEntry,
   saveSessionStore,
 } from "../config/sessions.js";
+import { isTraceSessions } from "../globals.js";
 import {
   emitAgentEvent,
   registerAgentRunContext,
 } from "../infra/agent-events.js";
-import { isTraceSessions } from "../globals.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { resolveTelegramToken } from "../telegram/token.js";
 import { normalizeE164 } from "../utils.js";
@@ -210,7 +210,9 @@ export async function agentCommand(
     persistedVerbose,
   } = sessionResolution;
   if (isTraceSessions()) {
-    console.log(`[agentCommand] resolved sessionId=${sessionId} (input was ${opts.sessionId})`);
+    console.log(
+      `[agentCommand] resolved sessionId=${sessionId} (input was ${opts.sessionId})`,
+    );
   }
   let sessionEntry = resolvedSessionEntry;
 
@@ -339,7 +341,9 @@ export async function agentCommand(
     // Use sessionKey as lane to allow ACP sessions to run in parallel with main
     const lane = sessionKey?.startsWith("acp:") ? sessionKey : undefined;
     if (isTraceSessions()) {
-      console.log(`[agentCommand] calling runEmbeddedPiAgent for sessionId=${sessionId} lane=${lane}`);
+      console.log(
+        `[agentCommand] calling runEmbeddedPiAgent for sessionId=${sessionId} lane=${lane}`,
+      );
     }
     result = await runEmbeddedPiAgent({
       sessionId,

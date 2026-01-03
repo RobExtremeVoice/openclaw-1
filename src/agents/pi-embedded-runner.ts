@@ -25,6 +25,7 @@ import {
 import type { ThinkLevel, VerboseLevel } from "../auto-reply/thinking.js";
 import { formatToolAggregate } from "../auto-reply/tool-meta.js";
 import type { ClawdisConfig } from "../config/config.js";
+import { isTraceSessions } from "../globals.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
 import { splitMediaFromOutput } from "../media/parse.js";
 import {
@@ -42,7 +43,6 @@ import {
   sanitizeSessionMessagesImages,
 } from "./pi-embedded-helpers.js";
 import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
-import { isTraceSessions } from "../globals.js";
 import { extractAssistantText } from "./pi-embedded-utils.js";
 import { createClawdisCodingTools } from "./pi-tools.js";
 import {
@@ -349,12 +349,16 @@ export async function runEmbeddedPiAgent(params: {
     params.enqueue ??
     ((task, opts) => enqueueCommandInLane(globalLane, task, opts));
   if (isTraceSessions()) {
-    console.log(`[pi-embedded] enqueueing sessionId=${params.sessionId} sessionLane=${sessionLane} globalLane=${globalLane}`);
+    console.log(
+      `[pi-embedded] enqueueing sessionId=${params.sessionId} sessionLane=${sessionLane} globalLane=${globalLane}`,
+    );
   }
   return enqueueCommandInLane(sessionLane, () =>
     enqueueGlobal(async () => {
       if (isTraceSessions()) {
-        console.log(`[pi-embedded] starting agent for sessionId=${params.sessionId}`);
+        console.log(
+          `[pi-embedded] starting agent for sessionId=${params.sessionId}`,
+        );
       }
       const started = Date.now();
       const resolvedWorkspace = resolveUserPath(params.workspaceDir);

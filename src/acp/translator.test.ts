@@ -1,14 +1,16 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewayClient } from "../gateway/client.js";
+import { clearAllSessions } from "./session.js";
 import { AcpGwAgent } from "./translator.js";
-import { clearAllSessions, createSession } from "./session.js";
 
 // Mock AgentSideConnection
 function createMockConnection() {
   return {
     sessionUpdate: vi.fn().mockResolvedValue(undefined),
-    requestPermission: vi.fn().mockResolvedValue({ outcome: { outcome: "selected", optionId: "allow" } }),
+    requestPermission: vi.fn().mockResolvedValue({
+      outcome: { outcome: "selected", optionId: "allow" },
+    }),
   } as unknown as AgentSideConnection;
 }
 
@@ -90,9 +92,9 @@ describe("AcpGwAgent", () => {
 
   describe("loadSession", () => {
     it("throws not implemented error", async () => {
-      await expect(
-        agent.loadSession({ sessionId: "test" }),
-      ).rejects.toThrow("Session loading not implemented");
+      await expect(agent.loadSession({ sessionId: "test" })).rejects.toThrow(
+        "Session loading not implemented",
+      );
     });
   });
 
@@ -105,9 +107,12 @@ describe("AcpGwAgent", () => {
 
     it("calls gateway sessions.patch for valid session", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
-      await agent.setSessionMode({ sessionId: session.sessionId, modeId: "high" });
-      
+
+      await agent.setSessionMode({
+        sessionId: session.sessionId,
+        modeId: "high",
+      });
+
       expect(gateway.request).toHaveBeenCalledWith(
         "sessions.patch",
         expect.objectContaining({ thinkingLevel: "high" }),
@@ -117,9 +122,12 @@ describe("AcpGwAgent", () => {
     it("handles gateway error gracefully", async () => {
       gateway.request = vi.fn().mockRejectedValue(new Error("Gateway error"));
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       // Should not throw, just log
-      const result = await agent.setSessionMode({ sessionId: session.sessionId, modeId: "high" });
+      const result = await agent.setSessionMode({
+        sessionId: session.sessionId,
+        modeId: "high",
+      });
       expect(result).toEqual({});
     });
   });
@@ -136,7 +144,7 @@ describe("AcpGwAgent", () => {
 
     it("sends prompt to gateway", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       // Set up gateway to resolve after a delay
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
@@ -168,7 +176,7 @@ describe("AcpGwAgent", () => {
 
     it("extracts text from multiple content blocks", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {});
@@ -199,7 +207,7 @@ describe("AcpGwAgent", () => {
 
     it("extracts image attachments", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {});
@@ -220,7 +228,9 @@ describe("AcpGwAgent", () => {
       expect(gateway.request).toHaveBeenCalledWith(
         "chat.send",
         expect.objectContaining({
-          attachments: [{ type: "image", mimeType: "image/png", content: "base64data" }],
+          attachments: [
+            { type: "image", mimeType: "image/png", content: "base64data" },
+          ],
         }),
         expect.anything(),
       );
@@ -237,12 +247,14 @@ describe("AcpGwAgent", () => {
 
     it("calls gateway chat.abort for valid session", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       await agent.cancel({ sessionId: session.sessionId });
-      
+
       expect(gateway.request).toHaveBeenCalledWith(
         "chat.abort",
-        expect.objectContaining({ sessionKey: expect.stringContaining("acp:") }),
+        expect.objectContaining({
+          sessionKey: expect.stringContaining("acp:"),
+        }),
       );
     });
   });
@@ -258,7 +270,7 @@ describe("AcpGwAgent", () => {
 
     it("rejects pending prompts", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {}); // Never resolves
@@ -304,13 +316,13 @@ describe("AcpGwAgent", () => {
         event: "health",
         payload: { ok: true },
       });
-      
+
       expect(connection.sessionUpdate).not.toHaveBeenCalled();
     });
 
     it("handles tool start events", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       // Simulate an active run
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
@@ -327,7 +339,9 @@ describe("AcpGwAgent", () => {
       await new Promise((r) => setTimeout(r, 10));
 
       // Get the runId from the session
-      const internalSession = (agent as any).pendingPrompts.get(session.sessionId);
+      const internalSession = (agent as any).pendingPrompts.get(
+        session.sessionId,
+      );
       const runId = internalSession?.idempotencyKey;
 
       // Now send a tool event with matching runId
@@ -366,7 +380,7 @@ describe("AcpGwAgent", () => {
     it("handles tool result events", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
       const runId = "test-run-id";
-      
+
       const { setActiveRun } = await import("./session.js");
       setActiveRun(session.sessionId, runId, new AbortController());
 
@@ -398,7 +412,7 @@ describe("AcpGwAgent", () => {
     it("handles tool error events", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
       const runId = "test-run-id";
-      
+
       const { setActiveRun } = await import("./session.js");
       setActiveRun(session.sessionId, runId, new AbortController());
 
@@ -429,7 +443,7 @@ describe("AcpGwAgent", () => {
   describe("handleChatEvent", () => {
     it("handles delta events with text streaming", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       // Set up a pending prompt
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
@@ -471,7 +485,7 @@ describe("AcpGwAgent", () => {
 
     it("handles final events and resolves prompt", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {});
@@ -504,7 +518,7 @@ describe("AcpGwAgent", () => {
 
     it("handles aborted events", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {});
@@ -533,7 +547,7 @@ describe("AcpGwAgent", () => {
 
     it("deduplicates streaming text", async () => {
       const session = await agent.newSession({ cwd: "/test", mcpServers: [] });
-      
+
       gateway.request = vi.fn().mockImplementation((method) => {
         if (method === "chat.send") {
           return new Promise(() => {});
@@ -570,14 +584,16 @@ describe("AcpGwAgent", () => {
 
       // Should have sent "Hello" then " world", not "Hello" then "Hello world"
       expect(connection.sessionUpdate).toHaveBeenCalledTimes(2);
-      expect(connection.sessionUpdate).toHaveBeenNthCalledWith(1,
+      expect(connection.sessionUpdate).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
           update: expect.objectContaining({
             content: { type: "text", text: "Hello" },
           }),
         }),
       );
-      expect(connection.sessionUpdate).toHaveBeenNthCalledWith(2,
+      expect(connection.sessionUpdate).toHaveBeenNthCalledWith(
+        2,
         expect.objectContaining({
           update: expect.objectContaining({
             content: { type: "text", text: " world" },
@@ -591,11 +607,15 @@ describe("AcpGwAgent", () => {
 
   describe("verbose logging", () => {
     it("logs when verbose is true", async () => {
-      const verboseAgent = new AcpGwAgent(connection, gateway, { verbose: true });
-      
+      const verboseAgent = new AcpGwAgent(connection, gateway, {
+        verbose: true,
+      });
+
       // Capture stderr
-      const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      
+      const stderrWrite = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
       await verboseAgent.initialize({
         protocolVersion: 1,
         clientCapabilities: {},
@@ -604,8 +624,10 @@ describe("AcpGwAgent", () => {
 
       verboseAgent.start();
 
-      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("[acp]"));
-      
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining("[acp]"),
+      );
+
       stderrWrite.mockRestore();
     });
   });

@@ -1,18 +1,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  createSession,
-  getSession,
-  getAllSessions,
-  deleteSession,
-  setActiveRun,
-  getSessionByRunId,
-  clearActiveRun,
   cancelActiveRun,
+  clearActiveRun,
   clearAllSessions,
+  createSession,
+  deleteSession,
+  getAllSessions,
+  getSession,
+  getSessionByRunId,
   initSessionStore,
+  setActiveRun,
 } from "./session.js";
 
 describe("acp session manager", () => {
@@ -55,7 +55,7 @@ describe("acp session manager", () => {
       createSession("/path1");
       createSession("/path2");
       createSession("/path3");
-      
+
       const all = getAllSessions();
       expect(all.length).toBe(3);
     });
@@ -80,7 +80,7 @@ describe("acp session manager", () => {
       const session = createSession("/delete/abort");
       const abortController = new AbortController();
       setActiveRun(session.sessionId, "run-1", abortController);
-      
+
       let aborted = false;
       abortController.signal.addEventListener("abort", () => {
         aborted = true;

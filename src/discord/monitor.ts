@@ -114,7 +114,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
           content: message.content?.slice(0, 50),
           guildId: message.guild?.id,
         },
-        "discord: MessageCreate received"
+        "discord: MessageCreate received",
       );
 
       if (message.author?.bot) return;
@@ -199,7 +199,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
             normalizedIds: [...normalized],
             permitted,
           },
-          "discord: DM allowFrom check"
+          "discord: DM allowFrom check",
         );
         if (!permitted) {
           logVerbose(

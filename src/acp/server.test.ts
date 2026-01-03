@@ -1,10 +1,10 @@
 /**
  * Server module tests
- * 
+ *
  * Tests for parseArgs and other server utilities.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // We need to test parseArgs which is not exported, so we'll test via the module
 // For now, test the exported serveAcpGw indirectly through its options handling
@@ -13,7 +13,7 @@ describe("acp server", () => {
   describe("parseArgs (via CLI simulation)", () => {
     // Since parseArgs is not exported, we test the behavior through import
     // We can at least verify the module loads correctly
-    
+
     it("module exports serveAcpGw", async () => {
       const { serveAcpGw } = await import("./server.js");
       expect(typeof serveAcpGw).toBe("function");

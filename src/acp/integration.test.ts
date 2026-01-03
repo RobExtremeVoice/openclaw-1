@@ -1,17 +1,25 @@
 /**
  * ACP-GW Integration Tests
- * 
+ *
  * These tests spin up a real Gateway and test acp end-to-end.
  * They require more setup but test the full flow.
  */
 
-import { createServer, type AddressInfo } from "node:net";
-import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { type AddressInfo, createServer } from "node:net";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { GatewayClient } from "../gateway/client.js";
 import { startGatewayServer } from "../gateway/server.js";
-import { AcpGwAgent } from "./translator.js";
 import { clearAllSessions } from "./session.js";
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { AcpGwAgent } from "./translator.js";
 
 // Get a free port
 async function getFreePort(): Promise<number> {
@@ -60,7 +68,7 @@ describe("acp integration", () => {
   describe("gateway connection", () => {
     it("connects to gateway", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -86,7 +94,7 @@ describe("acp integration", () => {
   describe("session lifecycle", () => {
     it("creates a session via acp", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -124,7 +132,7 @@ describe("acp integration", () => {
 
     it("handles multiple sessions", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -161,14 +169,14 @@ describe("acp integration", () => {
   describe("disconnect handling", () => {
     it("handles gateway disconnect gracefully", async () => {
       const { connection } = createMockConnection();
-      
+
       // Start a temporary gateway
       const tempPort = await getFreePort();
       const tempServer = await startGatewayServer(tempPort);
-      
+
       // Create agent first so we can wire up onClose
       let agent: AcpGwAgent;
-      
+
       const gateway = new GatewayClient({
         url: `ws://127.0.0.1:${tempPort}`,
         clientName: "test",
@@ -197,14 +205,16 @@ describe("acp integration", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Agent should be marked as disconnected
-      expect((agent as unknown as { connected: boolean }).connected).toBe(false);
+      expect((agent as unknown as { connected: boolean }).connected).toBe(
+        false,
+      );
     });
   });
 
   describe("authentication", () => {
     it("authenticate returns empty object", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -233,7 +243,7 @@ describe("acp integration", () => {
   describe("full lifecycle", () => {
     it("initializes, creates session, and handles events", async () => {
       const { connection, updates } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -280,7 +290,7 @@ describe("acp integration", () => {
 
     it("handles setSessionMode", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -319,7 +329,7 @@ describe("acp integration", () => {
 
     it("handles cancel on non-running session", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -356,8 +366,10 @@ describe("acp integration", () => {
   describe("verbose mode", () => {
     it("logs to stderr when verbose is enabled", async () => {
       const { connection } = createMockConnection();
-      const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      
+      const stderrWrite = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -380,7 +392,7 @@ describe("acp integration", () => {
       });
 
       expect(stderrWrite).toHaveBeenCalled();
-      
+
       stderrWrite.mockRestore();
       gateway.stop();
     });
@@ -389,7 +401,7 @@ describe("acp integration", () => {
   describe("gateway reconnection", () => {
     it("updateGateway changes gateway reference", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway1 = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -420,7 +432,7 @@ describe("acp integration", () => {
 
       // Update to new gateway
       agent.updateGateway(gateway2);
-      
+
       // Verify reconnect handler works
       agent.handleGatewayReconnect();
       expect((agent as any).connected).toBe(true);
@@ -433,7 +445,7 @@ describe("acp integration", () => {
   describe("prompt flow", { timeout: 120_000 }, () => {
     it("sends prompt and receives streaming response", async () => {
       const { connection, updates } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -468,15 +480,17 @@ describe("acp integration", () => {
       // Send a simple prompt
       const result = await agent.prompt({
         sessionId: session.sessionId,
-        prompt: [{ type: "text", text: "What is 2+2? Reply with just the number." }],
+        prompt: [
+          { type: "text", text: "What is 2+2? Reply with just the number." },
+        ],
       });
 
       // Verify we got a valid response (end_turn or refusal are both valid completions)
       expect(["end_turn", "refusal"]).toContain(result.stopReason);
 
       // Verify we received streaming updates
-      const textChunks = updates.filter(
-        (u) => (u.update as any)?.sessionUpdate === "agent_message_chunk"
+      const _textChunks = updates.filter(
+        (u) => (u.update as any)?.sessionUpdate === "agent_message_chunk",
       );
       // May or may not have streaming text depending on response
       // The key is that we completed successfully
@@ -487,7 +501,7 @@ describe("acp integration", () => {
 
     it("sends prompt with tool use and receives tool events", async () => {
       const { connection, updates } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -522,7 +536,12 @@ describe("acp integration", () => {
       // Send a prompt that should trigger tool use (list files is safer than echo)
       const result = await agent.prompt({
         sessionId: session.sessionId,
-        prompt: [{ type: "text", text: "List the files in /tmp using bash. Just run: ls /tmp" }],
+        prompt: [
+          {
+            type: "text",
+            text: "List the files in /tmp using bash. Just run: ls /tmp",
+          },
+        ],
       });
 
       // Should complete (might be end_turn or refusal depending on model)
@@ -530,7 +549,7 @@ describe("acp integration", () => {
 
       // Check for tool call events - may or may not have them depending on model behavior
       const toolCalls = updates.filter(
-        (u) => (u.update as any)?.sessionUpdate === "tool_call"
+        (u) => (u.update as any)?.sessionUpdate === "tool_call",
       );
 
       // If we got tool calls, verify their structure
@@ -541,7 +560,7 @@ describe("acp integration", () => {
         expect(firstToolCall?.status).toBe("running");
 
         const toolUpdates = updates.filter(
-          (u) => (u.update as any)?.sessionUpdate === "tool_call_update"
+          (u) => (u.update as any)?.sessionUpdate === "tool_call_update",
         );
         if (toolUpdates.length > 0) {
           const firstToolUpdate = toolUpdates[0]?.update as any;
@@ -555,7 +574,7 @@ describe("acp integration", () => {
 
     it("handles prompt cancellation", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -609,7 +628,7 @@ describe("acp integration", () => {
   describe("error handling", () => {
     it("loadSession throws not implemented", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -624,15 +643,16 @@ describe("acp integration", () => {
 
       const agent = new AcpGwAgent(connection, gateway, { verbose: false });
 
-      await expect(agent.loadSession({ sessionId: "test" }))
-        .rejects.toThrow("Session loading not implemented");
+      await expect(agent.loadSession({ sessionId: "test" })).rejects.toThrow(
+        "Session loading not implemented",
+      );
 
       gateway.stop();
     });
 
     it("prompt throws for unknown session", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -647,17 +667,19 @@ describe("acp integration", () => {
 
       const agent = new AcpGwAgent(connection, gateway, { verbose: false });
 
-      await expect(agent.prompt({
-        sessionId: "nonexistent",
-        prompt: [{ type: "text", text: "hello" }],
-      })).rejects.toThrow("Session nonexistent not found");
+      await expect(
+        agent.prompt({
+          sessionId: "nonexistent",
+          prompt: [{ type: "text", text: "hello" }],
+        }),
+      ).rejects.toThrow("Session nonexistent not found");
 
       gateway.stop();
     });
 
     it("setSessionMode throws for unknown session", async () => {
       const { connection } = createMockConnection();
-      
+
       const gateway = new GatewayClient({
         url: gatewayUrl,
         clientName: "test",
@@ -672,10 +694,12 @@ describe("acp integration", () => {
 
       const agent = new AcpGwAgent(connection, gateway, { verbose: false });
 
-      await expect(agent.setSessionMode({
-        sessionId: "nonexistent",
-        modeId: "high",
-      })).rejects.toThrow("Session nonexistent not found");
+      await expect(
+        agent.setSessionMode({
+          sessionId: "nonexistent",
+          modeId: "high",
+        }),
+      ).rejects.toThrow("Session nonexistent not found");
 
       gateway.stop();
     });

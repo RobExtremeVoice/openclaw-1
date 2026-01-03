@@ -800,8 +800,14 @@ export async function getReplyFromConfig(
 
   // Optional allowlist by origin number (E.164 without whatsapp: prefix)
   const configuredAllowFrom = cfg.routing?.allowFrom;
-  const from = (ctx.From ?? "").replace(/^(whatsapp|discord|telegram|signal|imessage|acp):/, "");
-  const to = (ctx.To ?? "").replace(/^(whatsapp|discord|telegram|signal|imessage|acp|user|channel|session):/, "");
+  const from = (ctx.From ?? "").replace(
+    /^(whatsapp|discord|telegram|signal|imessage|acp):/,
+    "",
+  );
+  const to = (ctx.To ?? "").replace(
+    /^(whatsapp|discord|telegram|signal|imessage|acp|user|channel|session):/,
+    "",
+  );
   const isSamePhone = from && to && from === to;
   // If no config is present, default to self-only DM access.
   const defaultAllowFrom =

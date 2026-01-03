@@ -1824,7 +1824,9 @@ export async function startGatewayServer(
     entry: { sessionKey: string; clientRunId: string },
   ) => {
     if (isTraceSessions()) {
-      console.log(`[gateway] addChatRun: sessionId=${sessionId} sessionKey=${entry.sessionKey} clientRunId=${entry.clientRunId}`);
+      console.log(
+        `[gateway] addChatRun: sessionId=${sessionId} sessionKey=${entry.sessionKey} clientRunId=${entry.clientRunId}`,
+      );
     }
     const queue = chatRunSessions.get(sessionId);
     if (queue) {
@@ -1836,7 +1838,9 @@ export async function startGatewayServer(
   const peekChatRun = (sessionId: string) => {
     const result = chatRunSessions.get(sessionId)?.[0];
     if (!result && isTraceSessions()) {
-      console.log(`[gateway] peekChatRun: miss for sessionId=${sessionId}, keys=${[...chatRunSessions.keys()].join(",")}`);
+      console.log(
+        `[gateway] peekChatRun: miss for sessionId=${sessionId}, keys=${[...chatRunSessions.keys()].join(",")}`,
+      );
     }
     return result;
   };

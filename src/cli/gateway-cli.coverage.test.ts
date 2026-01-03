@@ -38,6 +38,7 @@ vi.mock("../globals.js", () => ({
   info: (msg: string) => msg,
   isVerbose: () => false,
   setVerbose: (enabled: boolean) => setVerbose(enabled),
+  setTraceSessions: () => {},
 }));
 
 vi.mock("../runtime.js", () => ({
