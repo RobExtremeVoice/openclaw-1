@@ -7,6 +7,7 @@ import {
   readTool,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+
 import type { ClawdbotConfig } from "../config/config.js";
 import { detectMime } from "../media/mime.js";
 import { startWebLoginWithQr, waitForWebLogin } from "../web/login-qr.js";
