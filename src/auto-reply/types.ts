@@ -11,4 +11,6 @@ export type ReplyPayload = {
   mediaUrl?: string;
   mediaUrls?: string[];
   replyToId?: string;
+  /** Send audio as voice message (bubble) instead of audio file. Defaults to true on Telegram. */
+  audioAsVoice?: boolean;
 };

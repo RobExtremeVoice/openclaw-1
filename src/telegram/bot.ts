@@ -326,10 +326,20 @@ async function deliverReplies(params: {
           reply_to_message_id: replyToMessageId,
         });
       } else if (kind === "audio") {
-        await bot.api.sendAudio(chatId, file, {
-          caption,
-          reply_to_message_id: replyToMessageId,
-        });
+        const useVoice = reply.audioAsVoice !== false; // default true for Telegram
+        if (useVoice) {
+          // Voice message - displays as round playable bubble
+          await bot.api.sendVoice(chatId, file, {
+            caption,
+            reply_to_message_id: replyToMessageId,
+          });
+        } else {
+          // Audio file - displays with metadata (title, duration)
+          await bot.api.sendAudio(chatId, file, {
+            caption,
+            reply_to_message_id: replyToMessageId,
+          });
+        }
       } else {
         await bot.api.sendDocument(chatId, file, {
           caption,
