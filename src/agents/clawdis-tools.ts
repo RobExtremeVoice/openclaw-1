@@ -2736,7 +2736,7 @@ function createSessionsSendTool(): AnyAgentTool {
           ? Math.max(0, Math.floor(params.timeoutSeconds))
           : 30;
       const idempotencyKey = crypto.randomUUID();
-      let runId = idempotencyKey;
+      let runId: string = idempotencyKey;
       const displayKey = resolveDisplaySessionKey({
         key: sessionKey,
         alias,
