@@ -683,7 +683,7 @@ export function getDefaultWebSearchCliPath(): string {
 const WEB_SEARCH_DEFAULTS = {
   enabled: true,
   cliPath: "",
-  timeoutMs: 30000,
+  timeoutMs: 90000, // 90s for deep research with Gemini
   requireConfirmation: false,
   geminiModel: "gemini-3-flash-preview",
 } as const;
