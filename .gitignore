@@ -75,6 +75,7 @@ trace-*.js
 # Documentation drafts
 CHANGES.md
 *-SUMMARY.md
+*_SUMMARY.md
 *-fix-summary.md
 investigation.md
 *Analysis.md
@@ -145,6 +146,7 @@ test_*.md
 *_test.py
 *_test.sh
 *_test.md
+scripts/test-*.sh
 
 # Development update/create scripts
 create_*.py
