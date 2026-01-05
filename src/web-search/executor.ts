@@ -24,7 +24,7 @@ export async function executeWebSearch(
 ): Promise<ExecuteWebSearchResult> {
   const cfg = loadConfig();
   const {
-    timeoutMs = cfg.webSearch?.timeoutMs ?? 30000,
+    timeoutMs = cfg.webSearch?.timeoutMs ?? 60000, // Increased from 30s to 60s
     dryRun = false,
   } = options;
   
@@ -55,26 +55,35 @@ export async function executeWebSearch(
       throw new Error("Query too short or empty");
     }
     
-    if (query.length > 200) {
-      throw new Error("Query too long (max 200 characters)");
+    if (query.length > 2000) {
+      throw new Error("Query too long (max 2000 characters)");
     }
     
-    // Use the unified CLI approach (same as Pi agent)
+    // Use CUSTOM SKILL BASH SCRIPT (web-search-with-gemini)
     const { exec } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execAsync = promisify(exec);
     
-    const cliPath = "/home/almaz/zoo_flow/clawdis/google_web";
-    const { stdout, stderr } = await execAsync(`${cliPath} ${JSON.stringify(query)}`, {
+    const cliPath = "/home/almaz/zoo_flow/clawdis/scripts/web_search_with_gemini.sh";
+    console.log(`[web-search] Executing CUSTOM SKILL: ${cliPath} "${query}" (timeout: ${timeoutMs}ms)`);
+    
+    const { stdout, stderr } = await execAsync(`"${cliPath}" ${JSON.stringify(query)}`, {
       timeout: timeoutMs,
-      env: process.env,
+      env: { ...process.env, PATH: process.env.PATH },
     });
     
     if (stderr) {
       console.warn(`[web-search] CLI stderr: ${stderr}`);
     }
-    
-    const result = JSON.parse(stdout.trim());
+
+    // Gemini CLI outputs "Loaded cached credentials." before JSON - extract JSON part
+    let jsonStr = stdout.trim();
+    const jsonStart = jsonStr.indexOf('{');
+    if (jsonStart > 0) {
+      jsonStr = jsonStr.slice(jsonStart);
+    }
+
+    const result = JSON.parse(jsonStr);
     
     return {
       success: true,
@@ -98,7 +107,7 @@ export async function executeWebSearch(
     } else if (errorStr.includes('too short')) {
       errorMessage = '❌ Запрос слишком короткий';
     } else if (errorStr.includes('too long')) {
-      errorMessage = '❌ Запрос слишком длинный (макс. 200 символов)';
+      errorMessage = '❌ Запрос слишком длинный (макс. 2000 символов)';
     } else if (errorStr.includes('Command failed')) {
       errorMessage = '❌ Ошибка при выполнении поиска';
     }
