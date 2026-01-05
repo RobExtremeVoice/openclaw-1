@@ -181,3 +181,9 @@ update_*_*.py
 !docs/comparison.html
 !docs/deep-research-comparison.md
 !docs/web-search-skill.md
+
+# Telegram-specific fix documentation
+TELEGRAM_MARKDOWN_FIX.md
+*_fix.md
+*FIX.md
+*_FIX.md
