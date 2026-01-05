@@ -2,7 +2,7 @@
 import { Buffer } from "node:buffer";
 
 import { apiThrottler } from "@grammyjs/transformer-throttler";
-import type { ApiClientOptions, Message } from "grammy";
+import type { ApiClientOptions, BotCommand, Message } from "grammy";
 import { Bot, InputFile, webhookCallback } from "grammy";
 import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { hasControlCommand } from "../auto-reply/command-detection.js";
@@ -76,6 +76,143 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     if (typeof groupDefault === "boolean") return groupDefault;
     if (typeof opts.requireMention === "boolean") return opts.requireMention;
     return true;
+  };
+
+  // Register slash commands for private chats
+  const registerCommands = async () => {
+    const commands: BotCommand[] = [
+      { command: "help", description: "Show available commands" },
+      { command: "new", description: "Start a new conversation" },
+      { command: "model", description: "Show or change the model" },
+      {
+        command: "thinking",
+        description: "Set thinking level (off/low/medium/high)",
+      },
+      { command: "compact", description: "Compact conversation context" },
+      { command: "stop", description: "Stop current generation" },
+    ];
+    try {
+      await bot.api.setMyCommands(commands, {
+        scope: { type: "all_private_chats" },
+      });
+      logVerbose("Registered Telegram slash commands");
+    } catch (err) {
+      logVerbose(`Failed to register Telegram commands: ${String(err)}`);
+    }
+  };
+  void registerCommands();
+
+  // Track working messages for streaming edits
+  const workingMessages = new Map<
+    string,
+    {
+      messageId: number;
+      text: string;
+      lastEdit: number;
+      editQueue: Promise<void>;
+    }
+  >();
+  const EDIT_THROTTLE_MS = 250; // Slightly faster for smoother feel
+  const TELEGRAM_MAX_LENGTH = 4096;
+  const WORKING_INDICATOR = " ∙"; // Same as Pi coding agent
+
+  const editWorkingMessage = async (
+    chatId: string,
+    text: string,
+    isWorking: boolean,
+  ) => {
+    const state = workingMessages.get(chatId);
+
+    // Truncate if too long for Telegram
+    let truncatedText = text;
+    if (text.length > TELEGRAM_MAX_LENGTH - 50) {
+      truncatedText =
+        text.slice(0, TELEGRAM_MAX_LENGTH - 50) + "\n\n_(truncated)_";
+    }
+
+    const displayText = isWorking
+      ? `${truncatedText}${WORKING_INDICATOR}`
+      : truncatedText;
+
+    if (!state) {
+      // First message - send it
+      try {
+        const initialText = displayText || "_Thinking..._";
+        let result;
+        try {
+          result = await bot.api.sendMessage(Number(chatId), initialText, {
+            parse_mode: "Markdown",
+          });
+        } catch {
+          // Fallback to plain text if Markdown fails
+          result = await bot.api.sendMessage(
+            Number(chatId),
+            initialText.replace(/_/g, ""),
+          );
+        }
+        workingMessages.set(chatId, {
+          messageId: result.message_id,
+          text: displayText,
+          lastEdit: Date.now(),
+          editQueue: Promise.resolve(),
+        });
+      } catch (err) {
+        logVerbose(`Failed to send working message: ${String(err)}`);
+      }
+      return;
+    }
+
+    // Don't edit if text hasn't changed
+    if (state.text === displayText) return;
+
+    // Throttle edits while working
+    const now = Date.now();
+    if (isWorking && now - state.lastEdit < EDIT_THROTTLE_MS) return;
+
+    // Queue edits to avoid race conditions
+    state.editQueue = state.editQueue.then(async () => {
+      try {
+        const editText = displayText || "_..._";
+        try {
+          await bot.api.editMessageText(
+            Number(chatId),
+            state.messageId,
+            editText,
+            { parse_mode: "Markdown" },
+          );
+        } catch (err) {
+          const errStr = String(err);
+          // If Markdown parsing fails, retry without it
+          if (PARSE_ERR_RE.test(errStr)) {
+            await bot.api.editMessageText(
+              Number(chatId),
+              state.messageId,
+              editText.replace(/_/g, ""),
+            );
+          } else if (
+            !errStr.includes("message is not modified") &&
+            !errStr.includes("MESSAGE_NOT_MODIFIED")
+          ) {
+            throw err;
+          }
+        }
+        state.text = displayText;
+        state.lastEdit = Date.now();
+      } catch (err) {
+        const errStr = String(err);
+        if (
+          !errStr.includes("message is not modified") &&
+          !errStr.includes("MESSAGE_NOT_MODIFIED")
+        ) {
+          logVerbose(`Failed to edit working message: ${errStr}`);
+        }
+      }
+    });
+    await state.editQueue;
+  };
+
+  const clearWorkingMessage = (chatId: string) => {
+    workingMessages.delete(chatId);
   };
 
   bot.on("message", async (ctx) => {
@@ -256,22 +393,48 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           });
       };
 
+      // Track accumulated text for streaming
+      let streamedText = "";
+      const chatIdStr = String(chatId);
+
+      const onReplyStart = async () => {
+        await sendTyping();
+        // Send initial "thinking" message that we'll edit
+        await editWorkingMessage(chatIdStr, "", true);
+      };
+
+      const onPartialReply = async (payload: ReplyPayload) => {
+        if (payload.text) {
+          streamedText = payload.text;
+          await editWorkingMessage(chatIdStr, streamedText, true);
+        }
+      };
+
       const replyResult = await getReplyFromConfig(
         ctxPayload,
-        { onReplyStart: sendTyping, onBlockReply: sendBlockReply },
+        { onReplyStart, onBlockReply: sendBlockReply, onPartialReply },
         cfg,
       );
+
+      // Final update - remove "working" indicator
+      if (streamedText) {
+        await editWorkingMessage(chatIdStr, streamedText, false);
+      }
+      clearWorkingMessage(chatIdStr);
+
       const replies = replyResult
         ? Array.isArray(replyResult)
           ? replyResult
           : [replyResult]
         : [];
       await blockSendChain;
-      if (replies.length === 0) return;
+
+      // Only deliver replies if we didn't stream (no partial replies received)
+      if (replies.length === 0 || streamedText) return;
 
       await deliverReplies({
         replies,
-        chatId: String(chatId),
+        chatId: chatIdStr,
         token: opts.token,
         runtime,
         bot,
