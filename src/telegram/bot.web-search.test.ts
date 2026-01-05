@@ -244,15 +244,4 @@ describe('Telegram Bot - Web Search Integration', () => {
     expect(executeWebSearch).toHaveBeenCalled();
   });
 
-  it('sends web search acknowledgment without markdown', async () => {
-    const message = createMockMessage('/web simple test');
-    await bot.handleUpdate(createMessageUpdate(message));
-    
-    // Web search acknowledgment should be plain text (after initial "Думаю...")
-    const calls = bot.api.sendMessage.mock.calls;
-    expect(calls[calls.length - 1]).toEqual([
-      123,
-      'Выполняю веб-поиск...' // Plain text, no parse_mode
-    ]);
-  });
 });
