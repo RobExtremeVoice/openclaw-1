@@ -312,6 +312,85 @@ export function createClawdisCodingTools(options?: {
     processTool as unknown as AnyAgentTool,
     createWhatsAppLoginTool(),
     ...createClawdisTools(),
+    createWebSearchTool(),
   ];
   return tools.map(normalizeToolParameters);
+}
+
+export function createWebSearchTool(): AnyAgentTool {
+  return {
+    name: "web_search",
+    description: "Search the web for current information. Use when user asks about recent events, current data, or explicitly says 'google', 'search', or 'find'. Always returns results in Russian.",
+    parameters: Type.Object({
+      query: Type.String({
+        description: "The search query to look up on the web",
+        examples: ["weather in Moscow today", "latest news about AI", "who won the world cup 2022"],
+      }),
+    }),
+    execute: async ({ query }: { query: string }) => {
+      const { exec } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(exec);
+      const logger = console; // Simple logger for debugging
+      
+      try {
+        logger.log(`[web_search] Executing search for: "${query}"`);
+        
+        // Use the project's google_web CLI
+        const cliPath = "/home/almaz/zoo_flow/clawdis/google_web";
+        const command = `${cliPath} ${JSON.stringify(query)}`;
+        logger.log(`[web_search] Command: ${command}`);
+        
+        const { stdout, stderr } = await execAsync(command, {
+          timeout: 60000, // Increased from 30s to 60s
+          env: process.env,
+        });
+        
+        if (stderr) {
+          logger.warn(`[web_search] CLI stderr: ${stderr}`);
+        }
+        
+        const trimmed = stdout.trim();
+        logger.log(`[web_search] Raw output length: ${trimmed.length}`);
+        
+        const result = JSON.parse(trimmed);
+        logger.log(`[web_search] Parsed result, has response: ${!!result.response}`);
+        
+        if (result.response) {
+          return {
+            content: [
+              { type: "text", text: `🌐 Результат поиска:\n${result.response}` },
+            ],
+          };
+        }
+        
+        return {
+          content: [
+            { type: "text", text: "❌ Поиск не дал результатов" },
+          ],
+        };
+      } catch (error) {
+        const errorStr = String(error);
+        logger.error(`[web_search] Error: ${errorStr}`);
+        
+        if (errorStr.includes("timeout")) {
+          return {
+            content: [
+              { type: "text", text: "⏱️ Поиск занял слишком много времени" },
+            ],
+          };
+        }
+        
+        // Include more error details for debugging
+        const details = error instanceof Error && 'stdout' in error ? 
+          ` (stdout: ${String((error as any).stdout).substring(0, 200)})` : '';
+        
+        return {
+          content: [
+            { type: "text", text: `❌ Ошибка при поиске: ${errorStr}${details}` },
+          ],
+        };
+      }
+    },
+  } as unknown as AnyAgentTool;
 }

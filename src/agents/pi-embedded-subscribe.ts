@@ -57,6 +57,10 @@ export function subscribeEmbeddedPiSession(params: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
+  onToolStart?: (payload: {
+    name: string;
+    args?: any;
+  }) => void | Promise<void>;
   onPartialReply?: (payload: {
     text?: string;
     mediaUrls?: string[];
@@ -66,6 +70,7 @@ export function subscribeEmbeddedPiSession(params: {
     data: Record<string, unknown>;
   }) => void;
   enforceFinalTag?: boolean;
+  waitForFinalReply?: boolean;
 }) {
   const assistantTexts: string[] = [];
   const toolMetas: Array<{ toolName?: string; meta?: string }> = [];
@@ -76,6 +81,8 @@ export function subscribeEmbeddedPiSession(params: {
   let pendingCompactionRetry = 0;
   let compactionRetryResolve: (() => void) | undefined;
   let compactionRetryPromise: Promise<void> | null = null;
+  let assistantBuffer = "";
+  let assistantFlushed = false;
 
   const ensureCompactionPromise = () => {
     if (!compactionRetryPromise) {
@@ -130,7 +137,7 @@ export function subscribeEmbeddedPiSession(params: {
   };
 
   const toolDebouncer = createToolDebouncer((toolName, metas) => {
-    if (!params.onPartialReply) return;
+    if (!params.onPartialReply || params.waitForFinalReply) return;
     const text = formatToolAggregate(toolName, metas);
     const { text: cleanedText, mediaUrls } = splitMediaFromOutput(text);
     void params.onPartialReply({
@@ -175,6 +182,9 @@ export function subscribeEmbeddedPiSession(params: {
           stream: "tool",
           data: { phase: "start", name: toolName, toolCallId },
         });
+        if (params.onToolStart) {
+          void params.onToolStart({ name: toolName, args });
+        }
       }
 
       if (evt.type === "tool_execution_end") {
@@ -285,7 +295,7 @@ export function subscribeEmbeddedPiSession(params: {
                     mediaUrls: mediaUrls?.length ? mediaUrls : undefined,
                   },
                 });
-                if (params.onPartialReply) {
+                if (params.onPartialReply && !params.waitForFinalReply) {
                   void params.onPartialReply({
                     text: cleanedText,
                     mediaUrls: mediaUrls?.length ? mediaUrls : undefined,

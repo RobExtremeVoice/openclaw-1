@@ -341,6 +341,11 @@ export async function agentCommand(
           data: evt.data,
         });
       },
+      onToolStart: (payload) => {
+        if (resolvedVerboseLevel === "on") {
+          runtime.log(`🛠️ Using tool: ${payload.name}...`);
+        }
+      },
     });
     emitAgentEvent({
       runId: sessionId,

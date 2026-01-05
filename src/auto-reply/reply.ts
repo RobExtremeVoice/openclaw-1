@@ -1224,13 +1224,18 @@ export async function getReplyFromConfig(
             }
           : undefined,
         shouldEmitToolResult,
-        onToolResult: opts?.onToolResult
+        onToolResult: opts?.onToolResult && !opts.suppressToolStreaming
           ? async (payload) => {
               await startTypingOnText(payload.text);
               await opts.onToolResult?.({
                 text: payload.text,
                 mediaUrls: payload.mediaUrls,
               });
+            }
+          : undefined,
+        onToolStart: opts?.onToolStart && !opts.suppressToolStreaming
+          ? async (payload) => {
+              await opts.onToolStart?.(payload);
             }
           : undefined,
       });

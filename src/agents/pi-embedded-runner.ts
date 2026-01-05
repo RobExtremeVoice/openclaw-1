@@ -330,6 +330,10 @@ export async function runEmbeddedPiAgent(params: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
+  onToolStart?: (payload: {
+    name: string;
+    args?: any;
+  }) => void | Promise<void>;
   onAgentEvent?: (evt: {
     stream: string;
     data: Record<string, unknown>;
@@ -339,6 +343,7 @@ export async function runEmbeddedPiAgent(params: {
   extraSystemPrompt?: string;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  waitForFinalReply?: boolean;
 }): Promise<EmbeddedPiRunResult> {
   const sessionLane = resolveSessionLane(
     params.sessionKey?.trim() || params.sessionId,
@@ -408,6 +413,31 @@ export async function runEmbeddedPiAgent(params: {
         const promptSkills = resolvePromptSkills(skillsSnapshot, skillEntries);
         const tools = createClawdisCodingTools({
           bash: params.config?.agent?.bash,
+        });
+        const waitForFinalReply = params.waitForFinalReply ?? false;
+        
+        // Initialize tool call tracking to prevent infinite loops
+        const toolCalls = new Map<string, number>();
+        const maxToolCalls = 10; // Maximum calls per tool per request
+        
+        // Wrap tool execution to track calls
+        const wrappedTools = tools.map(tool => {
+          const originalExecute = tool.execute;
+          const toolName = tool.name;
+          
+          return {
+            ...tool,
+            execute: async (args: any) => {
+              const count = (toolCalls.get(toolName) || 0) + 1;
+              toolCalls.set(toolName, count);
+              
+              if (count > maxToolCalls) {
+                throw new Error(`Tool "${toolName}" called ${count} times - possible infinite loop. Stopping.`);
+              }
+              
+              return originalExecute.call(tool, args);
+            }
+          };
         });
         const machineName = await getMachineDisplayName();
         const runtimeInfo = {
@@ -492,9 +522,11 @@ export async function runEmbeddedPiAgent(params: {
           verboseLevel: params.verboseLevel,
           shouldEmitToolResult: params.shouldEmitToolResult,
           onToolResult: params.onToolResult,
+          onToolStart: params.onToolStart,
           onPartialReply: params.onPartialReply,
           onAgentEvent: params.onAgentEvent,
           enforceFinalTag: params.enforceFinalTag,
+          waitForFinalReply,
         });
 
         const abortTimer = setTimeout(
