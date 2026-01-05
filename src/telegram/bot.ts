@@ -416,12 +416,6 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         cfg,
       );
 
-      // Final update - remove "working" indicator
-      if (streamedText) {
-        await editWorkingMessage(chatIdStr, streamedText, false);
-      }
-      clearWorkingMessage(chatIdStr);
-
       const replies = replyResult
         ? Array.isArray(replyResult)
           ? replyResult
@@ -429,8 +423,34 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         : [];
       await blockSendChain;
 
-      // Only deliver replies if we didn't stream (no partial replies received)
-      if (replies.length === 0 || streamedText) return;
+      // Final update - remove "working" indicator or use working message for final reply
+      const workingState = workingMessages.get(chatIdStr);
+      if (streamedText) {
+        // Streaming worked - update working message with final text
+        await editWorkingMessage(chatIdStr, streamedText, false);
+        clearWorkingMessage(chatIdStr);
+        return;
+      }
+
+      if (workingState) {
+        // Streaming didn't work but we have a working message
+        if (replies.length > 0 && replies[0]?.text) {
+          // Edit the working message with the final reply instead of sending new
+          await editWorkingMessage(chatIdStr, replies[0].text, false);
+          clearWorkingMessage(chatIdStr);
+          return;
+        }
+        // No reply - delete orphaned working message
+        try {
+          await bot.api.deleteMessage(Number(chatIdStr), workingState.messageId);
+        } catch {
+          // Ignore delete errors
+        }
+        clearWorkingMessage(chatIdStr);
+      }
+
+      // Only deliver replies if we didn't handle them above
+      if (replies.length === 0) return;
 
       await deliverReplies({
         replies,
