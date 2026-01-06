@@ -2,7 +2,7 @@
 import { Buffer } from "node:buffer";
 
 import { apiThrottler } from "@grammyjs/transformer-throttler";
-import type { ApiClientOptions, Message } from "grammy";
+import type { ApiClientOptions, Context, Message, NextFunction } from "grammy";
 import { Bot, InputFile, webhookCallback } from "grammy";
 import {
   chunkMarkdownText,
@@ -118,6 +118,40 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   const bot = new Bot(opts.token, { client });
   bot.api.config.use(apiThrottler());
 
+  // Custom sequentialize by chat+topic - different chats/topics process in parallel,
+  // same chat+topic processes sequentially to maintain conversation order
+  const sessionLocks = new Map<string, Promise<void>>();
+  const getSessionKey = (ctx: Context): string | undefined => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return undefined;
+    const threadId = (ctx.message as { message_thread_id?: number })
+      ?.message_thread_id;
+    return threadId ? `${chatId}:${threadId}` : String(chatId);
+  };
+  bot.use(async (ctx: Context, next: NextFunction) => {
+    const key = getSessionKey(ctx);
+    if (!key) return next();
+
+    // Wait for any previous handler with same key to finish
+    const prev = sessionLocks.get(key) ?? Promise.resolve();
+    let resolve: () => void;
+    const current = new Promise<void>((r) => {
+      resolve = r;
+    });
+    sessionLocks.set(key, current);
+
+    try {
+      await prev;
+      await next();
+    } finally {
+      resolve?.();
+      // Clean up if this is still the latest promise for this key
+      if (sessionLocks.get(key) === current) {
+        sessionLocks.delete(key);
+      }
+    }
+  });
+
   const mediaGroupBuffer = new Map<string, MediaGroupEntry>();
 
   const cfg = loadConfig();
@@ -195,6 +229,8 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     const msg = primaryCtx.message;
     const chatId = msg.chat.id;
     const isGroup = msg.chat.type === "group" || msg.chat.type === "supergroup";
+    const messageThreadId = (msg as { message_thread_id?: number })
+      ?.message_thread_id;
     const effectiveDmAllow = normalizeAllowFrom([
       ...(allowFrom ?? []),
       ...storeAllowFrom,
@@ -206,7 +242,9 @@ export function createTelegramBot(opts: TelegramBotOptions) {
 
     const sendTyping = async () => {
       try {
-        await bot.api.sendChatAction(chatId, "typing");
+        await bot.api.sendChatAction(chatId, "typing", {
+          message_thread_id: messageThreadId,
+        });
       } catch (err) {
         logVerbose(
           `telegram typing cue failed for chat ${chatId}: ${String(err)}`,
@@ -375,7 +413,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     const body = formatAgentEnvelope({
       provider: "Telegram",
       from: isGroup
-        ? buildGroupFromLabel(msg, chatId, senderId)
+        ? buildGroupFromLabel(msg, chatId, senderId, messageThreadId)
         : buildSenderLabel(msg, senderId || chatId),
       timestamp: msg.date ? msg.date * 1000 : undefined,
       body: `${bodyText}${replySuffix}`,
@@ -386,12 +424,18 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       provider: "telegram",
       peer: {
         kind: isGroup ? "group" : "dm",
-        id: String(chatId),
+        id: messageThreadId
+          ? `${chatId}:topic:${messageThreadId}`
+          : String(chatId),
       },
     });
     const ctxPayload = {
       Body: body,
-      From: isGroup ? `group:${chatId}` : `telegram:${chatId}`,
+      From: isGroup
+        ? messageThreadId
+          ? `telegram:group:${chatId}:topic:${messageThreadId}`
+          : `telegram:group:${chatId}`
+        : `telegram:${chatId}`,
       To: `telegram:${chatId}`,
       SessionKey: route.sessionKey,
       AccountId: route.accountId,
@@ -445,8 +489,9 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       const preview = body.slice(0, 200).replace(/\n/g, "\\n");
       const mediaInfo =
         allMedia.length > 1 ? ` mediaCount=${allMedia.length}` : "";
+      const topicInfo = messageThreadId ? ` topic=${messageThreadId}` : "";
       logVerbose(
-        `telegram inbound: chatId=${chatId} from=${ctxPayload.From} len=${body.length}${mediaInfo} preview="${preview}"`,
+        `telegram inbound: chatId=${chatId} from=${ctxPayload.From} len=${body.length}${mediaInfo}${topicInfo} preview="${preview}"`,
       );
     }
 
@@ -462,6 +507,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
             bot,
             replyToMode,
             textLimit,
+            messageThreadId,
           });
         },
         onError: (err, info) => {
@@ -784,8 +830,17 @@ async function deliverReplies(params: {
   bot: Bot;
   replyToMode: ReplyToMode;
   textLimit: number;
+  messageThreadId?: number;
 }) {
-  const { replies, chatId, runtime, bot, replyToMode, textLimit } = params;
+  const {
+    replies,
+    chatId,
+    runtime,
+    bot,
+    replyToMode,
+    textLimit,
+    messageThreadId,
+  } = params;
   let hasReplied = false;
   for (const reply of replies) {
     if (!reply?.text && !reply?.mediaUrl && !(reply?.mediaUrls?.length ?? 0)) {
@@ -808,6 +863,7 @@ async function deliverReplies(params: {
             replyToId && (replyToMode === "all" || !hasReplied)
               ? replyToId
               : undefined,
+          messageThreadId,
         });
         if (replyToId && !hasReplied) {
           hasReplied = true;
@@ -836,26 +892,31 @@ async function deliverReplies(params: {
         await bot.api.sendAnimation(chatId, file, {
           caption,
           reply_to_message_id: replyToMessageId,
+          message_thread_id: messageThreadId,
         });
       } else if (kind === "image") {
         await bot.api.sendPhoto(chatId, file, {
           caption,
           reply_to_message_id: replyToMessageId,
+          message_thread_id: messageThreadId,
         });
       } else if (kind === "video") {
         await bot.api.sendVideo(chatId, file, {
           caption,
           reply_to_message_id: replyToMessageId,
+          message_thread_id: messageThreadId,
         });
       } else if (kind === "audio") {
         await bot.api.sendAudio(chatId, file, {
           caption,
           reply_to_message_id: replyToMessageId,
+          message_thread_id: messageThreadId,
         });
       } else {
         await bot.api.sendDocument(chatId, file, {
           caption,
           reply_to_message_id: replyToMessageId,
+          message_thread_id: messageThreadId,
         });
       }
       if (replyToId && !hasReplied) {
@@ -899,18 +960,24 @@ function buildSenderLabel(
   return idPart ?? "id:unknown";
 }
 
-function buildGroupLabel(msg: TelegramMessage, chatId: number | string) {
+function buildGroupLabel(
+  msg: TelegramMessage,
+  chatId: number | string,
+  messageThreadId?: number,
+) {
   const title = msg.chat?.title;
-  if (title) return `${title} id:${chatId}`;
-  return `group:${chatId}`;
+  const topicSuffix = messageThreadId ? ` topic:${messageThreadId}` : "";
+  if (title) return `${title} id:${chatId}${topicSuffix}`;
+  return `group:${chatId}${topicSuffix}`;
 }
 
 function buildGroupFromLabel(
   msg: TelegramMessage,
   chatId: number | string,
   senderId?: number | string,
+  messageThreadId?: number,
 ) {
-  const groupLabel = buildGroupLabel(msg, chatId);
+  const groupLabel = buildGroupLabel(msg, chatId, messageThreadId);
   const senderLabel = buildSenderLabel(msg, senderId);
   return `${groupLabel} from ${senderLabel}`;
 }
@@ -985,12 +1052,13 @@ async function sendTelegramText(
   chatId: string,
   text: string,
   runtime: RuntimeEnv,
-  opts?: { replyToMessageId?: number },
+  opts?: { replyToMessageId?: number; messageThreadId?: number },
 ): Promise<number | undefined> {
   try {
     const res = await bot.api.sendMessage(chatId, text, {
       parse_mode: "Markdown",
       reply_to_message_id: opts?.replyToMessageId,
+      message_thread_id: opts?.messageThreadId,
     });
     return res.message_id;
   } catch (err) {
@@ -1001,6 +1069,7 @@ async function sendTelegramText(
       );
       const res = await bot.api.sendMessage(chatId, text, {
         reply_to_message_id: opts?.replyToMessageId,
+        message_thread_id: opts?.messageThreadId,
       });
       return res.message_id;
     }
