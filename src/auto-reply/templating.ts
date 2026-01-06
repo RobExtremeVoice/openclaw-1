@@ -1,3 +1,13 @@
+/** Valid provider channels for message routing. */
+export type OriginatingChannelType =
+  | "telegram"
+  | "slack"
+  | "discord"
+  | "signal"
+  | "imessage"
+  | "whatsapp"
+  | "webchat";
+
 export type MsgContext = {
   Body?: string;
   From?: string;
@@ -34,6 +44,17 @@ export type MsgContext = {
   CommandAuthorized?: boolean;
   CommandSource?: "text" | "native";
   CommandTargetSessionKey?: string;
+  /**
+   * Originating channel for reply routing.
+   * When set, replies should be routed back to this provider
+   * instead of using lastChannel from the session.
+   */
+  OriginatingChannel?: OriginatingChannelType;
+  /**
+   * Originating destination for reply routing.
+   * The chat/channel/user ID where the reply should be sent.
+   */
+  OriginatingTo?: string;
 };
 
 export type TemplateContext = MsgContext & {

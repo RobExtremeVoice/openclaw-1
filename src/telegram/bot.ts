@@ -418,6 +418,9 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           : undefined,
       ...(locationData ? toLocationContext(locationData) : undefined),
       CommandAuthorized: commandAuthorized,
+      // Originating channel for reply routing.
+      OriginatingChannel: "telegram" as const,
+      OriginatingTo: `telegram:${chatId}`,
     };
 
     if (replyTarget && shouldLogVerbose()) {
