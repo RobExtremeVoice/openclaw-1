@@ -1,11 +1,34 @@
 import type { OAuthCredentials, OAuthProvider } from "@mariozechner/pi-ai";
+import { resolveClawdbotAgentDir } from "../agents/agent-paths.js";
+import { resolveAgentDir } from "../agents/agent-scope.js";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
 import type { ClawdbotConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
+import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
+
+/**
+ * Resolve the agent directory for storing auth credentials.
+ * Respects CLAWDBOT_AGENT_DIR or PI_CODING_AGENT_DIR if set (for tests and explicit overrides).
+ * Otherwise uses the multi-agent path (~/.clawdbot/agents/main/agent).
+ */
+function resolveAuthAgentDir(): string {
+  // If CLAWDBOT_AGENT_DIR or legacy PI_CODING_AGENT_DIR is explicitly set, respect it
+  if (
+    process.env.CLAWDBOT_AGENT_DIR?.trim() ||
+    process.env.PI_CODING_AGENT_DIR?.trim()
+  ) {
+    return resolveClawdbotAgentDir();
+  }
+  // Otherwise use the multi-agent path for the default agent
+  const cfg = loadConfig();
+  return resolveAgentDir(cfg, DEFAULT_AGENT_ID);
+}
 
 export async function writeOAuthCredentials(
   provider: OAuthProvider,
   creds: OAuthCredentials,
 ): Promise<void> {
+  const agentDir = resolveAuthAgentDir();
   upsertAuthProfile({
     profileId: `${provider}:${creds.email ?? "default"}`,
     credential: {
@@ -13,10 +36,12 @@ export async function writeOAuthCredentials(
       provider,
       ...creds,
     },
+    agentDir,
   });
 }
 
 export async function setAnthropicApiKey(key: string) {
+  const agentDir = resolveAuthAgentDir();
   upsertAuthProfile({
     profileId: "anthropic:default",
     credential: {
@@ -24,6 +49,7 @@ export async function setAnthropicApiKey(key: string) {
       provider: "anthropic",
       key,
     },
+    agentDir,
   });
 }
 
