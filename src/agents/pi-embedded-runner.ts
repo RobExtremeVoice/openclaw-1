@@ -10,7 +10,6 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import type { Api, AssistantMessage, Model } from "@mariozechner/pi-ai";
 import {
-  buildSystemPrompt,
   createAgentSession,
   discoverAuthStorage,
   discoverModels,
@@ -637,28 +636,26 @@ export async function compactEmbeddedPiSession(params: {
           params.config?.agent?.userTimezone,
         );
         const userTime = formatUserTime(new Date(), userTimezone);
-        const systemPrompt = buildSystemPrompt({
-          appendPrompt: buildAgentSystemPromptAppend({
-            workspaceDir: effectiveWorkspace,
-            defaultThinkLevel: params.thinkLevel,
-            extraSystemPrompt: params.extraSystemPrompt,
-            ownerNumbers: params.ownerNumbers,
-            reasoningTagHint,
-            heartbeatPrompt: resolveHeartbeatPrompt(
-              params.config?.agent?.heartbeat?.prompt,
-            ),
-            runtimeInfo,
-            sandboxInfo,
-            toolNames: tools.map((tool) => tool.name),
-            modelAliasLines: buildModelAliasLines(params.config),
-            userTimezone,
-            userTime,
-          }),
-          contextFiles,
-          skills: promptSkills,
-          cwd: effectiveWorkspace,
-          tools,
+        const appendPrompt = buildAgentSystemPromptAppend({
+          workspaceDir: effectiveWorkspace,
+          defaultThinkLevel: params.thinkLevel,
+          extraSystemPrompt: params.extraSystemPrompt,
+          ownerNumbers: params.ownerNumbers,
+          reasoningTagHint,
+          heartbeatPrompt: resolveHeartbeatPrompt(
+            params.config?.agent?.heartbeat?.prompt,
+          ),
+          runtimeInfo,
+          sandboxInfo,
+          toolNames: tools.map((tool) => tool.name),
+          modelAliasLines: buildModelAliasLines(params.config),
+          userTimezone,
+          userTime,
         });
+        const systemPrompt = (defaultPrompt: string) =>
+          appendPrompt.trim().length > 0
+            ? `${defaultPrompt}\n\n${appendPrompt}`
+            : defaultPrompt;
 
         const sessionManager = SessionManager.open(params.sessionFile);
         const settingsManager = SettingsManager.create(
@@ -956,28 +953,26 @@ export async function runEmbeddedPiAgent(params: {
             params.config?.agent?.userTimezone,
           );
           const userTime = formatUserTime(new Date(), userTimezone);
-          const systemPrompt = buildSystemPrompt({
-            appendPrompt: buildAgentSystemPromptAppend({
-              workspaceDir: effectiveWorkspace,
-              defaultThinkLevel: thinkLevel,
-              extraSystemPrompt: params.extraSystemPrompt,
-              ownerNumbers: params.ownerNumbers,
-              reasoningTagHint,
-              heartbeatPrompt: resolveHeartbeatPrompt(
-                params.config?.agent?.heartbeat?.prompt,
-              ),
-              runtimeInfo,
-              sandboxInfo,
-              toolNames: tools.map((tool) => tool.name),
-              modelAliasLines: buildModelAliasLines(params.config),
-              userTimezone,
-              userTime,
-            }),
-            contextFiles,
-            skills: promptSkills,
-            cwd: effectiveWorkspace,
-            tools,
+          const appendPrompt = buildAgentSystemPromptAppend({
+            workspaceDir: effectiveWorkspace,
+            defaultThinkLevel: thinkLevel,
+            extraSystemPrompt: params.extraSystemPrompt,
+            ownerNumbers: params.ownerNumbers,
+            reasoningTagHint,
+            heartbeatPrompt: resolveHeartbeatPrompt(
+              params.config?.agent?.heartbeat?.prompt,
+            ),
+            runtimeInfo,
+            sandboxInfo,
+            toolNames: tools.map((tool) => tool.name),
+            modelAliasLines: buildModelAliasLines(params.config),
+            userTimezone,
+            userTime,
           });
+          const systemPrompt = (defaultPrompt: string) =>
+            appendPrompt.trim().length > 0
+              ? `${defaultPrompt}\n\n${appendPrompt}`
+              : defaultPrompt;
 
           const sessionManager = SessionManager.open(params.sessionFile);
           const settingsManager = SettingsManager.create(
