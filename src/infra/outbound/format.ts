@@ -63,6 +63,7 @@ export function buildOutboundDeliveryJson(params: {
 
   return payload;
 }
+
 export function formatGatewaySummary(params: {
   action?: string;
   provider?: string;
