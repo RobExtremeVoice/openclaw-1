@@ -246,6 +246,7 @@ export function renderApp(state: AppViewState) {
                 state.resetToolStream();
                 state.applySettings({ ...state.settings, sessionKey: next });
               },
+              onConnect: () => state.connect(),
               onRefresh: () => state.loadOverview(),
             })
           : nothing}
