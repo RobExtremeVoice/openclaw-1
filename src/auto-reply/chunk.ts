@@ -16,7 +16,8 @@ export type TextChunkProvider =
   | "slack"
   | "signal"
   | "imessage"
-  | "webchat";
+  | "webchat"
+  | "msteams";
 
 const DEFAULT_CHUNK_LIMIT_BY_PROVIDER: Record<TextChunkProvider, number> = {
   whatsapp: 4000,
@@ -26,6 +27,7 @@ const DEFAULT_CHUNK_LIMIT_BY_PROVIDER: Record<TextChunkProvider, number> = {
   signal: 4000,
   imessage: 4000,
   webchat: 4000,
+  msteams: 4000,
 };
 
 export function resolveTextChunkLimit(
