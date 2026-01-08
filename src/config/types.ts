@@ -508,16 +508,23 @@ export type MSTeamsWebhookConfig = {
   path?: string;
 };
 
+/** Reply style for MS Teams messages. */
+export type MSTeamsReplyStyle = "thread" | "top-level";
+
 /** Channel-level config for MS Teams. */
 export type MSTeamsChannelConfig = {
   /** Require @mention to respond. Default: true. */
   requireMention?: boolean;
+  /** Reply style: "thread" replies to the message, "top-level" posts a new message. */
+  replyStyle?: MSTeamsReplyStyle;
 };
 
 /** Team-level config for MS Teams. */
 export type MSTeamsTeamConfig = {
   /** Default requireMention for channels in this team. */
   requireMention?: boolean;
+  /** Default reply style for channels in this team. */
+  replyStyle?: MSTeamsReplyStyle;
   /** Per-channel overrides. Key is channel ID (e.g., "19:abc@thread.tacv2"). */
   channels?: Record<string, MSTeamsChannelConfig>;
 };
@@ -541,6 +548,8 @@ export type MSTeamsConfig = {
   textChunkLimit?: number;
   /** Default: require @mention to respond in channels/groups. */
   requireMention?: boolean;
+  /** Default reply style: "thread" replies to the message, "top-level" posts a new message. Default: thread. */
+  replyStyle?: MSTeamsReplyStyle;
   /** Per-team config. Key is team ID (groupId from Teams URL). */
   teams?: Record<string, MSTeamsTeamConfig>;
 };
