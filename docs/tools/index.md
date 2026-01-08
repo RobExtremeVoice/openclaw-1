@@ -109,6 +109,7 @@ Core actions:
 - `status`, `describe`
 - `pending`, `approve`, `reject` (pairing)
 - `notify` (macOS `system.notify`)
+- `run` (macOS `system.run`)
 - `camera_snap`, `camera_clip`, `screen_record`
 - `location_get`
 
@@ -117,6 +118,20 @@ Notes:
 - Images return image blocks + `MEDIA:<path>`.
 - Videos return `FILE:<path>` (mp4).
 - Location returns a JSON payload (lat/lon/accuracy/timestamp).
+- `run` params: `command` argv array; optional `cwd`, `env` (`KEY=VAL`), `commandTimeoutMs`, `invokeTimeoutMs`, `needsScreenRecording`.
+
+Example (`run`):
+```json
+{
+  "action": "run",
+  "node": "office-mac",
+  "command": ["echo", "Hello"],
+  "env": ["FOO=bar"],
+  "commandTimeoutMs": 12000,
+  "invokeTimeoutMs": 45000,
+  "needsScreenRecording": false
+}
+```
 
 ### `image`
 Analyze an image with the configured image model.
@@ -144,10 +159,13 @@ Notes:
 - `update` uses `{ id, patch }`.
 
 ### `gateway`
-Restart the running Gateway process (in-place).
+Restart or apply updates to the running Gateway process (in-place).
 
 Core actions:
 - `restart` (sends `SIGUSR1` to the current process; `clawdbot gateway`/`gateway-daemon` restart in-place)
+- `config.get` / `config.schema`
+- `config.apply` (validate + write config + restart + wake)
+- `update.run` (run update + restart + wake)
 
 Notes:
 - Use `delayMs` (defaults to 2000) to avoid interrupting an in-flight reply.
@@ -259,11 +277,11 @@ Canvas render:
 Node targeting:
 1) `nodes` → `status`
 2) `describe` on the chosen node
-3) `notify` / `camera_snap` / `screen_record`
+3) `notify` / `run` / `camera_snap` / `screen_record`
 
 ## Safety
 
-- Avoid `system.run` (not exposed as a tool).
+- Avoid direct `system.run`; use `nodes` → `run` only with explicit user consent.
 - Respect user consent for camera/screen capture.
 - Use `status/describe` to ensure permissions before invoking media commands.
 

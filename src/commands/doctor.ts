@@ -11,6 +11,7 @@ import {
   DEFAULT_SANDBOX_BROWSER_IMAGE,
   DEFAULT_SANDBOX_COMMON_IMAGE,
   DEFAULT_SANDBOX_IMAGE,
+  resolveSandboxScope,
 } from "../agents/sandbox.js";
 import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
 import { DEFAULT_AGENTS_FILENAME } from "../agents/workspace.js";
@@ -61,6 +62,42 @@ import { ensureSystemdUserLingerInteractive } from "./systemd-linger.js";
 
 function resolveMode(cfg: ClawdbotConfig): "local" | "remote" {
   return cfg.gateway?.mode === "remote" ? "remote" : "local";
+}
+
+function hasObjectOverrides(value?: unknown) {
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).some((entry) => entry !== undefined);
+}
+
+function collectSandboxSharedOverrideWarnings(cfg: ClawdbotConfig) {
+  const globalSandbox = cfg.agent?.sandbox;
+  const agents = cfg.routing?.agents;
+  if (!agents) return [];
+
+  const warnings: string[] = [];
+  for (const [agentId, agentCfg] of Object.entries(agents)) {
+    if (!agentCfg || typeof agentCfg !== "object") continue;
+    const agentSandbox = agentCfg.sandbox;
+    if (!agentSandbox || typeof agentSandbox !== "object") continue;
+
+    const hasOverrides =
+      hasObjectOverrides(agentSandbox.docker) ||
+      hasObjectOverrides(agentSandbox.browser) ||
+      hasObjectOverrides(agentSandbox.prune);
+    if (!hasOverrides) continue;
+
+    const scope = resolveSandboxScope({
+      scope: agentSandbox.scope ?? globalSandbox?.scope,
+      perSession: agentSandbox.perSession ?? globalSandbox?.perSession,
+    });
+    if (scope !== "shared") continue;
+
+    warnings.push(
+      `- routing.agents.${agentId}.sandbox.{docker,browser,prune}.* is ignored when sandbox scope resolves to "shared" (single shared container).`,
+    );
+  }
+
+  return warnings;
 }
 
 function resolveLegacyConfigPath(env: NodeJS.ProcessEnv): string {
@@ -975,6 +1012,18 @@ export async function doctorCommand(
   await maybeScanExtraGatewayServices(options);
 
   await noteSecurityWarnings(cfg);
+
+  const sharedOverrideWarnings = collectSandboxSharedOverrideWarnings(cfg);
+  if (sharedOverrideWarnings.length > 0) {
+    note(
+      [
+        ...sharedOverrideWarnings,
+        "",
+        'Fix: set scope to "agent"/"session", or move the config to agent.sandbox.{docker,browser,prune} (global).',
+      ].join("\n"),
+      "Sandbox",
+    );
+  }
 
   if (
     options.nonInteractive !== true &&

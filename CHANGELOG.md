@@ -18,7 +18,10 @@
 - Auto-reply: removed `autoReply` from Discord/Slack/Telegram channel configs; use `requireMention` instead (Telegram topics now support `requireMention` overrides).
 
 ### Fixes
+- Discord: format slow listener logs in seconds to match shared duration style.
+- Agent: avoid duplicating context/skills when SDK rebuilds the system prompt. (#418)
 - Signal: reconnect SSE monitor with abortable backoff; log stream errors. Thanks @nexty5870 for PR #430.
+- Gateway: pass resolved provider as messageProvider for agent runs so provider-specific tools are available. Thanks @imfing for PR #389.
 - Discord/Telegram: add per-request retry policy with configurable delays and docs.
 - Telegram: run long polling via grammY runner with per-chat sequentialization and concurrency tied to `agent.maxConcurrent`. Thanks @mukhtharcm for PR #366.
 - macOS: prevent gateway launchd startup race where the app could kill a just-started gateway; avoid unnecessary `bootout` and ensure the job is enabled at login. Fixes #306. Thanks @gupsammy for PR #387.
@@ -29,6 +32,7 @@
 - Discord: include all inbound attachments in `MediaPaths`/`MediaUrls` (back-compat `MediaPath`/`MediaUrl` still first).
 - Sandbox: add `agent.sandbox.workspaceAccess` (`none`/`ro`/`rw`) to control agent workspace visibility inside the container; `ro` hard-disables `write`/`edit`.
 - Routing: allow per-agent sandbox overrides (including `workspaceAccess` and `sandbox.tools`) plus per-agent tool policies in multi-agent configs. Thanks @pasogott for PR #380.
+- Sandbox: allow per-agent `routing.agents.<agentId>.sandbox.{docker,browser,prune}.*` overrides for multi-agent gateways (ignored when `scope: "shared"`).
 - Tools: make per-agent tool policies override global defaults and run bash synchronously when `process` is disallowed.
 - Tools: scope `process` sessions per agent to prevent cross-agent visibility.
 - Cron: clamp timer delay to avoid TimeoutOverflowWarning. Thanks @emanuelst for PR #412.
@@ -37,6 +41,7 @@
 - Tools: add Telegram/WhatsApp reaction tools (with per-provider gating). Thanks @zats for PR #353.
 - Tools: flatten literal-union schemas for Claude on Vertex AI. Thanks @carlulsoe for PR #409.
 - Tools: keep tool failure logs concise (no stack traces); full stack only in debug logs.
+- Tools: add nodes tool run invoke-timeout support. Thanks @sircrumpet for PR #433.
 - Tools: unify reaction removal semantics across Discord/Slack/Telegram/WhatsApp and allow WhatsApp reaction routing across accounts.
 - Android: fix APK output filename renaming after AGP updates. Thanks @Syhids for PR #410.
 - Android: rotate camera photos by EXIF orientation. Thanks @fcatuhe for PR #403.

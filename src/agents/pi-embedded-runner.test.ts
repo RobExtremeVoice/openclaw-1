@@ -1,10 +1,14 @@
 import type { AgentMessage, AgentTool } from "@mariozechner/pi-agent-core";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import {
+  buildSystemPrompt,
+  SessionManager,
+} from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyGoogleTurnOrderingFix,
   buildEmbeddedSandboxInfo,
+  createSystemPromptAppender,
   splitSdkTools,
 } from "./pi-embedded-runner.js";
 import type { SandboxContext } from "./sandbox.js";
@@ -102,6 +106,30 @@ describe("splitSdkTools", () => {
       "write",
     ]);
     expect(customTools.map((tool) => tool.name)).toEqual(["browser"]);
+  });
+});
+
+describe("createSystemPromptAppender", () => {
+  it("appends without duplicating context files", () => {
+    const sentinel = "CONTEXT_SENTINEL_42";
+    const defaultPrompt = buildSystemPrompt({
+      cwd: "/tmp",
+      contextFiles: [{ path: "/tmp/AGENTS.md", content: sentinel }],
+    });
+    const appender = createSystemPromptAppender("APPEND_SECTION");
+    const finalPrompt = appender(defaultPrompt);
+    const occurrences = finalPrompt.split(sentinel).length - 1;
+    const contextHeaders = finalPrompt.split("# Project Context").length - 1;
+    expect(typeof appender).toBe("function");
+    expect(occurrences).toBe(1);
+    expect(contextHeaders).toBe(1);
+    expect(finalPrompt).toContain("APPEND_SECTION");
+  });
+
+  it("returns the default prompt when append text is empty", () => {
+    const defaultPrompt = buildSystemPrompt({ cwd: "/tmp" });
+    const appender = createSystemPromptAppender("  \n  ");
+    expect(appender(defaultPrompt)).toBe(defaultPrompt);
   });
 });
 

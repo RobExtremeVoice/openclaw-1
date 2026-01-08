@@ -10,7 +10,6 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import type { Api, AssistantMessage, Model } from "@mariozechner/pi-ai";
 import {
-  buildSystemPrompt,
   createAgentSession,
   discoverAuthStorage,
   discoverModels,
@@ -492,6 +491,52 @@ export function buildEmbeddedSandboxInfo(
   };
 }
 
+function buildEmbeddedAppendPrompt(params: {
+  workspaceDir: string;
+  defaultThinkLevel?: ThinkLevel;
+  extraSystemPrompt?: string;
+  ownerNumbers?: string[];
+  reasoningTagHint: boolean;
+  heartbeatPrompt?: string;
+  runtimeInfo: {
+    host: string;
+    os: string;
+    arch: string;
+    node: string;
+    model: string;
+  };
+  sandboxInfo?: EmbeddedSandboxInfo;
+  tools: AgentTool[];
+  modelAliasLines: string[];
+  userTimezone: string;
+  userTime?: string;
+}): string {
+  return buildAgentSystemPromptAppend({
+    workspaceDir: params.workspaceDir,
+    defaultThinkLevel: params.defaultThinkLevel,
+    extraSystemPrompt: params.extraSystemPrompt,
+    ownerNumbers: params.ownerNumbers,
+    reasoningTagHint: params.reasoningTagHint,
+    heartbeatPrompt: params.heartbeatPrompt,
+    runtimeInfo: params.runtimeInfo,
+    sandboxInfo: params.sandboxInfo,
+    toolNames: params.tools.map((tool) => tool.name),
+    modelAliasLines: params.modelAliasLines,
+    userTimezone: params.userTimezone,
+    userTime: params.userTime,
+  });
+}
+
+export function createSystemPromptAppender(
+  appendPrompt: string,
+): (defaultPrompt: string) => string {
+  const trimmed = appendPrompt.trim();
+  if (!trimmed) {
+    return (defaultPrompt) => defaultPrompt;
+  }
+  return (defaultPrompt) => `${defaultPrompt}\n\n${appendPrompt}`;
+}
+
 const BUILT_IN_TOOL_NAMES = new Set(["read", "bash", "edit", "write"]);
 
 type AnyAgentTool = AgentTool;
@@ -775,28 +820,23 @@ export async function compactEmbeddedPiSession(params: {
           params.config?.agent?.userTimezone,
         );
         const userTime = formatUserTime(new Date(), userTimezone);
-        const systemPrompt = buildSystemPrompt({
-          appendPrompt: buildAgentSystemPromptAppend({
-            workspaceDir: effectiveWorkspace,
-            defaultThinkLevel: params.thinkLevel,
-            extraSystemPrompt: params.extraSystemPrompt,
-            ownerNumbers: params.ownerNumbers,
-            reasoningTagHint,
-            heartbeatPrompt: resolveHeartbeatPrompt(
-              params.config?.agent?.heartbeat?.prompt,
-            ),
-            runtimeInfo,
-            sandboxInfo,
-            toolNames: tools.map((tool) => tool.name),
-            modelAliasLines: buildModelAliasLines(params.config),
-            userTimezone,
-            userTime,
-          }),
-          contextFiles,
-          skills: promptSkills,
-          cwd: effectiveWorkspace,
+        const appendPrompt = buildEmbeddedAppendPrompt({
+          workspaceDir: effectiveWorkspace,
+          defaultThinkLevel: params.thinkLevel,
+          extraSystemPrompt: params.extraSystemPrompt,
+          ownerNumbers: params.ownerNumbers,
+          reasoningTagHint,
+          heartbeatPrompt: resolveHeartbeatPrompt(
+            params.config?.agent?.heartbeat?.prompt,
+          ),
+          runtimeInfo,
+          sandboxInfo,
           tools,
+          modelAliasLines: buildModelAliasLines(params.config),
+          userTimezone,
+          userTime,
         });
+        const systemPrompt = createSystemPromptAppender(appendPrompt);
 
         // Pre-warm session file to bring it into OS page cache
         await prewarmSessionFile(params.sessionFile);
@@ -1100,28 +1140,23 @@ export async function runEmbeddedPiAgent(params: {
             params.config?.agent?.userTimezone,
           );
           const userTime = formatUserTime(new Date(), userTimezone);
-          const systemPrompt = buildSystemPrompt({
-            appendPrompt: buildAgentSystemPromptAppend({
-              workspaceDir: effectiveWorkspace,
-              defaultThinkLevel: thinkLevel,
-              extraSystemPrompt: params.extraSystemPrompt,
-              ownerNumbers: params.ownerNumbers,
-              reasoningTagHint,
-              heartbeatPrompt: resolveHeartbeatPrompt(
-                params.config?.agent?.heartbeat?.prompt,
-              ),
-              runtimeInfo,
-              sandboxInfo,
-              toolNames: tools.map((tool) => tool.name),
-              modelAliasLines: buildModelAliasLines(params.config),
-              userTimezone,
-              userTime,
-            }),
-            contextFiles,
-            skills: promptSkills,
-            cwd: effectiveWorkspace,
+          const appendPrompt = buildEmbeddedAppendPrompt({
+            workspaceDir: effectiveWorkspace,
+            defaultThinkLevel: thinkLevel,
+            extraSystemPrompt: params.extraSystemPrompt,
+            ownerNumbers: params.ownerNumbers,
+            reasoningTagHint,
+            heartbeatPrompt: resolveHeartbeatPrompt(
+              params.config?.agent?.heartbeat?.prompt,
+            ),
+            runtimeInfo,
+            sandboxInfo,
             tools,
+            modelAliasLines: buildModelAliasLines(params.config),
+            userTimezone,
+            userTime,
           });
+          const systemPrompt = createSystemPromptAppender(appendPrompt);
 
           // Pre-warm session file to bring it into OS page cache
           await prewarmSessionFile(params.sessionFile);

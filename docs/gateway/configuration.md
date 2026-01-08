@@ -23,6 +23,26 @@ The Control UI renders a form from this schema, with a **Raw JSON** editor as an
 Hints (labels, grouping, sensitive fields) ship alongside the schema so clients can render
 better forms without hard-coding config knowledge.
 
+## Apply + restart (RPC)
+
+Use `config.apply` to validate + write the full config and restart the Gateway in one step.
+It writes a restart sentinel and pings the last active session after the Gateway comes back.
+
+Params:
+- `raw` (string) — JSON5 payload for the entire config
+- `sessionKey` (optional) — last active session key for the wake-up ping
+- `restartDelayMs` (optional) — delay before restart (default 2000)
+
+Example (via `gateway call`):
+
+```bash
+clawdbot gateway call config.apply --params '{
+  "raw": "{\\n  agent: { workspace: \\"~/clawd\\" }\\n}\\n",
+  "sessionKey": "agent:main:whatsapp:dm:+15555550123",
+  "restartDelayMs": 1000
+}'
+```
+
 ## Minimal config (recommended starting point)
 
 ```json5
@@ -339,6 +359,9 @@ Run multiple isolated agents (separate workspace, `agentDir`, sessions) inside o
     - `workspaceAccess`: `"none"` | `"ro"` | `"rw"`
     - `scope`: `"session"` | `"agent"` | `"shared"`
     - `workspaceRoot`: custom sandbox workspace root
+    - `docker`: per-agent docker overrides (e.g. `image`, `network`, `env`, `setupCommand`, limits; ignored when `scope: "shared"`)
+    - `browser`: per-agent sandboxed browser overrides (ignored when `scope: "shared"`)
+    - `prune`: per-agent sandbox pruning overrides (ignored when `scope: "shared"`)
     - `tools`: per-agent sandbox tool policy (deny wins; overrides `agent.sandbox.tools`)
   - `tools`: per-agent tool restrictions (overrides `agent.tools`; applied before sandbox tool policy).
     - `allow`: array of allowed tool names
@@ -1115,6 +1138,7 @@ Legacy: `perSession` is still supported (`true` → `scope: "session"`,
         capDrop: ["ALL"],
         env: { LANG: "C.UTF-8" },
         setupCommand: "apt-get update && apt-get install -y git curl jq",
+        // Per-agent override (multi-agent): routing.agents.<agentId>.sandbox.docker.*
         pidsLimit: 256,
         memory: "1g",
         memorySwap: "2g",
@@ -1589,6 +1613,8 @@ Defaults:
         sessionKey: "hook:gmail:{{messages[0].id}}",
         messageTemplate:
           "From: {{messages[0].from}}\nSubject: {{messages[0].subject}}\n{{messages[0].snippet}}",
+        deliver: true,
+        provider: "last",
       },
     ],
   }
@@ -1612,6 +1638,8 @@ Mapping notes:
 - `match.source` matches a payload field (e.g. `{ source: "gmail" }`) so you can use a generic `/hooks/ingest` path.
 - Templates like `{{messages[0].subject}}` read from the payload.
 - `transform` can point to a JS/TS module that returns a hook action.
+- `deliver: true` sends the final reply to a provider; `provider` defaults to `last` (falls back to WhatsApp).
+- If there is no prior delivery route, set `provider` + `to` explicitly (required for Telegram/Discord/Slack/Signal/iMessage).
 
 Gmail helper config (used by `clawdbot hooks gmail setup` / `run`):
 
