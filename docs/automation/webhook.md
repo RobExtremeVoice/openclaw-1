@@ -57,7 +57,7 @@ Payload:
   "name": "Email",
   "sessionKey": "hook:email:msg-123",
   "wakeMode": "now",
-  "deliver": false,
+  "deliver": true,
   "provider": "last",
   "to": "+15551234567",
   "model": "openai/gpt-5.2-mini",
@@ -70,7 +70,7 @@ Payload:
 - `name` optional (used in the summary prefix)
 - `sessionKey` optional (default random `hook:<uuid>`)
 - `wakeMode` optional: `now` | `next-heartbeat` (default `now`)
-- `deliver` optional (default `false`)
+- `deliver` optional (default `true`)
 - `provider` optional: `last` | `whatsapp` | `telegram`
 - `to` optional (provider-specific target)
 - `model` optional (model override, `provider/model` or alias; must be allowed if `agent.models` is set)

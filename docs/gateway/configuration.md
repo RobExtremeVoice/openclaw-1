@@ -1764,7 +1764,7 @@ Mapping notes:
 - `match.source` matches a payload field (e.g. `{ source: "gmail" }`) so you can use a generic `/hooks/ingest` path.
 - Templates like `{{messages[0].subject}}` read from the payload.
 - `transform` can point to a JS/TS module that returns a hook action.
-- `deliver: true` sends the final reply to a provider; `provider` defaults to `last` (falls back to WhatsApp).
+- `deliver` defaults to `true`; it sends the final reply to a provider (`provider` defaults to `last` and falls back to WhatsApp). Set `deliver: false` to suppress outbound messages.
 - If there is no prior delivery route, set `provider` + `to` explicitly (required for Telegram/Discord/Slack/Signal/iMessage).
 - `model` overrides the LLM for this hook run (`provider/model` or alias; must be allowed if `agent.models` is set).
 
