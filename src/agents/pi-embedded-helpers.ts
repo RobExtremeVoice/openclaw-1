@@ -10,7 +10,8 @@ import {
   normalizeThinkLevel,
   type ThinkLevel,
 } from "../auto-reply/thinking.js";
-
+import type { ClawdbotConfig } from "../config/config.js";
+import { formatSandboxToolPolicyBlockedMessage } from "./sandbox.js";
 import { sanitizeContentBlocksImages } from "./tool-images.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
 
@@ -85,6 +86,7 @@ function isEmptyAssistantErrorMessage(
 export async function sanitizeSessionMessagesImages(
   messages: AgentMessage[],
   label: string,
+  options?: { sanitizeToolCallIds?: boolean; enforceToolCallLast?: boolean },
 ): Promise<AgentMessage[]> {
   // We sanitize historical session messages because Anthropic can reject a request
   // if the transcript contains oversized base64 images (see MAX_IMAGE_DIMENSION_PX).
@@ -103,14 +105,25 @@ export async function sanitizeSessionMessagesImages(
         content as ContentBlock[],
         label,
       )) as unknown as typeof toolMsg.content;
-      const sanitizedToolCallId = toolMsg.toolCallId
-        ? sanitizeToolCallId(toolMsg.toolCallId)
-        : undefined;
+      const sanitizedToolCallId =
+        options?.sanitizeToolCallIds && toolMsg.toolCallId
+          ? sanitizeToolCallId(toolMsg.toolCallId)
+          : undefined;
+      const toolUseId = (toolMsg as { toolUseId?: unknown }).toolUseId;
+      const sanitizedToolUseId =
+        options?.sanitizeToolCallIds &&
+        typeof toolUseId === "string" &&
+        toolUseId
+          ? sanitizeToolCallId(toolUseId)
+          : undefined;
       const sanitizedMsg = {
         ...toolMsg,
         content: nextContent,
         ...(sanitizedToolCallId && {
           toolCallId: sanitizedToolCallId,
+        }),
+        ...(sanitizedToolUseId && {
+          toolUseId: sanitizedToolUseId,
         }),
       };
       out.push(sanitizedMsg);
@@ -143,24 +156,51 @@ export async function sanitizeSessionMessagesImages(
           if (rec.type !== "text" || typeof rec.text !== "string") return true;
           return rec.text.trim().length > 0;
         });
-        // Also sanitize tool call IDs in assistant messages (function call blocks)
-        const sanitizedContent = await Promise.all(
-          filteredContent.map(async (block) => {
-            if (
-              block &&
-              typeof block === "object" &&
-              (block as { type?: unknown }).type === "functionCall" &&
-              (block as { id?: unknown }).id
-            ) {
-              const functionBlock = block as { type: string; id: string };
-              return {
-                ...functionBlock,
-                id: sanitizeToolCallId(functionBlock.id),
-              };
-            }
-            return block;
-          }),
-        );
+        const normalizedContent = options?.enforceToolCallLast
+          ? (() => {
+              let lastToolIndex = -1;
+              for (let i = filteredContent.length - 1; i >= 0; i -= 1) {
+                const block = filteredContent[i];
+                if (!block || typeof block !== "object") continue;
+                const type = (block as { type?: unknown }).type;
+                if (
+                  type === "functionCall" ||
+                  type === "toolUse" ||
+                  type === "toolCall"
+                ) {
+                  lastToolIndex = i;
+                  break;
+                }
+              }
+              if (lastToolIndex === -1) return filteredContent;
+              return filteredContent.slice(0, lastToolIndex + 1);
+            })()
+          : filteredContent;
+        const sanitizedContent = options?.sanitizeToolCallIds
+          ? await Promise.all(
+              normalizedContent.map(async (block) => {
+                if (!block || typeof block !== "object") return block;
+
+                const type = (block as { type?: unknown }).type;
+                const id = (block as { id?: unknown }).id;
+                if (typeof id !== "string" || !id) return block;
+
+                // Cloud Code Assist tool blocks require ids matching ^[a-zA-Z0-9_-]+$.
+                if (
+                  type === "functionCall" ||
+                  type === "toolUse" ||
+                  type === "toolCall"
+                ) {
+                  return {
+                    ...(block as unknown as Record<string, unknown>),
+                    id: sanitizeToolCallId(id),
+                  };
+                }
+
+                return block;
+              }),
+            )
+          : normalizedContent;
         const finalContent = (await sanitizeContentBlocksImages(
           sanitizedContent as unknown as ContentBlock[],
           label,
@@ -175,6 +215,150 @@ export async function sanitizeSessionMessagesImages(
 
     out.push(msg);
   }
+  return out;
+}
+
+type ToolCallLike = {
+  id: string;
+  name?: string;
+};
+
+function extractToolCallsFromAssistant(
+  msg: Extract<AgentMessage, { role: "assistant" }>,
+): ToolCallLike[] {
+  const content = msg.content;
+  if (!Array.isArray(content)) return [];
+
+  const toolCalls: ToolCallLike[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const rec = block as { type?: unknown; id?: unknown; name?: unknown };
+    if (typeof rec.id !== "string" || !rec.id) continue;
+
+    if (
+      rec.type === "toolCall" ||
+      rec.type === "toolUse" ||
+      rec.type === "functionCall"
+    ) {
+      toolCalls.push({
+        id: rec.id,
+        name: typeof rec.name === "string" ? rec.name : undefined,
+      });
+    }
+  }
+  return toolCalls;
+}
+
+function extractToolResultId(
+  msg: Extract<AgentMessage, { role: "toolResult" }>,
+): string | null {
+  const toolCallId = (msg as { toolCallId?: unknown }).toolCallId;
+  if (typeof toolCallId === "string" && toolCallId) return toolCallId;
+  const toolUseId = (msg as { toolUseId?: unknown }).toolUseId;
+  if (typeof toolUseId === "string" && toolUseId) return toolUseId;
+  return null;
+}
+
+function makeMissingToolResult(params: {
+  toolCallId: string;
+  toolName?: string;
+}): Extract<AgentMessage, { role: "toolResult" }> {
+  return {
+    role: "toolResult",
+    toolCallId: params.toolCallId,
+    toolName: params.toolName ?? "unknown",
+    content: [
+      {
+        type: "text",
+        text: "[clawdbot] missing tool result in session history; inserted synthetic error result for transcript repair.",
+      },
+    ],
+    isError: true,
+    timestamp: Date.now(),
+  } as Extract<AgentMessage, { role: "toolResult" }>;
+}
+
+export function sanitizeToolUseResultPairing(
+  messages: AgentMessage[],
+): AgentMessage[] {
+  // Anthropic (and Cloud Code Assist) reject transcripts where assistant tool calls are not
+  // immediately followed by matching tool results. Session files can end up with results
+  // displaced (e.g. after user turns) or duplicated. Repair by:
+  // - moving matching toolResult messages directly after their assistant toolCall turn
+  // - inserting synthetic error toolResults for missing ids
+  // - dropping duplicate toolResults for the same id within the span
+  const out: AgentMessage[] = [];
+
+  for (let i = 0; i < messages.length; i += 1) {
+    const msg = messages[i] as AgentMessage;
+    if (!msg || typeof msg !== "object") {
+      out.push(msg);
+      continue;
+    }
+
+    const role = (msg as { role?: unknown }).role;
+    if (role !== "assistant") {
+      out.push(msg);
+      continue;
+    }
+
+    const assistant = msg as Extract<AgentMessage, { role: "assistant" }>;
+    const toolCalls = extractToolCallsFromAssistant(assistant);
+    if (toolCalls.length === 0) {
+      out.push(msg);
+      continue;
+    }
+
+    const toolCallIds = new Set(toolCalls.map((t) => t.id));
+
+    const spanResultsById = new Map<
+      string,
+      Extract<AgentMessage, { role: "toolResult" }>
+    >();
+    const remainder: AgentMessage[] = [];
+
+    let j = i + 1;
+    for (; j < messages.length; j += 1) {
+      const next = messages[j] as AgentMessage;
+      if (!next || typeof next !== "object") {
+        remainder.push(next);
+        continue;
+      }
+
+      const nextRole = (next as { role?: unknown }).role;
+      if (nextRole === "assistant") break;
+
+      if (nextRole === "toolResult") {
+        const toolResult = next as Extract<
+          AgentMessage,
+          { role: "toolResult" }
+        >;
+        const id = extractToolResultId(toolResult);
+        if (id && toolCallIds.has(id)) {
+          if (!spanResultsById.has(id)) {
+            spanResultsById.set(id, toolResult);
+          }
+          continue;
+        }
+      }
+
+      remainder.push(next);
+    }
+
+    out.push(msg);
+
+    for (const call of toolCalls) {
+      const existing = spanResultsById.get(call.id);
+      out.push(
+        existing ??
+          makeMissingToolResult({ toolCallId: call.id, toolName: call.name }),
+      );
+    }
+
+    out.push(...remainder);
+    i = j - 1;
+  }
+
   return out;
 }
 
@@ -248,10 +432,25 @@ export function isContextOverflowError(errorMessage?: string): boolean {
 
 export function formatAssistantErrorText(
   msg: AssistantMessage,
+  opts?: { cfg?: ClawdbotConfig; sessionKey?: string },
 ): string | undefined {
   if (msg.stopReason !== "error") return undefined;
   const raw = (msg.errorMessage ?? "").trim();
   if (!raw) return "LLM request failed with an unknown error.";
+
+  const unknownTool =
+    raw.match(/unknown tool[:\s]+["']?([a-z0-9_-]+)["']?/i) ??
+    raw.match(
+      /tool\s+["']?([a-z0-9_-]+)["']?\s+(?:not found|is not available)/i,
+    );
+  if (unknownTool?.[1]) {
+    const rewritten = formatSandboxToolPolicyBlockedMessage({
+      cfg: opts?.cfg,
+      sessionKey: opts?.sessionKey,
+      toolName: unknownTool[1],
+    });
+    if (rewritten) return rewritten;
+  }
 
   // Check for context overflow (413) errors
   if (isContextOverflowError(raw)) {

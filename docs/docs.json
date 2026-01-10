@@ -30,6 +30,14 @@
       "destination": "/cron-jobs"
     },
     {
+      "source": "/sandbox",
+      "destination": "/gateway/sandbox-vs-tool-policy-vs-elevated"
+    },
+    {
+      "source": "/sandbox/",
+      "destination": "/gateway/sandbox-vs-tool-policy-vs-elevated"
+    },
+    {
       "source": "/model",
       "destination": "/models"
     },
@@ -44,6 +52,22 @@
     {
       "source": "/messages/",
       "destination": "/concepts/messages"
+    },
+    {
+      "source": "/message",
+      "destination": "/cli/message"
+    },
+    {
+      "source": "/message/",
+      "destination": "/cli/message"
+    },
+    {
+      "source": "/sandbox",
+      "destination": "/cli/sandbox"
+    },
+    {
+      "source": "/sandbox/",
+      "destination": "/cli/sandbox"
     },
     {
       "source": "/AGENTS.default",
@@ -556,6 +580,7 @@
         "group": "Install & Updates",
         "pages": [
           "install/updating",
+          "install/ansible",
           "install/nix",
           "install/docker",
           "install/bun"
@@ -565,7 +590,9 @@
         "group": "CLI",
         "pages": [
           "cli/index",
+          "cli/message",
           "cli/gateway",
+          "cli/update",
           "cli/sandbox"
         ]
       },
@@ -588,12 +615,16 @@
           "concepts/presence",
           "concepts/provider-routing",
           "concepts/messages",
+          "concepts/streaming",
           "concepts/groups",
           "concepts/group-messages",
           "concepts/typing-indicators",
           "concepts/queue",
+          "concepts/retry",
+          "concepts/model-providers",
           "concepts/models",
           "concepts/model-failover",
+          "concepts/usage-tracking",
           "concepts/timezone",
           "concepts/typebox"
         ]
@@ -604,6 +635,7 @@
           "gateway",
           "gateway/pairing",
           "gateway/gateway-lock",
+          "environment",
           "gateway/configuration",
           "gateway/configuration-examples",
           "gateway/authentication",
@@ -613,7 +645,10 @@
           "gateway/doctor",
           "gateway/logging",
           "gateway/security",
+          "gateway/sandbox-vs-tool-policy-vs-elevated",
+          "gateway/sandboxing",
           "gateway/troubleshooting",
+          "debugging",
           "gateway/remote",
           "gateway/remote-gateway-readme",
           "gateway/discovery",
@@ -635,12 +670,15 @@
         "group": "Providers",
         "pages": [
           "providers/whatsapp",
+          "broadcast-groups",
           "providers/telegram",
           "providers/grammy",
           "providers/discord",
           "providers/slack",
           "providers/signal",
           "providers/imessage",
+          "providers/msteams",
+          "providers/troubleshooting",
           "providers/location"
         ]
       },
@@ -666,6 +704,8 @@
           "tools/thinking",
           "tools/agent-send",
           "tools/subagents",
+          "multi-agent-sandbox-tools",
+          "tools/reactions",
           "tools/skills",
           "tools/skills-config",
           "tools/clawdhub"

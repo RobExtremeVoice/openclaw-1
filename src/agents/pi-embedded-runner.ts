@@ -8,7 +8,12 @@ import type {
   AgentTool,
   ThinkingLevel,
 } from "@mariozechner/pi-agent-core";
-import type { Api, AssistantMessage, Model } from "@mariozechner/pi-ai";
+import type {
+  Api,
+  AssistantMessage,
+  ImageContent,
+  Model,
+} from "@mariozechner/pi-ai";
 import {
   createAgentSession,
   discoverAuthStorage,
@@ -83,6 +88,7 @@ import {
   pickFallbackThinkingLevel,
   sanitizeGoogleTurnOrdering,
   sanitizeSessionMessagesImages,
+  sanitizeToolUseResultPairing,
   validateGeminiTurns,
 } from "./pi-embedded-helpers.js";
 import {
@@ -374,9 +380,14 @@ async function sanitizeSessionHistory(params: {
   const sanitizedImages = await sanitizeSessionMessagesImages(
     params.messages,
     "session:history",
+    {
+      sanitizeToolCallIds: isGoogleModelApi(params.modelApi),
+      enforceToolCallLast: params.modelApi === "anthropic-messages",
+    },
   );
+  const repairedTools = sanitizeToolUseResultPairing(sanitizedImages);
   return applyGoogleTurnOrderingFix({
-    messages: sanitizedImages,
+    messages: repairedTools,
     modelApi: params.modelApi,
     sessionManager: params.sessionManager,
     sessionId: params.sessionId,
@@ -468,6 +479,10 @@ type EmbeddedSandboxInfo = {
   agentWorkspaceMount?: string;
   browserControlUrl?: string;
   browserNoVncUrl?: string;
+  elevated?: {
+    allowed: boolean;
+    defaultLevel: "on" | "off";
+  };
 };
 
 function resolveSessionLane(key: string) {
@@ -541,8 +556,12 @@ function describeUnknownError(error: unknown): string {
 
 export function buildEmbeddedSandboxInfo(
   sandbox?: Awaited<ReturnType<typeof resolveSandboxContext>>,
+  bashElevated?: BashElevatedDefaults,
 ): EmbeddedSandboxInfo | undefined {
   if (!sandbox?.enabled) return undefined;
+  const elevatedAllowed = Boolean(
+    bashElevated?.enabled && bashElevated.allowed,
+  );
   return {
     enabled: true,
     workspaceDir: sandbox.workspaceDir,
@@ -551,6 +570,14 @@ export function buildEmbeddedSandboxInfo(
       sandbox.workspaceAccess === "ro" ? "/agent" : undefined,
     browserControlUrl: sandbox.browser?.controlUrl,
     browserNoVncUrl: sandbox.browser?.noVncUrl,
+    ...(elevatedAllowed
+      ? {
+          elevated: {
+            allowed: true,
+            defaultLevel: bashElevated?.defaultLevel ?? "off",
+          },
+        }
+      : {}),
   };
 }
 
@@ -762,8 +789,8 @@ export async function compactEmbeddedPiSession(params: {
       const provider =
         (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
       const modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-      await ensureClawdbotModelsJson(params.config);
       const agentDir = params.agentDir ?? resolveClawdbotAgentDir();
+      await ensureClawdbotModelsJson(params.config, agentDir);
       const { model, error, authStorage, modelRegistry } = resolveModel(
         provider,
         modelId,
@@ -876,7 +903,10 @@ export async function compactEmbeddedPiSession(params: {
           provider: runtimeProvider,
           capabilities: runtimeCapabilities,
         };
-        const sandboxInfo = buildEmbeddedSandboxInfo(sandbox);
+        const sandboxInfo = buildEmbeddedSandboxInfo(
+          sandbox,
+          params.bashElevated,
+        );
         const reasoningTagHint = provider === "ollama";
         const userTimezone = resolveUserTimezone(
           params.config?.agents?.defaults?.userTimezone,
@@ -1008,6 +1038,8 @@ export async function runEmbeddedPiAgent(params: {
   config?: ClawdbotConfig;
   skillsSnapshot?: SkillSnapshot;
   prompt: string;
+  /** Optional image attachments for multimodal messages. */
+  images?: ImageContent[];
   provider?: string;
   model?: string;
   authProfileId?: string;
@@ -1065,8 +1097,8 @@ export async function runEmbeddedPiAgent(params: {
       const provider =
         (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
       const modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-      await ensureClawdbotModelsJson(params.config);
       const agentDir = params.agentDir ?? resolveClawdbotAgentDir();
+      await ensureClawdbotModelsJson(params.config, agentDir);
       const { model, error, authStorage, modelRegistry } = resolveModel(
         provider,
         modelId,
@@ -1251,7 +1283,10 @@ export async function runEmbeddedPiAgent(params: {
             node: process.version,
             model: `${provider}/${modelId}`,
           };
-          const sandboxInfo = buildEmbeddedSandboxInfo(sandbox);
+          const sandboxInfo = buildEmbeddedSandboxInfo(
+            sandbox,
+            params.bashElevated,
+          );
           const reasoningTagHint = provider === "ollama";
           const userTimezone = resolveUserTimezone(
             params.config?.agents?.defaults?.userTimezone,
@@ -1433,7 +1468,9 @@ export async function runEmbeddedPiAgent(params: {
               `embedded run prompt start: runId=${params.runId} sessionId=${params.sessionId}`,
             );
             try {
-              await session.prompt(params.prompt);
+              await session.prompt(params.prompt, {
+                images: params.images,
+              });
             } catch (err) {
               promptError = err;
             } finally {
@@ -1592,7 +1629,10 @@ export async function runEmbeddedPiAgent(params: {
               const message =
                 lastAssistant?.errorMessage?.trim() ||
                 (lastAssistant
-                  ? formatAssistantErrorText(lastAssistant)
+                  ? formatAssistantErrorText(lastAssistant, {
+                      cfg: params.config,
+                      sessionKey: params.sessionKey ?? params.sessionId,
+                    })
                   : "") ||
                 (timedOut
                   ? "LLM request timed out."
@@ -1633,7 +1673,10 @@ export async function runEmbeddedPiAgent(params: {
           }> = [];
 
           const errorText = lastAssistant
-            ? formatAssistantErrorText(lastAssistant)
+            ? formatAssistantErrorText(lastAssistant, {
+                cfg: params.config,
+                sessionKey: params.sessionKey ?? params.sessionId,
+              })
             : undefined;
 
           if (errorText) replyItems.push({ text: errorText, isError: true });

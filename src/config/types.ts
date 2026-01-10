@@ -22,6 +22,12 @@ export type BlockStreamingCoalesceConfig = {
   idleMs?: number;
 };
 
+export type BlockStreamingChunkConfig = {
+  minChars?: number;
+  maxChars?: number;
+  breakPreference?: "paragraph" | "newline" | "sentence";
+};
+
 export type HumanDelayConfig = {
   /** Delay style for block replies (off|natural|custom). */
   mode?: "off" | "natural" | "custom";
@@ -145,6 +151,8 @@ export type WhatsAppConfig = {
    * - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
    */
   groupPolicy?: GroupPolicy;
+  /** Max group messages to keep as history context (0 disables). */
+  historyLimit?: number;
   /** Outbound text chunk size (chars). Default: 4000. */
   textChunkLimit?: number;
   /** Maximum media file size in MB. Default: 50. */
@@ -181,6 +189,8 @@ export type WhatsAppAccountConfig = {
   allowFrom?: string[];
   groupAllowFrom?: string[];
   groupPolicy?: GroupPolicy;
+  /** Max group messages to keep as history context (0 disables). */
+  historyLimit?: number;
   textChunkLimit?: number;
   mediaMaxMb?: number;
   blockStreaming?: boolean;
@@ -287,6 +297,8 @@ export type HooksGmailConfig = {
   tailscale?: {
     mode?: HooksGmailTailscaleMode;
     path?: string;
+    /** Optional tailscale serve/funnel target (port, host:port, or full URL). */
+    target?: string;
   };
   /** Optional model override for Gmail hook processing (provider/model or alias). */
   model?: string;
@@ -341,10 +353,14 @@ export type TelegramAccountConfig = {
    * - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
    */
   groupPolicy?: GroupPolicy;
+  /** Max group messages to keep as history context (0 disables). */
+  historyLimit?: number;
   /** Outbound text chunk size (chars). Default: 4000. */
   textChunkLimit?: number;
   /** Disable block streaming for this account. */
   blockStreaming?: boolean;
+  /** Chunking config for draft streaming in `streamMode: "block"`. */
+  draftChunk?: BlockStreamingChunkConfig;
   /** Merge streamed block replies before sending. */
   blockStreamingCoalesce?: BlockStreamingCoalesceConfig;
   /** Draft streaming mode for Telegram (off|partial|block). Default: partial. */
@@ -576,6 +592,8 @@ export type SlackAccountConfig = {
    * - "allowlist": only allow channels present in slack.channels
    */
   groupPolicy?: GroupPolicy;
+  /** Max channel messages to keep as history context (0 disables). */
+  historyLimit?: number;
   textChunkLimit?: number;
   blockStreaming?: boolean;
   /** Merge streamed block replies before sending. */
@@ -633,6 +651,8 @@ export type SignalAccountConfig = {
    * - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
    */
   groupPolicy?: GroupPolicy;
+  /** Max group messages to keep as history context (0 disables). */
+  historyLimit?: number;
   /** Outbound text chunk size (chars). Default: 4000. */
   textChunkLimit?: number;
   blockStreaming?: boolean;
@@ -706,6 +726,8 @@ export type MSTeamsConfig = {
   mediaAllowHosts?: Array<string>;
   /** Default: require @mention to respond in channels/groups. */
   requireMention?: boolean;
+  /** Max group/channel messages to keep as history context (0 disables). */
+  historyLimit?: number;
   /** Default reply style: "thread" replies to the message, "top-level" posts a new message. */
   replyStyle?: MSTeamsReplyStyle;
   /** Per-team config. Key is team ID (from the /team/ URL path segment). */
@@ -740,6 +762,8 @@ export type IMessageAccountConfig = {
    * - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
    */
   groupPolicy?: GroupPolicy;
+  /** Max group messages to keep as history context (0 disables). */
+  historyLimit?: number;
   /** Include attachments + reactions in watch payloads. */
   includeAttachments?: boolean;
   /** Max outbound media size in MB. */
@@ -1318,11 +1342,7 @@ export type AgentDefaultsConfig = {
    */
   blockStreamingBreak?: "text_end" | "message_end";
   /** Soft block chunking for streamed replies (min/max chars, prefer paragraph/newline). */
-  blockStreamingChunk?: {
-    minChars?: number;
-    maxChars?: number;
-    breakPreference?: "paragraph" | "newline" | "sentence";
-  };
+  blockStreamingChunk?: BlockStreamingChunkConfig;
   /**
    * Block reply coalescing (merge streamed chunks before send).
    * idleMs: wait time before flushing when idle.

@@ -103,6 +103,18 @@ const BlockStreamingCoalesceSchema = z.object({
   idleMs: z.number().int().nonnegative().optional(),
 });
 
+const BlockStreamingChunkSchema = z.object({
+  minChars: z.number().int().positive().optional(),
+  maxChars: z.number().int().positive().optional(),
+  breakPreference: z
+    .union([
+      z.literal("paragraph"),
+      z.literal("newline"),
+      z.literal("sentence"),
+    ])
+    .optional(),
+});
+
 const HumanDelaySchema = z.object({
   mode: z
     .union([z.literal("off"), z.literal("natural"), z.literal("custom")])
@@ -205,8 +217,10 @@ const TelegramAccountSchemaBase = z.object({
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupPolicy: GroupPolicySchema.optional().default("open"),
+  historyLimit: z.number().int().min(0).optional(),
   textChunkLimit: z.number().int().positive().optional(),
   blockStreaming: z.boolean().optional(),
+  draftChunk: BlockStreamingChunkSchema.optional(),
   blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
   streamMode: z.enum(["off", "partial", "block"]).optional().default("partial"),
   mediaMaxMb: z.number().positive().optional(),
@@ -292,12 +306,12 @@ const DiscordAccountSchema = z.object({
   enabled: z.boolean().optional(),
   token: z.string().optional(),
   groupPolicy: GroupPolicySchema.optional().default("open"),
+  historyLimit: z.number().int().min(0).optional(),
   textChunkLimit: z.number().int().positive().optional(),
   blockStreaming: z.boolean().optional(),
   blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
   maxLinesPerMessage: z.number().int().positive().optional(),
   mediaMaxMb: z.number().positive().optional(),
-  historyLimit: z.number().int().min(0).optional(),
   retry: RetryConfigSchema,
   actions: z
     .object({
@@ -364,6 +378,7 @@ const SlackAccountSchema = z.object({
   appToken: z.string().optional(),
   allowBots: z.boolean().optional(),
   groupPolicy: GroupPolicySchema.optional().default("open"),
+  historyLimit: z.number().int().min(0).optional(),
   textChunkLimit: z.number().int().positive().optional(),
   blockStreaming: z.boolean().optional(),
   blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
@@ -417,6 +432,7 @@ const SignalAccountSchemaBase = z.object({
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupPolicy: GroupPolicySchema.optional().default("open"),
+  historyLimit: z.number().int().min(0).optional(),
   textChunkLimit: z.number().int().positive().optional(),
   blockStreaming: z.boolean().optional(),
   blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
@@ -464,6 +480,7 @@ const IMessageAccountSchemaBase = z.object({
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupPolicy: GroupPolicySchema.optional().default("open"),
+  historyLimit: z.number().int().min(0).optional(),
   includeAttachments: z.boolean().optional(),
   mediaMaxMb: z.number().int().positive().optional(),
   textChunkLimit: z.number().int().positive().optional(),
@@ -537,6 +554,7 @@ const MSTeamsConfigSchema = z
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     mediaAllowHosts: z.array(z.string()).optional(),
     requireMention: z.boolean().optional(),
+    historyLimit: z.number().int().min(0).optional(),
     replyStyle: MSTeamsReplyStyleSchema.optional(),
     teams: z.record(z.string(), MSTeamsTeamSchema.optional()).optional(),
   })
@@ -944,6 +962,7 @@ const HooksGmailSchema = z
           .union([z.literal("off"), z.literal("serve"), z.literal("funnel")])
           .optional(),
         path: z.string().optional(),
+        target: z.string().optional(),
       })
       .optional(),
     model: z.string().optional(),
@@ -1038,19 +1057,7 @@ const AgentDefaultsSchema = z
     blockStreamingBreak: z
       .union([z.literal("text_end"), z.literal("message_end")])
       .optional(),
-    blockStreamingChunk: z
-      .object({
-        minChars: z.number().int().positive().optional(),
-        maxChars: z.number().int().positive().optional(),
-        breakPreference: z
-          .union([
-            z.literal("paragraph"),
-            z.literal("newline"),
-            z.literal("sentence"),
-          ])
-          .optional(),
-      })
-      .optional(),
+    blockStreamingChunk: BlockStreamingChunkSchema.optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     humanDelay: HumanDelaySchema.optional(),
     timeoutSeconds: z.number().int().positive().optional(),
@@ -1285,6 +1292,7 @@ export const ClawdbotSchema = z
                 allowFrom: z.array(z.string()).optional(),
                 groupAllowFrom: z.array(z.string()).optional(),
                 groupPolicy: GroupPolicySchema.optional().default("open"),
+                historyLimit: z.number().int().min(0).optional(),
                 textChunkLimit: z.number().int().positive().optional(),
                 mediaMaxMb: z.number().int().positive().optional(),
                 blockStreaming: z.boolean().optional(),
@@ -1323,6 +1331,7 @@ export const ClawdbotSchema = z
         allowFrom: z.array(z.string()).optional(),
         groupAllowFrom: z.array(z.string()).optional(),
         groupPolicy: GroupPolicySchema.optional().default("open"),
+        historyLimit: z.number().int().min(0).optional(),
         textChunkLimit: z.number().int().positive().optional(),
         mediaMaxMb: z.number().int().positive().optional().default(50),
         blockStreaming: z.boolean().optional(),

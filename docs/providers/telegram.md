@@ -78,6 +78,7 @@ group messages, so use admin if you need full visibility.
 ## Limits
 - Outbound text is chunked to `telegram.textChunkLimit` (default 4000).
 - Media downloads/uploads are capped by `telegram.mediaMaxMb` (default 5).
+- Group history context uses `telegram.historyLimit` (or `telegram.accounts.*.historyLimit`), falling back to `messages.groupChat.historyLimit`. Set `0` to disable (default 50).
 
 ## Group activation modes
 
@@ -209,6 +210,9 @@ Config:
   - `partial`: update the draft bubble with the latest streaming text.
   - `block`: update the draft bubble in larger blocks (chunked).
   - `off`: disable draft streaming.
+- Optional (only for `streamMode: "block"`):
+  - `telegram.draftChunk: { minChars?, maxChars?, breakPreference? }`
+    - defaults: `minChars: 200`, `maxChars: 800`, `breakPreference: "paragraph"` (clamped to `telegram.textChunkLimit`).
 
 Note: draft streaming is separate from **block streaming** (provider messages).
 Block streaming is off by default and requires `telegram.blockStreaming: true`

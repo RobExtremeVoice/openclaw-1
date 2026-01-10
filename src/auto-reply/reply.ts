@@ -15,7 +15,10 @@ import {
   isEmbeddedPiRunStreaming,
   resolveEmbeddedSessionLane,
 } from "../agents/pi-embedded.js";
-import { ensureSandboxWorkspaceForSession } from "../agents/sandbox.js";
+import {
+  ensureSandboxWorkspaceForSession,
+  resolveSandboxRuntimeStatus,
+} from "../agents/sandbox.js";
 import { resolveAgentTimeoutMs } from "../agents/timeout.js";
 import {
   DEFAULT_AGENT_WORKSPACE_DIR,
@@ -216,15 +219,30 @@ function resolveElevatedPermissions(params: {
   agentId: string;
   ctx: MsgContext;
   provider: string;
-}): { enabled: boolean; allowed: boolean } {
+}): {
+  enabled: boolean;
+  allowed: boolean;
+  failures: Array<{ gate: string; key: string }>;
+} {
   const globalConfig = params.cfg.tools?.elevated;
   const agentConfig = resolveAgentConfig(params.cfg, params.agentId)?.tools
     ?.elevated;
   const globalEnabled = globalConfig?.enabled !== false;
   const agentEnabled = agentConfig?.enabled !== false;
   const enabled = globalEnabled && agentEnabled;
-  if (!enabled) return { enabled, allowed: false };
-  if (!params.provider) return { enabled, allowed: false };
+  const failures: Array<{ gate: string; key: string }> = [];
+  if (!globalEnabled)
+    failures.push({ gate: "enabled", key: "tools.elevated.enabled" });
+  if (!agentEnabled)
+    failures.push({
+      gate: "enabled",
+      key: "agents.list[].tools.elevated.enabled",
+    });
+  if (!enabled) return { enabled, allowed: false, failures };
+  if (!params.provider) {
+    failures.push({ gate: "provider", key: "ctx.Provider" });
+    return { enabled, allowed: false, failures };
+  }
 
   const discordFallback =
     params.provider === "discord"
@@ -236,7 +254,16 @@ function resolveElevatedPermissions(params: {
     allowFrom: globalConfig?.allowFrom,
     discordFallback,
   });
-  if (!globalAllowed) return { enabled, allowed: false };
+  if (!globalAllowed) {
+    failures.push({
+      gate: "allowFrom",
+      key:
+        params.provider === "discord" && discordFallback
+          ? "tools.elevated.allowFrom.discord (or discord.dm.allowFrom fallback)"
+          : `tools.elevated.allowFrom.${params.provider}`,
+    });
+    return { enabled, allowed: false, failures };
+  }
 
   const agentAllowed = agentConfig?.allowFrom
     ? isApprovedElevatedSender({
@@ -245,7 +272,44 @@ function resolveElevatedPermissions(params: {
         allowFrom: agentConfig.allowFrom,
       })
     : true;
-  return { enabled, allowed: globalAllowed && agentAllowed };
+  if (!agentAllowed) {
+    failures.push({
+      gate: "allowFrom",
+      key: `agents.list[].tools.elevated.allowFrom.${params.provider}`,
+    });
+  }
+  return { enabled, allowed: globalAllowed && agentAllowed, failures };
+}
+
+function formatElevatedUnavailableMessage(params: {
+  runtimeSandboxed: boolean;
+  failures: Array<{ gate: string; key: string }>;
+  sessionKey?: string;
+}): string {
+  const lines: string[] = [];
+  lines.push(
+    `elevated is not available right now (runtime=${params.runtimeSandboxed ? "sandboxed" : "direct"}).`,
+  );
+  if (params.failures.length > 0) {
+    lines.push(
+      `Failing gates: ${params.failures
+        .map((f) => `${f.gate} (${f.key})`)
+        .join(", ")}`,
+    );
+  } else {
+    lines.push(
+      "Failing gates: enabled (tools.elevated.enabled / agents.list[].tools.elevated.enabled), allowFrom (tools.elevated.allowFrom.<provider>).",
+    );
+  }
+  lines.push("Fix-it keys:");
+  lines.push("- tools.elevated.enabled");
+  lines.push("- tools.elevated.allowFrom.<provider>");
+  lines.push("- agents.list[].tools.elevated.enabled");
+  lines.push("- agents.list[].tools.elevated.allowFrom.<provider>");
+  if (params.sessionKey) {
+    lines.push(`See: clawdbot sandbox explain --session ${params.sessionKey}`);
+  }
+  return lines.join("\n");
 }
 
 export async function getReplyFromConfig(
@@ -340,10 +404,14 @@ export async function getReplyFromConfig(
     triggerBodyNormalized,
   } = sessionState;
 
-  // Prefer RawBody (clean message without structural context) for directive parsing.
+  // Prefer CommandBody/RawBody (clean message without structural context) for directive parsing.
   // Keep `Body`/`BodyStripped` as the best-available prompt text (may include context).
-  const rawBody =
-    sessionCtx.RawBody ?? sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
+  const commandSource =
+    sessionCtx.CommandBody ??
+    sessionCtx.RawBody ??
+    sessionCtx.BodyStripped ??
+    sessionCtx.Body ??
+    "";
   const clearInlineDirectives = (cleaned: string): InlineDirectives => ({
     cleaned,
     hasThinkDirective: false,
@@ -382,7 +450,7 @@ export async function getReplyFromConfig(
     .map((entry) => entry.alias?.trim())
     .filter((alias): alias is string => Boolean(alias))
     .filter((alias) => !reservedCommands.has(alias.toLowerCase()));
-  let parsedDirectives = parseInlineDirectives(rawBody, {
+  let parsedDirectives = parseInlineDirectives(commandSource, {
     modelAliases: configuredAliases,
   });
   if (
@@ -436,7 +504,7 @@ export async function getReplyFromConfig(
   const existingBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
   const cleanedBody = (() => {
     if (!existingBody) return parsedDirectives.cleaned;
-    if (!sessionCtx.RawBody) {
+    if (!sessionCtx.CommandBody && !sessionCtx.RawBody) {
       return parseInlineDirectives(existingBody, {
         modelAliases: configuredAliases,
       }).cleaned;
@@ -469,19 +537,31 @@ export async function getReplyFromConfig(
     sessionCtx.Provider?.trim().toLowerCase() ??
     ctx.Provider?.trim().toLowerCase() ??
     "";
-  const { enabled: elevatedEnabled, allowed: elevatedAllowed } =
-    resolveElevatedPermissions({
-      cfg,
-      agentId,
-      ctx,
-      provider: messageProviderKey,
-    });
+  const elevated = resolveElevatedPermissions({
+    cfg,
+    agentId,
+    ctx,
+    provider: messageProviderKey,
+  });
+  const elevatedEnabled = elevated.enabled;
+  const elevatedAllowed = elevated.allowed;
+  const elevatedFailures = elevated.failures;
   if (
     directives.hasElevatedDirective &&
     (!elevatedEnabled || !elevatedAllowed)
   ) {
     typing.cleanup();
-    return { text: "elevated is not available right now." };
+    const runtimeSandboxed = resolveSandboxRuntimeStatus({
+      cfg,
+      sessionKey: ctx.SessionKey,
+    }).sandboxed;
+    return {
+      text: formatElevatedUnavailableMessage({
+        runtimeSandboxed,
+        failures: elevatedFailures,
+        sessionKey: ctx.SessionKey,
+      }),
+    };
   }
 
   const requireMention = resolveGroupRequireMention({
@@ -617,6 +697,8 @@ export async function getReplyFromConfig(
       storePath,
       elevatedEnabled,
       elevatedAllowed,
+      elevatedFailures,
+      messageProviderKey,
       defaultProvider,
       defaultModel,
       aliasIndex,
@@ -786,14 +868,19 @@ export async function getReplyFromConfig(
     .filter(Boolean)
     .join("\n\n");
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
-  // Use RawBody for bare reset detection (clean message without structural context).
-  const rawBodyTrimmed = (ctx.RawBody ?? ctx.Body ?? "").trim();
+  // Use CommandBody/RawBody for bare reset detection (clean message without structural context).
+  const rawBodyTrimmed = (
+    ctx.CommandBody ??
+    ctx.RawBody ??
+    ctx.Body ??
+    ""
+  ).trim();
   const baseBodyTrimmedRaw = baseBody.trim();
   if (
     allowTextCommands &&
     !commandAuthorized &&
     !baseBodyTrimmedRaw &&
-    hasControlCommand(rawBody)
+    hasControlCommand(commandSource)
   ) {
     typing.cleanup();
     return undefined;
@@ -863,18 +950,18 @@ export async function getReplyFromConfig(
   const mediaReplyHint = mediaNote
     ? "To send an image back, add a line like: MEDIA:https://example.com/image.jpg (no spaces). Keep caption in the text body."
     : undefined;
-  let commandBody = mediaNote
+  let prefixedCommandBody = mediaNote
     ? [mediaNote, mediaReplyHint, prefixedBody ?? ""]
         .filter(Boolean)
         .join("\n")
         .trim()
     : prefixedBody;
-  if (!resolvedThinkLevel && commandBody) {
-    const parts = commandBody.split(/\s+/);
+  if (!resolvedThinkLevel && prefixedCommandBody) {
+    const parts = prefixedCommandBody.split(/\s+/);
     const maybeLevel = normalizeThinkLevel(parts[0]);
     if (maybeLevel) {
       resolvedThinkLevel = maybeLevel;
-      commandBody = parts.slice(1).join(" ").trim();
+      prefixedCommandBody = parts.slice(1).join(" ").trim();
     }
   }
   if (!resolvedThinkLevel) {
@@ -968,7 +1055,7 @@ export async function getReplyFromConfig(
   }
 
   return runReplyAgent({
-    commandBody,
+    commandBody: prefixedCommandBody,
     followupRun,
     queueKey,
     resolvedQueue,

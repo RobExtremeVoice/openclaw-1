@@ -556,7 +556,7 @@ describe("trigger handling", () => {
         cfg,
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toBe("elevated is not available right now.");
+      expect(text).toContain("tools.elevated.enabled");
 
       const storeRaw = await fs.readFile(cfg.session.store, "utf-8");
       const store = JSON.parse(storeRaw) as Record<
@@ -795,7 +795,7 @@ describe("trigger handling", () => {
         cfg,
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).not.toBe("elevated is not available right now.");
+      expect(text).not.toContain("elevated is not available right now");
       expect(runEmbeddedPiAgent).toHaveBeenCalled();
     });
   });
@@ -876,7 +876,7 @@ describe("trigger handling", () => {
         cfg,
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
-      expect(text).toBe("elevated is not available right now.");
+      expect(text).toContain("tools.elevated.allowFrom.discord");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -1517,7 +1517,7 @@ describe("group intro prompts", () => {
         vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0]
           ?.extraSystemPrompt ?? "";
       expect(extraSystemPrompt).toBe(
-        `You are replying inside the WhatsApp group "Ops". Activation: trigger-only (you are invoked only when explicitly mentioned; recent context may be included). ${groupParticipationNote} Address the specific sender noted in the message context.`,
+        `You are replying inside the WhatsApp group "Ops". Activation: trigger-only (you are invoked only when explicitly mentioned; recent context may be included). WhatsApp IDs: SenderId is the participant JID; [message_id: ...] is the message id for reactions (use SenderId as participant). ${groupParticipationNote} Address the specific sender noted in the message context.`,
       );
     });
   });
