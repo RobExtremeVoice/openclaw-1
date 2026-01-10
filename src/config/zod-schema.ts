@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { parseDurationMs } from "../cli/parse-duration.js";
 import { isSafeExecutableValue } from "../infra/exec-safety.js";
+import { VoiceCallConfigSchema } from "../voice-call/config.js";
 
 const ModelApiSchema = z.union([
   z.literal("openai-completions"),
@@ -1442,6 +1443,7 @@ export const ClawdbotSchema = z
           .optional(),
       })
       .optional(),
+    voiceCall: VoiceCallConfigSchema.optional(),
     whatsapp: z
       .object({
         accounts: z

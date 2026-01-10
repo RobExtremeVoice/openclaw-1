@@ -125,6 +125,10 @@ import {
   isGatewayCliClient,
   isWebchatClient,
 } from "../utils/message-provider.js";
+import {
+  getVoiceCallRuntime,
+  stopVoiceCallRuntime,
+} from "../voice-call/runtime.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import type { WizardSession } from "../wizard/session.js";
 import {
@@ -267,6 +271,11 @@ const BASE_METHODS = [
   "update.run",
   "voicewake.get",
   "voicewake.set",
+  "voicecall.initiate",
+  "voicecall.continue",
+  "voicecall.speak",
+  "voicecall.end",
+  "voicecall.status",
   "sessions.list",
   "sessions.patch",
   "sessions.reset",
@@ -1944,6 +1953,16 @@ export async function startGatewayServer(
     log.warn(`plugin services failed to start: ${String(err)}`);
   }
 
+  // Start voice-call webhook server if enabled (must be running before inbound calls arrive)
+  if (cfgAtStart.voiceCall?.enabled) {
+    try {
+      await getVoiceCallRuntime();
+      log.info("[voice-call] webhook server started");
+    } catch (err) {
+      log.error(`[voice-call] startup failed: ${String(err)}`);
+    }
+  }
+
   const scheduleRestartSentinelWake = async () => {
     const sentinel = await consumeRestartSentinel();
     if (!sentinel) return;
@@ -2185,6 +2204,7 @@ export async function startGatewayServer(
         await pluginServices.stop().catch(() => {});
       }
       await stopGmailWatcher();
+      await stopVoiceCallRuntime().catch(() => {});
       cron.stop();
       heartbeatRunner.stop();
       for (const timer of nodePresenceTimers.values()) {

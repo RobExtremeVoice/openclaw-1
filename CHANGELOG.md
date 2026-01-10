@@ -127,6 +127,7 @@
 - CLI Backends: add Codex CLI fallback with resume support (text output) and JSONL parsing for new runs, plus a live CLI resume probe.
 - CLI: add `clawdbot update` (safe-ish git checkout update) + `--update` shorthand. (#673) — thanks @fm1randa.
 - Gateway: add OpenAI-compatible `/v1/chat/completions` HTTP endpoint (auth, SSE streaming, per-agent routing). (#680).
+- Voice Call: add call modes (`notify` vs `conversation`) with configurable auto-hangup delay; enforce `maxDurationSeconds` safety timer; `mode` parameter in `initiate_call` tool action. (#693)
 
 ### Changes
 - Onboarding/Models: add first-class Z.AI (GLM) auth choice (`zai-api-key`) + `--zai-api-key` flag.

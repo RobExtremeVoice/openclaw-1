@@ -62,6 +62,7 @@ import { registerSandboxCli } from "./sandbox-cli.js";
 import { registerSkillsCli } from "./skills-cli.js";
 import { registerTuiCli } from "./tui-cli.js";
 import { registerUpdateCli } from "./update-cli.js";
+import { registerVoiceCallCli } from "./voicecall-cli.js";
 
 export { forceFreePort };
 
@@ -1228,6 +1229,7 @@ ${theme.muted("Docs:")} ${formatDocsLink(
   registerProvidersCli(program);
   registerSkillsCli(program);
   registerUpdateCli(program);
+  registerVoiceCallCli(program);
   registerPluginCliCommands(program, loadConfig());
 
   program
