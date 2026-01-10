@@ -28,6 +28,7 @@ pnpm gateway:watch
   - Disable with `gateway.reload.mode="off"`.
 - Binds WebSocket control plane to `127.0.0.1:<port>` (default 18789).
 - The same port also serves HTTP (control UI, hooks, A2UI). Single-port multiplex.
+  - OpenAI Chat Completions (HTTP): [`/v1/chat/completions`](/gateway/openai-http-api).
 - Starts a Canvas file server by default on `canvasHost.port` (default `18793`), serving `http://<gateway-host>:18793/__clawdbot__/canvas/` from `~/clawd/canvas`. Disable with `canvasHost.enabled=false` or `CLAWDBOT_SKIP_CANVAS_HOST=1`.
 - Logs to stdout; use launchd/systemd to keep it alive and rotate logs.
 - Pass `--verbose` to mirror debug logging (handshakes, req/res, events) from the log file into stdio when troubleshooting.
@@ -111,7 +112,7 @@ CLAWDBOT_CONFIG_PATH=~/.clawdbot/b.json CLAWDBOT_STATE_DIR=~/.clawdbot-b clawdbo
 - `node.invoke` — invoke a command on a node (e.g. `canvas.*`, `camera.*`).
 - `node.pair.*` — pairing lifecycle (`request`, `list`, `approve`, `reject`, `verify`).
 
-See also: [`docs/presence.md`](/concepts/presence) for how presence is produced/deduped and why `instanceId` matters.
+See also: [Presence](/concepts/presence) for how presence is produced/deduped and why `instanceId` matters.
 
 ## Events
 - `agent` — streamed tool/output events from the agent run (seq-tagged).

@@ -479,6 +479,10 @@ type EmbeddedSandboxInfo = {
   agentWorkspaceMount?: string;
   browserControlUrl?: string;
   browserNoVncUrl?: string;
+  elevated?: {
+    allowed: boolean;
+    defaultLevel: "on" | "off";
+  };
 };
 
 function resolveSessionLane(key: string) {
@@ -552,8 +556,12 @@ function describeUnknownError(error: unknown): string {
 
 export function buildEmbeddedSandboxInfo(
   sandbox?: Awaited<ReturnType<typeof resolveSandboxContext>>,
+  bashElevated?: BashElevatedDefaults,
 ): EmbeddedSandboxInfo | undefined {
   if (!sandbox?.enabled) return undefined;
+  const elevatedAllowed = Boolean(
+    bashElevated?.enabled && bashElevated.allowed,
+  );
   return {
     enabled: true,
     workspaceDir: sandbox.workspaceDir,
@@ -562,12 +570,21 @@ export function buildEmbeddedSandboxInfo(
       sandbox.workspaceAccess === "ro" ? "/agent" : undefined,
     browserControlUrl: sandbox.browser?.controlUrl,
     browserNoVncUrl: sandbox.browser?.noVncUrl,
+    ...(elevatedAllowed
+      ? {
+          elevated: {
+            allowed: true,
+            defaultLevel: bashElevated?.defaultLevel ?? "off",
+          },
+        }
+      : {}),
   };
 }
 
 function buildEmbeddedSystemPrompt(params: {
   workspaceDir: string;
   defaultThinkLevel?: ThinkLevel;
+  reasoningLevel?: ReasoningLevel;
   extraSystemPrompt?: string;
   ownerNumbers?: string[];
   reasoningTagHint: boolean;
@@ -592,6 +609,7 @@ function buildEmbeddedSystemPrompt(params: {
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
     defaultThinkLevel: params.defaultThinkLevel,
+    reasoningLevel: params.reasoningLevel,
     extraSystemPrompt: params.extraSystemPrompt,
     ownerNumbers: params.ownerNumbers,
     reasoningTagHint: params.reasoningTagHint,
@@ -751,6 +769,7 @@ export async function compactEmbeddedPiSession(params: {
   provider?: string;
   model?: string;
   thinkLevel?: ThinkLevel;
+  reasoningLevel?: ReasoningLevel;
   bashElevated?: BashElevatedDefaults;
   customInstructions?: string;
   lane?: string;
@@ -887,7 +906,10 @@ export async function compactEmbeddedPiSession(params: {
           provider: runtimeProvider,
           capabilities: runtimeCapabilities,
         };
-        const sandboxInfo = buildEmbeddedSandboxInfo(sandbox);
+        const sandboxInfo = buildEmbeddedSandboxInfo(
+          sandbox,
+          params.bashElevated,
+        );
         const reasoningTagHint = provider === "ollama";
         const userTimezone = resolveUserTimezone(
           params.config?.agents?.defaults?.userTimezone,
@@ -902,6 +924,7 @@ export async function compactEmbeddedPiSession(params: {
         const appendPrompt = buildEmbeddedSystemPrompt({
           workspaceDir: effectiveWorkspace,
           defaultThinkLevel: params.thinkLevel,
+          reasoningLevel: params.reasoningLevel ?? "off",
           extraSystemPrompt: params.extraSystemPrompt,
           ownerNumbers: params.ownerNumbers,
           reasoningTagHint,
@@ -1264,7 +1287,10 @@ export async function runEmbeddedPiAgent(params: {
             node: process.version,
             model: `${provider}/${modelId}`,
           };
-          const sandboxInfo = buildEmbeddedSandboxInfo(sandbox);
+          const sandboxInfo = buildEmbeddedSandboxInfo(
+            sandbox,
+            params.bashElevated,
+          );
           const reasoningTagHint = provider === "ollama";
           const userTimezone = resolveUserTimezone(
             params.config?.agents?.defaults?.userTimezone,
@@ -1279,6 +1305,7 @@ export async function runEmbeddedPiAgent(params: {
           const appendPrompt = buildEmbeddedSystemPrompt({
             workspaceDir: effectiveWorkspace,
             defaultThinkLevel: thinkLevel,
+            reasoningLevel: params.reasoningLevel ?? "off",
             extraSystemPrompt: params.extraSystemPrompt,
             ownerNumbers: params.ownerNumbers,
             reasoningTagHint,
