@@ -98,6 +98,60 @@ Full setup walkthrough (28m) by VelvetShark.
   <img src="/assets/showcase/wienerlinien.png" alt="Wiener Linien skill on ClawdHub" />
 </Card>
 
+<Card title="Telos Protocol (Self-Improving Agent)" icon="infinity">
+  **@Cash Williams** • `todoist` `self-improvement` `heartbeats`
+
+  Agent manages its own task queue in Todoist. During heartbeats, it generates improvement tasks, gets approval, then executes. Over 20 self-improvement tasks completed.
+</Card>
+
+<Card title="Media Manager (Sonarr/Radarr)" icon="film">
+  **@coard** • `media` `automation` `api`
+
+  Add TV shows and movies by name using Sonarr/Radarr APIs. Just give it a title and it handles the rest.
+</Card>
+
+<Card title="TradingView Analysis" icon="chart-line">
+  **@Bheem** • `trading` `browser` `analysis`
+
+  Logs into TradingView, grabs stock screenshots, and performs technical analysis on demand.
+</Card>
+
+<Card title="Knowledge Classification" icon="folder-tree">
+  **@jhillock** • `obsidian` `knowledge` `automation`
+
+  Automated pipeline that pulls notes, documents, files, and bookmarks, moves them into Obsidian vault, then classifies, organizes, tags, and relates them.
+</Card>
+
+<Card title="Self-Hosted Whisper (3090)" icon="server">
+  **@SweetAsDeals** • `transcription` `self-hosted` `gpu`
+
+  Clawd SSH'd into a garage server with a 3090 GPU, set up Whisper, and created its own API for fast local transcription.
+</Card>
+
+<Card title="iMessage Typing Indicator" icon="message">
+  **@svj** • `imessage` `bluebubbles` `ux`
+
+  Shows typing indicator in iMessage when Clawd is composing a reply. Works in group chats and DMs. Requires SIP disabled.
+</Card>
+
+<Card title="Multi-Instance Setup" icon="users">
+  **@dodeja_terminal49** • `multi-user` `deployment` `family`
+
+  Running multiple Clawdbot instances on the same machine. "Gave my wife her own clawd and they are scheming."
+</Card>
+
+<Card title="TastyTrade Options" icon="chart-candlestick">
+  **@Thoth** • `trading` `options` `tastytrade`
+
+  Generates trade ideas from watchlists using IVR and builds options strategies with Greeks analysis via TastyTrade OpenAPI.
+</Card>
+
+<Card title="Image-to-Video (Replicate)" icon="video">
+  **@Joscha Hoche** • `video` `replicate` `wan-2.5`
+
+  Clawd figured out how to use Replicate API to turn images into videos using Wan-2.5 model.
+</Card>
+
 </CardGroup>
 
 ## 🤖 Automation & Workflows
