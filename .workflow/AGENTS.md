@@ -15,7 +15,9 @@
 .claude/
 ├── CLAUDE.md               # Points here
 ├── settings.json           # Permissions and hooks
-├── commands/dev/           # Slash commands (dev:*)
+├── commands/
+│   ├── dev/                # Dev workflow commands (dev:*)
+│   └── build/              # Release build commands (build:*)
 ├── skills/                 # Auto-applied knowledge
 │   ├── writing-tests/      # TDD patterns
 │   ├── e2e-testing/        # E2E patterns
@@ -76,6 +78,7 @@
 .workflow/           # This workflow documentation
 .claude/             # Claude Code config (slash commands, hooks)
 scripts/setup-*.sh   # Local setup scripts
+scripts/daily-*.sh   # Daily build automation
 ```
 
 ---
@@ -188,6 +191,12 @@ git branch -D temp/test-pr-123
 | `/dev:commit "msg" files` | Safe commit via scripts/committer |
 | `/dev:help` | List all commands |
 
+### Release Builds
+| Command | Purpose |
+|---------|---------|
+| `/build:release [version]` | Build latest (or specific) release with hotfixes |
+| `/build:help` | Show build command help |
+
 ---
 
 ## Quality Standards
@@ -224,6 +233,58 @@ For external contributors, add thanks:
 
 ---
 
+## Release Builds
+
+Build upstream releases with local hotfixes applied automatically.
+
+### Quick Start
+
+```bash
+/build:release              # Build latest upstream release
+/build:release v2026.1.8    # Build specific version
+/build:help                 # Show all build commands
+```
+
+### Hotfix Convention
+
+Name branches `hotfix/*` to have them auto-applied during builds:
+
+```bash
+# Create a hotfix
+git checkout -b hotfix/my-fix
+# ... make changes, commit ...
+
+# Check status
+./scripts/release-fixes-status.sh
+
+# Build (hotfixes auto-apply)
+/build:release
+```
+
+Hotfixes are automatically skipped once merged upstream.
+
+### Build Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `./scripts/build-release.sh <version>` | Full build pipeline |
+| `./scripts/deploy-release.sh [path]` | Deploy to /Applications |
+| `./scripts/release-fixes-status.sh [target]` | Show hotfix status |
+| `./scripts/apply-release-fixes.sh [--dry-run]` | Apply hotfixes manually |
+
+### Build Artifacts
+
+- **Worktrees**: `.worktrees/<version>/` - isolated build directories
+- **Latest symlink**: `.local/latest` → most recent build worktree
+- **Built app**: `.worktrees/<version>/dist/Clawdbot.app`
+
+### Workflow
+
+1. **Build** (as petter): `./scripts/build-release.sh v2026.1.10`
+2. **Deploy** (as admin): `./scripts/deploy-release.sh` (uses `.local/latest`)
+
+---
+
 ## Multi-Agent Safety
 
 When multiple agents work in parallel:
@@ -235,6 +296,77 @@ When multiple agents work in parallel:
 | Don't force push | Destroys others' work |
 | Scope commits to your files | Avoid conflicts |
 | Use worktrees for isolation | `.worktrees/<agent>/` |
+
+---
+
+## Daily Builds
+
+Automated dual-architecture builds run daily at 06:00 to catch upstream regressions.
+
+### Architecture
+
+| Build | Platform | Script |
+|-------|----------|--------|
+| ARM (Apple Silicon) | Mac (local) | `scripts/daily-build.sh` |
+| x86 (matches CI) | k8s cluster | `scripts/daily-build-k8s.sh` |
+| E2E tests | k8s cluster | `scripts/daily-e2e-k8s.sh` |
+| **Orchestrator** | Mac → k8s | `scripts/daily-all.sh` |
+
+### Running Manually
+
+```bash
+# Full dual-architecture build (ARM + x86 in parallel)
+./scripts/daily-all.sh
+
+# ARM only (local)
+./scripts/daily-build.sh
+
+# x86 only (on k8s)
+./scripts/daily-build-k8s.sh
+
+# Include E2E tests after builds
+INCLUDE_E2E=1 ./scripts/daily-all.sh
+```
+
+### Checking Results
+
+```bash
+# Latest build logs
+ls -lt ~/.clawdbot/daily-builds/
+
+# Today's summary
+cat ~/.clawdbot/daily-builds/summary-$(date +%Y-%m-%d).log
+
+# ARM build log
+cat ~/.clawdbot/daily-builds/arm-$(date +%Y-%m-%d).log
+
+# x86 build log
+cat ~/.clawdbot/daily-builds/x86-$(date +%Y-%m-%d).log
+```
+
+### Scheduling (launchd)
+
+The daily build is scheduled via `~/Library/LaunchAgents/com.clawdbot.daily-build.plist`.
+
+```bash
+# Check status
+launchctl list | grep clawdbot
+
+# Manual trigger
+launchctl start com.clawdbot.daily-build
+
+# View output
+tail -f /tmp/clawdbot-daily-build.log
+```
+
+### If Build Fails
+
+1. Check which architecture failed (ARM vs x86)
+2. Read the relevant log in `~/.clawdbot/daily-builds/`
+3. Determine if it's:
+   - **Upstream regression** → Create issue or find existing
+   - **Local config issue** → Fix deployment
+   - **Flaky test** → Re-run to confirm
 
 ---
 

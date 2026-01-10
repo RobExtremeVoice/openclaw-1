@@ -1,0 +1,70 @@
+{
+  "_comment": "Registry of all Clawdbot instances. Edit to add/remove instances.",
+  "_docs": "Run ./scripts/clawdbot-status.sh to check all instances",
+
+  "instances": [
+    {
+      "id": "production",
+      "name": "Production (Mac)",
+      "environment": "production",
+      "platform": "mac",
+      "arch": "arm64",
+      "version": "installed",
+      "host": "localhost",
+      "port": 18789,
+      "healthEndpoint": "http://localhost:18789/health",
+      "logsCommand": "~/Projects/clawdbot/clawdbot/scripts/clawlog.sh --tail 30m",
+      "managedBy": "menubar-app",
+      "notes": "Primary production instance via Clawdbot.app"
+    }
+  ],
+
+  "_templates": {
+    "_comment": "Copy these to 'instances' array when you create new instances",
+
+    "dev-worktree": {
+      "id": "dev-BRANCH",
+      "name": "Dev (branch-name)",
+      "environment": "development",
+      "platform": "mac",
+      "arch": "arm64",
+      "version": "worktree",
+      "host": "localhost",
+      "port": 18790,
+      "healthEndpoint": "http://localhost:18790/health",
+      "logsCommand": "tail -100 ~/.clawdbot/dev.log",
+      "managedBy": "manual",
+      "notes": "Started from .worktrees/branch-name"
+    },
+
+    "k8s-staging": {
+      "id": "k8s-staging",
+      "name": "K8s Staging",
+      "environment": "staging",
+      "platform": "k8s",
+      "arch": "x86_64",
+      "version": "latest",
+      "host": "clawdbot-staging.clawdbot.svc.cluster.local",
+      "port": 8080,
+      "healthEndpoint": "http://clawdbot-staging.clawdbot.svc.cluster.local:8080/health",
+      "logsCommand": "kubectl -n clawdbot logs -l app=clawdbot-staging --tail=100",
+      "managedBy": "k8s-deployment",
+      "notes": "x86 staging instance"
+    },
+
+    "pr-test": {
+      "id": "pr-NUMBER",
+      "name": "PR #NUMBER Test",
+      "environment": "testing",
+      "platform": "mac",
+      "arch": "arm64",
+      "version": "pr/NUMBER",
+      "host": "localhost",
+      "port": 18791,
+      "healthEndpoint": "http://localhost:18791/health",
+      "logsCommand": "tail -100 ~/.clawdbot/pr-test.log",
+      "managedBy": "manual",
+      "notes": "Ephemeral instance for testing PR"
+    }
+  }
+}
