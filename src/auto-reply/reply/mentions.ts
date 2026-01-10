@@ -89,11 +89,13 @@ export function stripStructuralPrefixes(text: string): string {
   // detection still works in group batches that include history/context.
   const marker = "[Current message - respond to this]";
   const afterMarker = text.includes(marker)
-    ? text.slice(text.indexOf(marker) + marker.length)
+    ? text.slice(text.indexOf(marker) + marker.length).trimStart()
     : text;
+  
   return afterMarker
     .replace(/\[[^\]]+\]\s*/g, "")
     .replace(/^[ \t]*[A-Za-z0-9+()\-_. ]+:\s*/gm, "")
+    .replace(/\\n/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -105,9 +107,9 @@ export function stripMentions(
   agentId?: string,
 ): string {
   let result = text;
-  const patterns = normalizeMentionPatterns(
-    resolveMentionPatterns(cfg, agentId),
-  );
+  const rawPatterns = resolveMentionPatterns(cfg, agentId);
+  const patterns = normalizeMentionPatterns(rawPatterns);
+
   for (const p of patterns) {
     try {
       const re = new RegExp(p, "gi");

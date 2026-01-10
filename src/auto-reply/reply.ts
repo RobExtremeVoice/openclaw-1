@@ -336,7 +336,8 @@ export async function getReplyFromConfig(
     triggerBodyNormalized,
   } = sessionState;
 
-  const rawBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
+  // Prefer RawBody (clean message without structural context) for directive parsing.
+  const rawBody = sessionCtx.RawBody ?? sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
   const clearInlineDirectives = (cleaned: string): InlineDirectives => ({
     cleaned,
     hasThinkDirective: false,
@@ -750,7 +751,8 @@ export async function getReplyFromConfig(
     .filter(Boolean)
     .join("\n\n");
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
-  const rawBodyTrimmed = (ctx.Body ?? "").trim();
+  // Use RawBody for bare reset detection (clean message without structural context).
+  const rawBodyTrimmed = (ctx.RawBody ?? ctx.Body ?? "").trim();
   const baseBodyTrimmedRaw = baseBody.trim();
   if (
     allowTextCommands &&

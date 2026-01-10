@@ -125,11 +125,15 @@ export async function initSessionState(params: {
   const groupResolution = resolveGroupSessionKey(ctx) ?? undefined;
   const isGroup =
     ctx.ChatType?.trim().toLowerCase() === "group" || Boolean(groupResolution);
-  const triggerBodyNormalized = stripStructuralPrefixes(ctx.Body ?? "")
+  // Prefer RawBody (clean message) for command detection; fall back to Body
+  // which may contain structural context (history, sender labels).
+  const commandSource = ctx.RawBody ?? ctx.Body ?? "";
+  const triggerBodyNormalized = stripStructuralPrefixes(commandSource)
     .trim()
     .toLowerCase();
 
-  const rawBody = ctx.Body ?? "";
+  // Use RawBody for reset trigger matching (clean message without structural context).
+  const rawBody = ctx.RawBody ?? ctx.Body ?? "";
   const trimmedBody = rawBody.trim();
   const resetAuthorized = resolveCommandAuthorization({
     ctx,
@@ -273,7 +277,7 @@ export async function initSessionState(params: {
 
   const sessionCtx: TemplateContext = {
     ...ctx,
-    BodyStripped: bodyStripped ?? ctx.Body,
+    BodyStripped: bodyStripped ?? ctx.RawBody ?? ctx.Body,
     SessionId: sessionId,
     IsNewSession: isNewSession ? "true" : "false",
   };
