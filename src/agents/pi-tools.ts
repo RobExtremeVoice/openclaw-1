@@ -295,7 +295,7 @@ const OAUTH_BLOCKED_TOOL_NAMES: Record<string, string> = {
   edit: "Edit",
 };
 
-function renameBlockedToolsForOAuth(tools: AnyAgentTool[]): AnyAgentTool[] {
+function _renameBlockedToolsForOAuth(tools: AnyAgentTool[]): AnyAgentTool[] {
   return tools.map((tool) => {
     const newName = OAUTH_BLOCKED_TOOL_NAMES[tool.name];
     if (newName) {
@@ -658,5 +658,5 @@ export function createClawdbotCodingTools(options?: {
 
   // Anthropic blocks specific lowercase tool names (bash, read, write, edit) with OAuth tokens.
   // Always use capitalized versions for compatibility with both OAuth and regular API keys.
-  return renameBlockedToolsForOAuth(withAbort);
+  return _renameBlockedToolsForOAuth(withAbort);
 }
