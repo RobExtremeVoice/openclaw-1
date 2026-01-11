@@ -1,40 +1,20 @@
 # Infrastructure
 
-## Implemented
+## Worktrees
 
-### Git Worktree Setup
+`./scripts/setup-worktrees.sh [dir]` → creates `agent-{dev,test,review}` worktrees.
 
-```bash
-./scripts/setup-worktrees.sh              # Creates agent-dev, agent-test, agent-review
-./scripts/setup-worktrees.sh ~/sandboxes  # Custom location
-```
+## tmux
 
-Creates worktrees at `~/clawdbot-sandboxes/agent-{dev,test,review}` with deps installed.
+Socket: `${TMPDIR}/clawdbot-tmux-sockets/clawdbot.sock`
 
-**Cleanup**:
-```bash
-git worktree remove ~/clawdbot-sandboxes/agent-dev
-git worktree prune
-```
+## Daily Builds
 
-### tmux Sessions
-
-```bash
-SOCKET="${TMPDIR}/clawdbot-tmux-sockets/clawdbot.sock"
-mkdir -p "$(dirname "$SOCKET")"
-
-tmux -S "$SOCKET" new -d -s agent-dev -n main
-tmux -S "$SOCKET" list-sessions
-tmux -S "$SOCKET" attach -t agent-dev
-```
-
-### Daily Builds
-
-```bash
-./scripts/daily-all.sh                    # ARM + x86 parallel
-./scripts/daily-build.sh                  # ARM only (local)
-./scripts/daily-build-k8s.sh              # x86 only (k8s)
-```
+| Script | Target |
+|--------|--------|
+| `./scripts/daily-all.sh` | ARM + x86 parallel |
+| `./scripts/daily-build.sh` | ARM (local) |
+| `./scripts/daily-build-k8s.sh` | x86 (k8s) |
 
 Results: `~/.clawdbot/daily-builds/summary-$(date +%Y-%m-%d).log`
 
@@ -67,12 +47,10 @@ Results: `~/.clawdbot/daily-builds/summary-$(date +%Y-%m-%d).log`
 ## Troubleshooting
 
 ```bash
-pgrep -f clawdbot && pkill -f clawdbot    # Stuck processes
-lsof -i :8080                             # Port conflicts
-git worktree list                         # Worktree issues
-pnpm format                               # Lint auto-fix
-tailscale status                          # Network check
-ls -la ${TMPDIR}/clawdbot-tmux-sockets/   # tmux sockets
-tmux -S $SOCKET kill-server               # Reset tmux
+pgrep -f clawdbot && pkill -f clawdbot
+lsof -i :8080
+git worktree list && git worktree prune
+tailscale status
+tmux -S $SOCKET kill-server
 ```
 

@@ -10,30 +10,7 @@
 
 ---
 
-## Structure
-
-```
-.workflow/
-├── AGENTS.md                    # This file
-├── signals/                     # Drop issues/ideas here
-└── automation/
-    ├── agent-automation.md      # Claude Code config
-    └── infrastructure.md        # Worktrees, tmux, daily builds
-
-.claude/
-├── commands/dev/                # /dev:* commands
-├── commands/build/              # /build:* commands
-├── skills/                      # writing-tests, e2e-testing, reviewing-code
-└── hooks/pre-bash.sh            # Safety validation
-```
-
-**Dev-only** (never push to fork/upstream): `.workflow/`, `.claude/`, `scripts/setup-*.sh`, `scripts/daily-*.sh`
-
----
-
-## Git Remotes
-
-`dev` (private) → `fork` (public) → `upstream` (target)
+**Dev-only** (never push): `.workflow/`, `.claude/`, `scripts/setup-*.sh`, `scripts/daily-*.sh`
 
 ---
 
@@ -54,94 +31,33 @@ Run `/dev:help` for full list.
 
 ## Upstream Contributions
 
-### Fix an Issue
-
-```bash
-git fetch upstream && git checkout -b pr/fix-123 upstream/main
-/dev:tdd red "description"
-/dev:tdd green
-/dev:gate
-scripts/committer "fix: description (#123)" <files>
-git push fork pr/fix-123
-gh pr create --repo clawdbot/clawdbot --base main --head petter-b:pr/fix-123
-```
-
-### Review a PR
-
-```bash
-gh pr view 123 --repo clawdbot/clawdbot
-gh pr diff 123 --repo clawdbot/clawdbot
-# Do NOT checkout - read-only review
-```
-
-### Test a PR
-
-```bash
-git checkout -b temp/test-123 main
-gh pr checkout 123 --repo clawdbot/clawdbot
-/dev:gate && /dev:e2e
-git checkout main && git branch -D temp/test-123
-```
+| Task | Command |
+|------|---------|
+| Fix issue | `/dev:fix-issue 123` |
+| Review PR | `/dev:pr-review 123` |
+| Test PR | `/dev:pr-test 123` |
 
 ---
 
-## Release Builds
+## Builds
 
-```bash
-/build:release              # Latest with hotfixes
-/build:release v2026.1.8    # Specific version
-./scripts/release-fixes-status.sh  # Check hotfix status
-```
+| Task | Command |
+|------|---------|
+| Release | `/build:release [ver]` |
+| Hotfix status | `./scripts/release-fixes-status.sh` |
+| Daily (ARM+x86) | `./scripts/daily-all.sh` |
 
-**Hotfix convention**: Name branches `hotfix/*` → auto-applied during builds, auto-skipped when merged upstream.
-
-**Artifacts**: `.worktrees/<version>/`, `.local/latest` symlink
-
----
-
-## Daily Builds
-
-```bash
-./scripts/daily-all.sh      # ARM + x86 parallel (06:00 scheduled)
-```
-
-Results: `~/.clawdbot/daily-builds/summary-$(date +%Y-%m-%d).log`
-
-See `automation/infrastructure.md` for per-architecture scripts and detailed setup.
+Hotfix branches: `hotfix/*` → auto-applied. See `automation/infrastructure.md` for details.
 
 ---
 
 ## Standards
 
-See root `AGENTS.md` for multi-agent safety and quality standards.
-
-Key points: `/dev:gate` before commits, `scripts/committer` for scoped commits, 70% coverage.
-
----
-
-## Troubleshooting
-
-See `automation/infrastructure.md` for logs, environment variables, and troubleshooting commands.
+See root `AGENTS.md`. Key: `/dev:gate` before commits, `scripts/committer` for scoped commits, 70% coverage.
 
 ---
 
 ## Signals
 
-Drop issues/ideas in `.workflow/signals/`:
+Drop issues/ideas in `.workflow/signals/` as `YYYY-MM-DD-<topic>.md`.
 
-```markdown
-# signals/YYYY-MM-DD-<topic>.md
-**Type**: issue | idea | blocker | observation
-**Context**: <what you were doing>
-<2-3 sentences>
-```
-
-Higher-tier agents handle triage.
-
----
-
-## Upstream Patterns
-
-- Issues: https://github.com/clawdbot/clawdbot/issues
-- PRs: focused scope, tests, CHANGELOG entry, conventional commit title
-- AI-assisted: mark in PR description, note testing level
