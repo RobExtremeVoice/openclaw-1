@@ -62,8 +62,7 @@
 
 ## Security & Configuration Tips
 - Web provider stores creds at `~/.clawdbot/credentials/`; rerun `clawdbot login` if logged out.
-- Pi sessions live under `~/.clawdbot/sessions/` by default; the base directory is not configurable.
-- Environment variables: see `~/.profile`.
+- Pi sessions live under `~/.clawdbot/agents/<agentId>/sessions/` (e.g., `~/.clawdbot/agents/main/sessions/` for the default agent); the base directory is not configurable.
 - Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
 
 ## Troubleshooting

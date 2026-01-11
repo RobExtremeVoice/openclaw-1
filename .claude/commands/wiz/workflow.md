@@ -1,6 +1,6 @@
 ---
 description: Summon workflow wizard - prime agent with dev workflow and project management
-allowed-tools: [Bash, Glob, Grep, Read, Task, Write]
+allowed-tools: Bash, Glob, Grep, Read, Task, Write
 argument-hint: "[path]"
 ---
 

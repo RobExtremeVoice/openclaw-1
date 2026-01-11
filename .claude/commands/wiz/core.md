@@ -1,6 +1,6 @@
 ---
 description: Summon architecture wizard - prime agent with Clawdbot product internals
-allowed-tools: [Bash, Glob, Grep, Read, Task, Write]
+allowed-tools: Bash, Glob, Grep, Read, Task, Write
 argument-hint: "[path]"
 ---
 
