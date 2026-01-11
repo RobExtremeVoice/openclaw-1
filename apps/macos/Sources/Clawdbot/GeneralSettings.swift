@@ -461,10 +461,8 @@ struct GeneralSettings: View {
         self.isInstallingCLI = true
         defer { isInstallingCLI = false }
         await CLIInstaller.install { status in
-            await MainActor.run {
-                self.cliStatus = status
-                self.refreshCLIStatus()
-            }
+            self.cliStatus = status
+            self.refreshCLIStatus()
         }
     }
 

@@ -6,6 +6,17 @@ enum GatewayLaunchAgentManager {
     private static let legacyGatewayLaunchdLabel = "com.steipete.clawdbot.gateway"
     private static let disableLaunchAgentMarker = ".clawdbot/disable-launchagent"
 
+    private enum GatewayProgramArgumentsError: LocalizedError {
+        case cliNotFound
+
+        var errorDescription: String? {
+            switch self {
+            case .cliNotFound:
+                "clawdbot CLI not found in PATH; install the CLI."
+            }
+        }
+    }
+
     private static var plistURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents/\(gatewayLaunchdLabel).plist")
@@ -16,7 +27,10 @@ enum GatewayLaunchAgentManager {
             .appendingPathComponent("Library/LaunchAgents/\(legacyGatewayLaunchdLabel).plist")
     }
 
-    private static func gatewayProgramArguments(port: Int, bind: String) -> Result<[String], String> {
+    private static func gatewayProgramArguments(
+        port: Int,
+        bind: String
+    ) -> Result<[String], GatewayProgramArgumentsError> {
         #if DEBUG
         let projectRoot = CommandResolver.projectRoot()
         if let localBin = CommandResolver.projectClawdbotExecutable(projectRoot: projectRoot) {
@@ -41,8 +55,8 @@ enum GatewayLaunchAgentManager {
             return .success([gatewayBin, "gateway-daemon", "--port", "\(port)", "--bind", bind])
         }
 
-        let projectRoot = CommandResolver.projectRoot()
-        if let entry = CommandResolver.gatewayEntrypoint(in: projectRoot) {
+        let fallbackProjectRoot = CommandResolver.projectRoot()
+        if let entry = CommandResolver.gatewayEntrypoint(in: fallbackProjectRoot) {
             switch CommandResolver.runtimeResolution(searchPaths: searchPaths) {
             case let .success(runtime):
                 let cmd = CommandResolver.makeRuntimeCommand(
@@ -56,7 +70,7 @@ enum GatewayLaunchAgentManager {
             }
         }
 
-        return .failure("clawdbot CLI not found in PATH; install the CLI.")
+        return .failure(.cliNotFound)
     }
 
     static func isLoaded() async -> Bool {
@@ -88,7 +102,8 @@ enum GatewayLaunchAgentManager {
             switch programArgumentsResult {
             case let .success(args):
                 programArguments = args
-            case let .failure(message):
+            case let .failure(error):
+                let message = error.errorDescription ?? "Failed to resolve gateway CLI"
                 self.logger.error("launchd enable failed: \(message)")
                 return message
             }

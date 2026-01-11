@@ -153,6 +153,9 @@ struct MenuContent: View {
             self.micRefreshTask = nil
             self.micObserver.stop()
         }
+        .task { @MainActor in
+            SettingsWindowOpener.shared.register(openSettings: self.openSettings)
+        }
     }
 
     private var connectionLabel: String {

@@ -62,7 +62,7 @@ final class CLIInstallPrompter {
     private func openSettings(tab: SettingsTab) {
         SettingsTabRouter.request(tab)
         NotificationCenter.default.post(name: .clawdbotSelectSettingsTab, object: tab)
-        NSApp.sendAction(#selector(NSApplication.showSettingsWindow), to: nil, from: nil)
+        SettingsWindowOpener.shared.open()
     }
 
     private static func appVersion() -> String? {
