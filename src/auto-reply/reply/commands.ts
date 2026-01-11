@@ -598,7 +598,7 @@ export async function handleCommands(params: {
   if (allowTextCommands && scriptDef) {
     if (!command.isAuthorizedSender) {
       logVerbose(
-        `Ignoring ${command.commandBodyNormalized} from unauthorized sender: ${command.senderE164 || "<unknown>"}`,
+        `Ignoring ${command.commandBodyNormalized} from unauthorized sender: ${command.senderId || "<unknown>"}`,
       );
       return { shouldContinue: false };
     }
