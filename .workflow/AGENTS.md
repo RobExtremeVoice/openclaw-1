@@ -27,6 +27,7 @@ Run `/dev:help` for full list.
 | Command | Purpose |
 |---------|---------|
 | `/dev:gate` | Quality gate (lint, build, test) |
+| `/dev:review <pr\|current>` | Multi-agent review (4 specialists) |
 | `/dev:fix-issue <num>` | Fix upstream issue with TDD |
 | `/dev:pr-review <num>` | Review PR (read-only) |
 | `/dev:pr-test <num>` | Test PR locally |

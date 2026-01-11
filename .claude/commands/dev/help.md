@@ -17,6 +17,7 @@ Available commands in the `dev:` namespace:
 | Command | Description |
 |---------|-------------|
 | `/dev:gate` | Run full quality gate (lint, build, test) before commits |
+| `/dev:review <pr\|current>` | Multi-agent code review (security, errors, types, comments) |
 | `/dev:test [pattern]` | Run tests with optional pattern filter |
 | `/dev:test --coverage` | Run tests with coverage report |
 | `/dev:e2e [pattern]` | Run end-to-end tests |
