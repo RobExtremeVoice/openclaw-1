@@ -10,6 +10,30 @@ import {
 let nextUploadArmId = 0;
 let nextDialogArmId = 0;
 
+function extractRoleAndName(line: string): { role: string | null; name: string } {
+  const trimmed = line.trimStart();
+  if (!trimmed.startsWith("- ")) return { role: null, name: "" };
+  const rest = trimmed.slice(2);
+  const role = rest.split(/\s+/)[0] ?? null;
+  const nameMatch = rest.match(/"([^"]*)"/);
+  return { role, name: (nameMatch?.[1] ?? "").trim() };
+}
+
+function shouldDropSnapshotLine(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (trimmed.startsWith("- /url:")) return true;
+  const { role, name } = extractRoleAndName(trimmed);
+  if ((role === "generic" || role === "none") && !name) return true;
+  return false;
+}
+
+function filterAiSnapshot(snapshot: string): string {
+  return snapshot
+    .split("\n")
+    .filter((line) => line && !shouldDropSnapshotLine(line))
+    .join("\n");
+}
+
 function requireRef(value: unknown): string {
   const ref = typeof value === "string" ? value.trim() : "";
   if (!ref) throw new Error("ref is required");
@@ -41,7 +65,8 @@ export async function snapshotAiViaPlaywright(opts: {
     ),
     track: "response",
   });
-  return { snapshot: String(result?.full ?? "") };
+  const raw = String(result?.full ?? "");
+  return { snapshot: filterAiSnapshot(raw) };
 }
 
 export async function clickViaPlaywright(opts: {

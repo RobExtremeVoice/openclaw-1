@@ -92,6 +92,36 @@ describe("pw-ai", () => {
     expect(p2.session.detach).toHaveBeenCalledTimes(1);
   });
 
+  it("filters urls and empty generic nodes from ai snapshots", async () => {
+    const { chromium } = await import("playwright-core");
+    const snapshot = [
+      "- document [ref=e1]:",
+      "  - link \"Home\" [ref=e2]:",
+      "    - /url: https://example.com/path",
+      "  - generic [ref=e3]:",
+      "  - none [ref=e4]:",
+      "  - generic \"Has name\" [ref=e5]:",
+    ].join("\n");
+    const p1 = createPage({ targetId: "T1", snapshotFull: snapshot });
+    const browser = createBrowser([p1.page]);
+    (
+      chromium.connectOverCDP as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(browser);
+
+    const mod = await importModule();
+    const res = await mod.snapshotAiViaPlaywright({
+      cdpUrl: "http://127.0.0.1:18792",
+      targetId: "T1",
+    });
+
+    expect(res.snapshot.length).toBeLessThan(snapshot.length);
+    expect(res.snapshot).toContain("link \"Home\"");
+    expect(res.snapshot).toContain("generic \"Has name\"");
+    expect(res.snapshot).not.toContain("/url:");
+    expect(res.snapshot).not.toContain("- generic [ref=e3]:");
+    expect(res.snapshot).not.toContain("- none [ref=e4]:");
+  });
+
   it("clicks a ref using aria-ref locator", async () => {
     const { chromium } = await import("playwright-core");
     const p1 = createPage({ targetId: "T1" });

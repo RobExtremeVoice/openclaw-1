@@ -183,12 +183,14 @@ async function promptConfigureSections(
       break;
     }
 
-    addMore = guardCancel(
-      await confirm({
-        message: "Configure another section?",
-        initialValue: false,
-      }),
-      runtime,
+    addMore = Boolean(
+      guardCancel(
+        await confirm({
+          message: "Configure another section?",
+          initialValue: false,
+        }),
+        runtime,
+      ),
     );
   }
 
