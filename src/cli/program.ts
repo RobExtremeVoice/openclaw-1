@@ -50,6 +50,7 @@ import { registerDocsCli } from "./docs-cli.js";
 import { registerGatewayCli } from "./gateway-cli.js";
 import { registerHooksCli } from "./hooks-cli.js";
 import { registerLogsCli } from "./logs-cli.js";
+import { registerMemoryCli } from "./memory-cli.js";
 import { registerModelsCli } from "./models-cli.js";
 import { registerNodesCli } from "./nodes-cli.js";
 import { registerPairingCli } from "./pairing-cli.js";
@@ -262,7 +263,7 @@ export function buildProgram() {
     .option("--mode <mode>", "Wizard mode: local|remote")
     .option(
       "--auth-choice <choice>",
-      "Auth: setup-token|claude-cli|token|openai-codex|openai-api-key|openrouter-api-key|codex-cli|antigravity|gemini-api-key|zai-api-key|apiKey|minimax-cloud|minimax-api|minimax|opencode-zen|skip",
+      "Auth: setup-token|claude-cli|token|openai-codex|openai-api-key|openrouter-api-key|moonshot-api-key|codex-cli|antigravity|gemini-api-key|zai-api-key|apiKey|minimax-api|minimax-api-lightning|opencode-zen|skip",
     )
     .option(
       "--token-provider <id>",
@@ -283,6 +284,7 @@ export function buildProgram() {
     .option("--anthropic-api-key <key>", "Anthropic API key")
     .option("--openai-api-key <key>", "OpenAI API key")
     .option("--openrouter-api-key <key>", "OpenRouter API key")
+    .option("--moonshot-api-key <key>", "Moonshot API key")
     .option("--gemini-api-key <key>", "Gemini API key")
     .option("--zai-api-key <key>", "Z.AI API key")
     .option("--minimax-api-key <key>", "MiniMax API key")
@@ -330,6 +332,7 @@ export function buildProgram() {
               | "openai-codex"
               | "openai-api-key"
               | "openrouter-api-key"
+              | "moonshot-api-key"
               | "codex-cli"
               | "antigravity"
               | "gemini-api-key"
@@ -337,6 +340,7 @@ export function buildProgram() {
               | "apiKey"
               | "minimax-cloud"
               | "minimax-api"
+              | "minimax-api-lightning"
               | "minimax"
               | "opencode-zen"
               | "skip"
@@ -348,6 +352,7 @@ export function buildProgram() {
             anthropicApiKey: opts.anthropicApiKey as string | undefined,
             openaiApiKey: opts.openaiApiKey as string | undefined,
             openrouterApiKey: opts.openrouterApiKey as string | undefined,
+            moonshotApiKey: opts.moonshotApiKey as string | undefined,
             geminiApiKey: opts.geminiApiKey as string | undefined,
             zaiApiKey: opts.zaiApiKey as string | undefined,
             minimaxApiKey: opts.minimaxApiKey as string | undefined,
@@ -1209,6 +1214,7 @@ ${theme.muted("Docs:")} ${formatDocsLink(
   registerDaemonCli(program);
   registerGatewayCli(program);
   registerLogsCli(program);
+  registerMemoryCli(program);
   registerModelsCli(program);
   registerNodesCli(program);
   registerSandboxCli(program);

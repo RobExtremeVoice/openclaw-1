@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type {
   AgentMessage,
   AgentTool,
+  StreamFn,
   ThinkingLevel,
 } from "@mariozechner/pi-agent-core";
 import type {
@@ -13,7 +14,9 @@ import type {
   AssistantMessage,
   ImageContent,
   Model,
+  SimpleStreamOptions,
 } from "@mariozechner/pi-ai";
+import { streamSimple } from "@mariozechner/pi-ai";
 import {
   createAgentSession,
   discoverAuthStorage,
@@ -33,12 +36,14 @@ import { isCacheEnabled, resolveCacheTtlMs } from "../config/cache-utils.js";
 import type { ClawdbotConfig } from "../config/config.js";
 import { resolveProviderCapabilities } from "../config/provider-capabilities.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
+import { registerUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
 import { createSubsystemLogger } from "../logging.js";
 import {
   type enqueueCommand,
   enqueueCommandInLane,
 } from "../process/command-queue.js";
 import { normalizeMessageProvider } from "../utils/message-provider.js";
+import { isReasoningTagProvider } from "../utils/provider-utils.js";
 import { resolveUserPath } from "../utils.js";
 import { resolveClawdbotAgentDir } from "./agent-paths.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
@@ -47,7 +52,7 @@ import {
   markAuthProfileGood,
   markAuthProfileUsed,
 } from "./auth-profiles.js";
-import type { BashElevatedDefaults } from "./bash-tools.js";
+import type { ExecElevatedDefaults, ExecToolDefaults } from "./bash-tools.js";
 import {
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
@@ -69,7 +74,10 @@ import {
 import { normalizeModelCompat } from "./model-compat.js";
 import { ensureClawdbotModelsJson } from "./models-config.js";
 import type { MessagingToolSend } from "./pi-embedded-messaging.js";
-import { ensurePiCompactionReserveTokens } from "./pi-settings.js";
+import {
+  ensurePiCompactionReserveTokens,
+  resolveCompactionReserveTokensFloor,
+} from "./pi-settings.js";
 import { acquireSessionWriteLock } from "./session-write-lock.js";
 
 export type { MessagingToolSend } from "./pi-embedded-messaging.js";
@@ -82,6 +90,7 @@ import {
   formatAssistantErrorText,
   isAuthAssistantError,
   isCloudCodeAssistFormatError,
+  isCompactionFailureError,
   isContextOverflowError,
   isFailoverAssistantError,
   isFailoverErrorMessage,
@@ -187,6 +196,76 @@ export function resolveExtraParams(params: {
   }
 
   return extraParams;
+}
+
+/**
+ * Create a wrapped streamFn that injects extra params (like temperature) from config.
+ *
+ * @internal
+ */
+function createStreamFnWithExtraParams(
+  baseStreamFn: StreamFn | undefined,
+  extraParams: Record<string, unknown> | undefined,
+): StreamFn | undefined {
+  if (!extraParams || Object.keys(extraParams).length === 0) {
+    return undefined; // No wrapper needed
+  }
+
+  const streamParams: Partial<SimpleStreamOptions> = {};
+  if (typeof extraParams.temperature === "number") {
+    streamParams.temperature = extraParams.temperature;
+  }
+  if (typeof extraParams.maxTokens === "number") {
+    streamParams.maxTokens = extraParams.maxTokens;
+  }
+
+  if (Object.keys(streamParams).length === 0) {
+    return undefined;
+  }
+
+  log.debug(
+    `creating streamFn wrapper with params: ${JSON.stringify(streamParams)}`,
+  );
+
+  const underlying = baseStreamFn ?? streamSimple;
+  const wrappedStreamFn: StreamFn = (model, context, options) =>
+    underlying(model, context, {
+      ...streamParams,
+      ...options, // Caller options take precedence
+    });
+
+  return wrappedStreamFn;
+}
+
+/**
+ * Apply extra params (like temperature) to an agent's streamFn.
+ *
+ * @internal Exported for testing
+ */
+export function applyExtraParamsToAgent(
+  agent: { streamFn?: StreamFn },
+  cfg: ClawdbotConfig | undefined,
+  provider: string,
+  modelId: string,
+  thinkLevel?: string,
+): void {
+  const extraParams = resolveExtraParams({
+    cfg,
+    provider,
+    modelId,
+    thinkLevel,
+  });
+  const wrappedStreamFn = createStreamFnWithExtraParams(
+    agent.streamFn,
+    extraParams,
+  );
+
+  if (wrappedStreamFn) {
+    log.debug(
+      `applying extraParams to agent streamFn for ${provider}/${modelId}`,
+    );
+    agent.streamFn = wrappedStreamFn;
+  }
 }
 
 // We configure context pruning per-session via a WeakMap registry keyed by the SessionManager instance.
@@ -334,6 +413,13 @@ type EmbeddedPiQueueHandle = {
 
 const log = createSubsystemLogger("agent/embedded");
 const GOOGLE_TURN_ORDERING_CUSTOM_TYPE = "google-turn-ordering-bootstrap";
+
+registerUnhandledRejectionHandler((reason) => {
+  const message = describeUnknownError(reason);
+  if (!isCompactionFailureError(message)) return false;
+  log.error(`Auto-compaction failed (unhandled): ${message}`);
+  return true;
+});
 
 type CustomEntryLike = { type?: unknown; customType?: unknown };
 
@@ -686,11 +772,11 @@ function describeUnknownError(error: unknown): string {
 
 export function buildEmbeddedSandboxInfo(
   sandbox?: Awaited<ReturnType<typeof resolveSandboxContext>>,
-  bashElevated?: BashElevatedDefaults,
+  execElevated?: ExecElevatedDefaults,
 ): EmbeddedSandboxInfo | undefined {
   if (!sandbox?.enabled) return undefined;
   const elevatedAllowed = Boolean(
-    bashElevated?.enabled && bashElevated.allowed,
+    execElevated?.enabled && execElevated.allowed,
   );
   return {
     enabled: true,
@@ -708,7 +794,7 @@ export function buildEmbeddedSandboxInfo(
       ? {
           elevated: {
             allowed: true,
-            defaultLevel: bashElevated?.defaultLevel ?? "off",
+            defaultLevel: execElevated?.defaultLevel ?? "off",
           },
         }
       : {}),
@@ -867,6 +953,16 @@ function mapThinkingLevel(level?: ThinkLevel): ThinkingLevel {
   return level;
 }
 
+function resolveExecToolDefaults(
+  config?: ClawdbotConfig,
+): ExecToolDefaults | undefined {
+  const tools = config?.tools;
+  if (!tools) return undefined;
+  if (!tools.exec) return tools.bash;
+  if (!tools.bash) return tools.exec;
+  return { ...tools.bash, ...tools.exec };
+}
+
 function resolveModel(
   provider: string,
   modelId: string,
@@ -905,7 +1001,7 @@ export async function compactEmbeddedPiSession(params: {
   model?: string;
   thinkLevel?: ThinkLevel;
   reasoningLevel?: ReasoningLevel;
-  bashElevated?: BashElevatedDefaults;
+  bashElevated?: ExecElevatedDefaults;
   customInstructions?: string;
   lane?: string;
   enqueue?: typeof enqueueCommand;
@@ -1005,8 +1101,8 @@ export async function compactEmbeddedPiSession(params: {
         const contextFiles = buildBootstrapContextFiles(bootstrapFiles);
         const runAbortController = new AbortController();
         const tools = createClawdbotCodingTools({
-          bash: {
-            ...params.config?.tools?.bash,
+          exec: {
+            ...resolveExecToolDefaults(params.config),
             elevated: params.bashElevated,
           },
           sandbox,
@@ -1018,6 +1114,7 @@ export async function compactEmbeddedPiSession(params: {
           config: params.config,
           abortSignal: runAbortController.signal,
           modelProvider: model.provider,
+          modelId,
           modelAuthMode: resolveModelAuthMode(model.provider, params.config),
           // No currentChannelId/currentThreadTs for compaction - not in message context
         });
@@ -1045,7 +1142,7 @@ export async function compactEmbeddedPiSession(params: {
           sandbox,
           params.bashElevated,
         );
-        const reasoningTagHint = provider === "ollama";
+        const reasoningTagHint = isReasoningTagProvider(provider);
         const userTimezone = resolveUserTimezone(
           params.config?.agents?.defaults?.userTimezone,
         );
@@ -1091,7 +1188,12 @@ export async function compactEmbeddedPiSession(params: {
             effectiveWorkspace,
             agentDir,
           );
-          ensurePiCompactionReserveTokens({ settingsManager });
+          ensurePiCompactionReserveTokens({
+            settingsManager,
+            minReserveTokens: resolveCompactionReserveTokensFloor(
+              params.config,
+            ),
+          });
           const additionalExtensionPaths = buildEmbeddedExtensionPaths({
             cfg: params.config,
             sessionManager,
@@ -1124,6 +1226,15 @@ export async function compactEmbeddedPiSession(params: {
             contextFiles: [],
             additionalExtensionPaths,
           }));
+
+          // Wire up config-driven model params (e.g., temperature/maxTokens)
+          applyExtraParamsToAgent(
+            session.agent,
+            params.config,
+            provider,
+            modelId,
+            params.thinkLevel,
+          );
 
           try {
             const prior = await sanitizeSessionHistory({
@@ -1198,7 +1309,7 @@ export async function runEmbeddedPiAgent(params: {
   thinkLevel?: ThinkLevel;
   verboseLevel?: VerboseLevel;
   reasoningLevel?: ReasoningLevel;
-  bashElevated?: BashElevatedDefaults;
+  bashElevated?: ExecElevatedDefaults;
   timeoutMs: number;
   runId: string;
   abortSignal?: AbortSignal;
@@ -1212,6 +1323,8 @@ export async function runEmbeddedPiAgent(params: {
     mediaUrls?: string[];
     audioAsVoice?: boolean;
   }) => void | Promise<void>;
+  /** Flush pending block replies (e.g., before tool execution to preserve message boundaries). */
+  onBlockReplyFlush?: () => void | Promise<void>;
   blockReplyBreak?: "text_end" | "message_end";
   blockReplyChunking?: BlockReplyChunking;
   onReasoningStream?: (payload: {
@@ -1370,11 +1483,6 @@ export async function runEmbeddedPiAgent(params: {
             : sandbox.workspaceDir
           : resolvedWorkspace;
         await fs.mkdir(effectiveWorkspace, { recursive: true });
-        await ensureSessionHeader({
-          sessionFile: params.sessionFile,
-          sessionId: params.sessionId,
-          cwd: effectiveWorkspace,
-        });
 
         let restoreSkillEnv: (() => void) | undefined;
         process.chdir(effectiveWorkspace);
@@ -1408,8 +1516,8 @@ export async function runEmbeddedPiAgent(params: {
           // Tool schemas must be provider-compatible (OpenAI requires top-level `type: "object"`).
           // `createClawdbotCodingTools()` normalizes schemas so the session can pass them through unchanged.
           const tools = createClawdbotCodingTools({
-            bash: {
-              ...params.config?.tools?.bash,
+            exec: {
+              ...resolveExecToolDefaults(params.config),
               elevated: params.bashElevated,
             },
             sandbox,
@@ -1421,6 +1529,7 @@ export async function runEmbeddedPiAgent(params: {
             config: params.config,
             abortSignal: runAbortController.signal,
             modelProvider: model.provider,
+            modelId,
             modelAuthMode: resolveModelAuthMode(model.provider, params.config),
             currentChannelId: params.currentChannelId,
             currentThreadTs: params.currentThreadTs,
@@ -1439,7 +1548,7 @@ export async function runEmbeddedPiAgent(params: {
             sandbox,
             params.bashElevated,
           );
-          const reasoningTagHint = provider === "ollama";
+          const reasoningTagHint = isReasoningTagProvider(provider);
           const userTimezone = resolveUserTimezone(
             params.config?.agents?.defaults?.userTimezone,
           );
@@ -1484,7 +1593,12 @@ export async function runEmbeddedPiAgent(params: {
             effectiveWorkspace,
             agentDir,
           );
-          ensurePiCompactionReserveTokens({ settingsManager });
+          ensurePiCompactionReserveTokens({
+            settingsManager,
+            minReserveTokens: resolveCompactionReserveTokensFloor(
+              params.config,
+            ),
+          });
           const additionalExtensionPaths = buildEmbeddedExtensionPaths({
             cfg: params.config,
             sessionManager,
@@ -1519,6 +1633,15 @@ export async function runEmbeddedPiAgent(params: {
             contextFiles: [],
             additionalExtensionPaths,
           }));
+
+          // Wire up config-driven model params (e.g., temperature/maxTokens)
+          applyExtraParamsToAgent(
+            session.agent,
+            params.config,
+            provider,
+            modelId,
+            params.thinkLevel,
+          );
 
           try {
             const prior = await sanitizeSessionHistory({
@@ -1559,6 +1682,7 @@ export async function runEmbeddedPiAgent(params: {
               onToolResult: params.onToolResult,
               onReasoningStream: params.onReasoningStream,
               onBlockReply: params.onBlockReply,
+              onBlockReplyFlush: params.onBlockReplyFlush,
               blockReplyBreak: params.blockReplyBreak,
               blockReplyChunking: params.blockReplyChunking,
               onPartialReply: params.onPartialReply,

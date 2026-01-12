@@ -1224,7 +1224,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           }
         }
         // Group policy filtering: controls how group messages are handled
-        // - "open" (default): groups bypass allowFrom, only mention-gating applies
+        // - "open": groups bypass allowFrom, only mention-gating applies
         // - "disabled": block all group messages entirely
         // - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
         const groupPolicy = telegramCfg.groupPolicy ?? "open";

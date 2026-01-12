@@ -95,9 +95,9 @@ const ReplyToModeSchema = z.union([
 ]);
 
 // GroupPolicySchema: controls how group messages are handled
-// Used with .default("open").optional() pattern:
+// Used with .default("allowlist").optional() pattern:
 //   - .optional() allows field omission in input config
-//   - .default("open") ensures runtime always resolves to "open" if not provided
+//   - .default("allowlist") ensures runtime always resolves to "allowlist" if not provided
 const GroupPolicySchema = z.enum(["open", "disabled", "allowlist"]);
 
 const DmPolicySchema = z.enum(["pairing", "allowlist", "open", "disabled"]);
@@ -275,7 +275,7 @@ const TelegramAccountSchemaBase = z.object({
   groups: z.record(z.string(), TelegramGroupSchema.optional()).optional(),
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-  groupPolicy: GroupPolicySchema.optional().default("open"),
+  groupPolicy: GroupPolicySchema.optional().default("allowlist"),
   historyLimit: z.number().int().min(0).optional(),
   dmHistoryLimit: z.number().int().min(0).optional(),
   dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -366,7 +366,7 @@ const DiscordAccountSchema = z.object({
   capabilities: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
   token: z.string().optional(),
-  groupPolicy: GroupPolicySchema.optional().default("open"),
+  groupPolicy: GroupPolicySchema.optional().default("allowlist"),
   historyLimit: z.number().int().min(0).optional(),
   dmHistoryLimit: z.number().int().min(0).optional(),
   dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -440,7 +440,7 @@ const SlackAccountSchema = z.object({
   botToken: z.string().optional(),
   appToken: z.string().optional(),
   allowBots: z.boolean().optional(),
-  groupPolicy: GroupPolicySchema.optional().default("open"),
+  groupPolicy: GroupPolicySchema.optional().default("allowlist"),
   historyLimit: z.number().int().min(0).optional(),
   dmHistoryLimit: z.number().int().min(0).optional(),
   dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -496,7 +496,7 @@ const SignalAccountSchemaBase = z.object({
   dmPolicy: DmPolicySchema.optional().default("pairing"),
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-  groupPolicy: GroupPolicySchema.optional().default("open"),
+  groupPolicy: GroupPolicySchema.optional().default("allowlist"),
   historyLimit: z.number().int().min(0).optional(),
   dmHistoryLimit: z.number().int().min(0).optional(),
   dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -546,7 +546,7 @@ const IMessageAccountSchemaBase = z.object({
   dmPolicy: DmPolicySchema.optional().default("pairing"),
   allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
   groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-  groupPolicy: GroupPolicySchema.optional().default("open"),
+  groupPolicy: GroupPolicySchema.optional().default("allowlist"),
   historyLimit: z.number().int().min(0).optional(),
   dmHistoryLimit: z.number().int().min(0).optional(),
   dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -619,6 +619,8 @@ const MSTeamsConfigSchema = z
       .optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     allowFrom: z.array(z.string()).optional(),
+    groupAllowFrom: z.array(z.string()).optional(),
+    groupPolicy: GroupPolicySchema.optional().default("allowlist"),
     textChunkLimit: z.number().int().positive().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     mediaAllowHosts: z.array(z.string()).optional(),
@@ -865,6 +867,48 @@ const AgentToolsSchema = z
   })
   .optional();
 
+const MemorySearchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    provider: z.union([z.literal("openai"), z.literal("local")]).optional(),
+    fallback: z.union([z.literal("openai"), z.literal("none")]).optional(),
+    model: z.string().optional(),
+    local: z
+      .object({
+        modelPath: z.string().optional(),
+        modelCacheDir: z.string().optional(),
+      })
+      .optional(),
+    store: z
+      .object({
+        driver: z.literal("sqlite").optional(),
+        path: z.string().optional(),
+      })
+      .optional(),
+    chunking: z
+      .object({
+        tokens: z.number().int().positive().optional(),
+        overlap: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
+    sync: z
+      .object({
+        onSessionStart: z.boolean().optional(),
+        onSearch: z.boolean().optional(),
+        watch: z.boolean().optional(),
+        watchDebounceMs: z.number().int().nonnegative().optional(),
+        intervalMinutes: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
+    query: z
+      .object({
+        maxResults: z.number().int().positive().optional(),
+        minScore: z.number().min(0).max(1).optional(),
+      })
+      .optional(),
+  })
+  .optional();
+
 const AgentEntrySchema = z.object({
   id: z.string(),
   default: z.boolean().optional(),
@@ -872,6 +916,7 @@ const AgentEntrySchema = z.object({
   workspace: z.string().optional(),
   agentDir: z.string().optional(),
   model: z.string().optional(),
+  memorySearch: MemorySearchSchema,
   humanDelay: HumanDelaySchema.optional(),
   identity: IdentitySchema,
   groupChat: GroupChatSchema,
@@ -903,6 +948,19 @@ const ToolsSchema = z
       .object({
         enabled: z.boolean().optional(),
         allowFrom: ElevatedAllowFromSchema,
+      })
+      .optional(),
+    exec: z
+      .object({
+        backgroundMs: z.number().int().positive().optional(),
+        timeoutSec: z.number().int().positive().optional(),
+        cleanupMs: z.number().int().positive().optional(),
+        applyPatch: z
+          .object({
+            enabled: z.boolean().optional(),
+            allowModels: z.array(z.string()).optional(),
+          })
+          .optional(),
       })
       .optional(),
     bash: z
@@ -1083,6 +1141,7 @@ const AgentDefaultsSchema = z
     userTimezone: z.string().optional(),
     contextTokens: z.number().int().positive().optional(),
     cliBackends: z.record(z.string(), CliBackendSchema).optional(),
+    memorySearch: MemorySearchSchema,
     contextPruning: z
       .object({
         mode: z
@@ -1113,6 +1172,19 @@ const AgentDefaultsSchema = z
           .object({
             enabled: z.boolean().optional(),
             placeholder: z.string().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+    compaction: z
+      .object({
+        reserveTokensFloor: z.number().int().nonnegative().optional(),
+        memoryFlush: z
+          .object({
+            enabled: z.boolean().optional(),
+            softThresholdTokens: z.number().int().nonnegative().optional(),
+            prompt: z.string().optional(),
+            systemPrompt: z.string().optional(),
           })
           .optional(),
       })
@@ -1368,7 +1440,7 @@ export const ClawdbotSchema = z
                 selfChatMode: z.boolean().optional(),
                 allowFrom: z.array(z.string()).optional(),
                 groupAllowFrom: z.array(z.string()).optional(),
-                groupPolicy: GroupPolicySchema.optional().default("open"),
+                groupPolicy: GroupPolicySchema.optional().default("allowlist"),
                 historyLimit: z.number().int().min(0).optional(),
                 dmHistoryLimit: z.number().int().min(0).optional(),
                 dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
@@ -1419,7 +1491,7 @@ export const ClawdbotSchema = z
         selfChatMode: z.boolean().optional(),
         allowFrom: z.array(z.string()).optional(),
         groupAllowFrom: z.array(z.string()).optional(),
-        groupPolicy: GroupPolicySchema.optional().default("open"),
+        groupPolicy: GroupPolicySchema.optional().default("allowlist"),
         historyLimit: z.number().int().min(0).optional(),
         dmHistoryLimit: z.number().int().min(0).optional(),
         dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
