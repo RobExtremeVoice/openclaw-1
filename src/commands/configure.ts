@@ -189,7 +189,7 @@ async function promptConfigureSections(
         initialValue: false,
       }),
       runtime,
-    );
+    ) as boolean;
   }
 
   return selected;
