@@ -159,6 +159,7 @@ Notes:
 - Multi-agent override: set per-agent patterns on `agents.list[].groupChat.mentionPatterns`.
 - If `channels` is present, any channel not listed is denied by default.
 - Bot-authored messages are ignored by default; set `discord.allowBots=true` to allow them (own messages remain filtered).
+- Warning: If you allow replies to other bots (`discord.allowBots=true`), prevent bot-to-bot reply loops with `requireMention`, `discord.guilds.*.channels.<id>.users` allowlists, and/or clear guardrails in `AGENTS.md` and `SOUL.md`.
 
 ### 6) Verify it works
 1. Start the gateway.
