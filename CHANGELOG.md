@@ -12,6 +12,7 @@
 - Telegram: split long captions into media + follow-up text messages. (#907) - thanks @jalehman.
 - Slack: drop Socket Mode events with mismatched `api_app_id`/`team_id`. (#889) — thanks @roshanasingh4.
 - Discord: isolate autoThread thread context. (#856) — thanks @davidguttman.
+- WhatsApp: fix context isolation using wrong ID (was bot's number, now conversation ID); add `channels.whatsapp.contextIsolation` config to disable. (#911)
 
 ## 2026.1.13
 

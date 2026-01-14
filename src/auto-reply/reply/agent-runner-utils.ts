@@ -31,6 +31,7 @@ export function buildThreadingToolContext(params: {
       accountId: sessionCtx.AccountId,
       context: {
         Channel: sessionCtx.Provider,
+        From: sessionCtx.From,
         To: sessionCtx.To,
         ReplyToId: sessionCtx.ReplyToId,
         ThreadLabel: sessionCtx.ThreadLabel,

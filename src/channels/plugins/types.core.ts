@@ -189,6 +189,7 @@ export type ChannelThreadingAdapter = {
 
 export type ChannelThreadingContext = {
   Channel?: string;
+  From?: string;
   To?: string;
   ReplyToId?: string;
   ThreadLabel?: string;

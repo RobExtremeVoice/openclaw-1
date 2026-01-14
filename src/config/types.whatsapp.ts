@@ -71,6 +71,12 @@ export type WhatsAppConfig = {
      */
     group?: "always" | "mentions" | "never";
   };
+  /**
+   * Restrict agent sends to the current chat context.
+   * - true (default): agent can only send to the chat it received a message from
+   * - false: agent can send to any chat (DM or group) regardless of context
+   */
+  contextIsolation?: boolean;
 };
 
 export type WhatsAppAccountConfig = {
@@ -123,4 +129,10 @@ export type WhatsAppAccountConfig = {
      */
     group?: "always" | "mentions" | "never";
   };
+  /**
+   * Restrict agent sends to the current chat context.
+   * - true (default): agent can only send to the chat it received a message from
+   * - false: agent can send to any chat (DM or group) regardless of context
+   */
+  contextIsolation?: boolean;
 };

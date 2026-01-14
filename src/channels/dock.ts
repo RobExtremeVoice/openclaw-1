@@ -145,11 +145,15 @@ const DOCKS: Record<ChannelId, ChannelDock> = {
       },
     },
     threading: {
-      buildToolContext: ({ context, hasRepliedRef }) => ({
-        currentChannelId: context.To?.trim() || undefined,
-        currentThreadTs: context.ReplyToId,
-        hasRepliedRef,
-      }),
+      buildToolContext: ({ cfg, accountId, context, hasRepliedRef }) => {
+        const account = resolveWhatsAppAccount({ cfg, accountId });
+        const isolationEnabled = account.contextIsolation !== false;
+        return {
+          currentChannelId: isolationEnabled ? context.From?.trim() || undefined : undefined,
+          currentThreadTs: context.ReplyToId,
+          hasRepliedRef,
+        };
+      },
     },
   },
   discord: {
