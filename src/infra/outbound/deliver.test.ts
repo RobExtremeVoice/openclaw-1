@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { chunkMarkdownText } from "../../auto-reply/chunk.js";
 import type { ClawdbotConfig } from "../../config/config.js";
 import { chunkSignalText, markdownToSignalText } from "../../signal/format.js";
 import {
@@ -114,10 +113,9 @@ describe("deliverOutboundPayloads", () => {
       channels: { signal: { textChunkLimit: 20 } },
     };
     const text = `Intro\\n\\n\`\`\`\`md\\n${"y".repeat(60)}\\n\`\`\`\\n\\nOutro`;
-    const markdownChunks = chunkMarkdownText(text, 20);
-    const expectedChunks = markdownChunks.flatMap((chunk) =>
-      chunkSignalText(markdownToSignalText(chunk), 20),
-    );
+    // Format the full text first, then chunk (format-first approach)
+    const formattedFull = markdownToSignalText(text);
+    const expectedChunks = chunkSignalText(formattedFull, 20);
 
     await deliverOutboundPayloads({
       cfg,

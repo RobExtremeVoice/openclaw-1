@@ -1,4 +1,4 @@
-import { chunkMarkdownText, resolveTextChunkLimit } from "../../auto-reply/chunk.js";
+import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import { resolveChannelMediaMaxBytes } from "../../channels/plugins/media-limits.js";
 import { loadChannelOutboundAdapter } from "../../channels/plugins/outbound/load.js";
@@ -213,17 +213,15 @@ export async function deliverOutboundPayloads(params: {
   };
 
   const sendSignalTextChunks = async (text: string) => {
-    const markdownChunks =
-      textLimit === undefined ? [text] : chunkMarkdownText(text, textLimit);
-    for (const markdownChunk of markdownChunks) {
+    throwIfAborted(abortSignal);
+    // Format the full text first to preserve inline markdown constructs
+    const formattedFull = markdownToSignalText(text);
+    // Then chunk the formatted text with styles
+    const signalChunks =
+      textLimit === undefined ? [formattedFull] : chunkSignalText(formattedFull, textLimit);
+    for (const chunk of signalChunks) {
       throwIfAborted(abortSignal);
-      const formatted = markdownToSignalText(markdownChunk);
-      const formattedChunks =
-        textLimit === undefined ? [formatted] : chunkSignalText(formatted, textLimit);
-      for (const chunk of formattedChunks) {
-        throwIfAborted(abortSignal);
-        results.push(await sendSignalText(chunk.text, chunk.styles));
-      }
+      results.push(await sendSignalText(chunk.text, chunk.styles));
     }
   };
 
