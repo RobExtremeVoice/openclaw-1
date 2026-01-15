@@ -26,6 +26,8 @@ export async function deliverReplies(params: {
   replyToMode: ReplyToMode;
   textLimit: number;
   messageThreadId?: number;
+  /** Callback invoked before sending a voice message to switch typing indicator. */
+  onVoiceRecording?: () => Promise<void> | void;
 }) {
   const { replies, chatId, runtime, bot, replyToMode, textLimit, messageThreadId } = params;
   const threadParams = buildTelegramThreadParams(messageThreadId);
@@ -97,6 +99,11 @@ export async function deliverReplies(params: {
         });
         if (useVoice) {
           // Voice message - displays as round playable bubble (opt-in via [[audio_as_voice]])
+          // Switch typing indicator to record_voice before sending
+          logVerbose(
+            `telegram voice delivery: invoking onVoiceRecording callback=${typeof params.onVoiceRecording}`,
+          );
+          await params.onVoiceRecording?.();
           await bot.api.sendVoice(chatId, file, {
             ...mediaParams,
           });
