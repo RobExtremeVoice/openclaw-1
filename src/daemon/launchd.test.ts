@@ -5,7 +5,11 @@ import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
-import { installLaunchAgent, parseLaunchctlPrint } from "./launchd.js";
+import {
+  installLaunchAgent,
+  parseLaunchctlPrint,
+  resolveLaunchAgentPlistPath,
+} from "./launchd.js";
 
 describe("launchd runtime parsing", () => {
   it("parses state, pid, and exit status", () => {
@@ -106,5 +110,39 @@ describe("launchd install", () => {
       }
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("resolveLaunchAgentPlistPath", () => {
+  it("uses default label when CLAWDBOT_PROFILE is default", () => {
+    const env = { HOME: "/Users/test", CLAWDBOT_PROFILE: "default" };
+    expect(resolveLaunchAgentPlistPath(env)).toBe(
+      "/Users/test/Library/LaunchAgents/com.clawdbot.gateway.plist",
+    );
+  });
+
+  it("uses default label when CLAWDBOT_PROFILE is unset", () => {
+    const env = { HOME: "/Users/test" };
+    expect(resolveLaunchAgentPlistPath(env)).toBe(
+      "/Users/test/Library/LaunchAgents/com.clawdbot.gateway.plist",
+    );
+  });
+
+  it("uses profile-specific label when CLAWDBOT_PROFILE is set to a custom value", () => {
+    const env = { HOME: "/Users/test", CLAWDBOT_PROFILE: "jbphoenix" };
+    expect(resolveLaunchAgentPlistPath(env)).toBe(
+      "/Users/test/Library/LaunchAgents/com.clawdbot.jbphoenix.plist",
+    );
+  });
+
+  it("prefers CLAWDBOT_LAUNCHD_LABEL over CLAWDBOT_PROFILE", () => {
+    const env = {
+      HOME: "/Users/test",
+      CLAWDBOT_PROFILE: "jbphoenix",
+      CLAWDBOT_LAUNCHD_LABEL: "com.custom.label",
+    };
+    expect(resolveLaunchAgentPlistPath(env)).toBe(
+      "/Users/test/Library/LaunchAgents/com.custom.label.plist",
+    );
   });
 });
