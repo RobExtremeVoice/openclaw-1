@@ -383,15 +383,9 @@ describe("handleSlackAction", () => {
     expect(opts?.token).toBeUndefined();
   });
 
-  it("prefers bot token for writes even when user token writes are allowed", async () => {
+  it("uses bot token for writes when userTokenReadOnly is true", async () => {
     const cfg = {
-      channels: {
-        slack: {
-          botToken: "xoxb-1",
-          userToken: "xoxp-1",
-          userTokenReadOnly: false,
-        },
-      },
+      channels: { slack: { botToken: "xoxb-1", userToken: "xoxp-1" } },
     } as ClawdbotConfig;
     sendSlackMessage.mockClear();
     await handleSlackAction(

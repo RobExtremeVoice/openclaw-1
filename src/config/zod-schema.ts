@@ -417,21 +417,6 @@ const DiscordConfigSchema = DiscordAccountSchema.extend({
   accounts: z.record(z.string(), DiscordAccountSchema.optional()).optional(),
 });
 
-const SlackBotTokenSchema = z
-  .string()
-  .regex(/^xoxb-[A-Za-z0-9-]+$/, "expected Slack bot token (xoxb-...)");
-
-const SlackAppTokenSchema = z
-  .string()
-  .regex(/^xapp-[A-Za-z0-9-]+$/, "expected Slack app token (xapp-...)");
-
-const SlackUserTokenSchema = z
-  .string()
-  .regex(
-    /^xox[psr]-[A-Za-z0-9-]+$/,
-    "expected Slack user token (xoxp-/xoxs-...)",
-  );
-
 const SlackDmSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -466,9 +451,9 @@ const SlackAccountSchema = z.object({
   capabilities: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
   commands: ProviderCommandsSchema,
-  botToken: SlackBotTokenSchema.optional(),
-  appToken: SlackAppTokenSchema.optional(),
-  userToken: SlackUserTokenSchema.optional(),
+  botToken: z.string().optional(),
+  appToken: z.string().optional(),
+  userToken: z.string().optional(),
   userTokenReadOnly: z.boolean().optional().default(true),
   allowBots: z.boolean().optional(),
   groupPolicy: GroupPolicySchema.optional().default("allowlist"),

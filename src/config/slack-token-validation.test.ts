@@ -2,53 +2,33 @@ import { describe, expect, it } from "vitest";
 
 import { validateConfigObject } from "./config.js";
 
-describe("Slack token validation", () => {
-  it("rejects invalid bot token format", () => {
-    const res = validateConfigObject({
-      channels: { slack: { botToken: "not-a-token" } },
-    });
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: "channels.slack.botToken" }),
-      ]),
-    );
-  });
-
-  it("rejects invalid app token format", () => {
-    const res = validateConfigObject({
-      channels: { slack: { appToken: "nope" } },
-    });
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: "channels.slack.appToken" }),
-      ]),
-    );
-  });
-
-  it("rejects invalid user token format", () => {
-    const res = validateConfigObject({
-      channels: { slack: { userToken: "invalid" } },
-    });
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: "channels.slack.userToken" }),
-      ]),
-    );
-  });
-
-  it("accepts valid Slack tokens", () => {
+describe("Slack token config fields", () => {
+  it("accepts user token config fields", () => {
     const res = validateConfigObject({
       channels: {
         slack: {
-          botToken: "xoxb-123",
-          appToken: "xapp-123",
-          userToken: "xoxp-123",
+          botToken: "xoxb-any",
+          appToken: "xapp-any",
+          userToken: "xoxp-any",
+          userTokenReadOnly: false,
+        },
+      },
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it("accepts account-level user token config", () => {
+    const res = validateConfigObject({
+      channels: {
+        slack: {
+          accounts: {
+            work: {
+              botToken: "xoxb-any",
+              appToken: "xapp-any",
+              userToken: "xoxp-any",
+              userTokenReadOnly: true,
+            },
+          },
         },
       },
     });
