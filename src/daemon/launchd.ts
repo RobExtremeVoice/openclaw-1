@@ -24,15 +24,10 @@ const formatLine = (label: string, value: string) => {
   return `${colorize(rich, theme.muted, `${label}:`)} ${colorize(rich, theme.command, value)}`;
 };
 
-function resolveLaunchAgentLabel(params?: {
-  env?: Record<string, string | undefined>;
-  profile?: string;
-}): string {
-  const envLabel = params?.env?.CLAWDBOT_LAUNCHD_LABEL?.trim();
-  if (envLabel) return envLabel;
-  // Use explicit profile param, or fall back to env.CLAWDBOT_PROFILE
-  const effectiveProfile = params?.profile ?? params?.env?.CLAWDBOT_PROFILE;
-  return resolveGatewayLaunchAgentLabel(effectiveProfile);
+function resolveLaunchAgentLabel(profile?: string, launchdLabelOverride?: string): string {
+  const trimmed = launchdLabelOverride?.trim();
+  if (trimmed) return trimmed;
+  return resolveGatewayLaunchAgentLabel(profile);
 }
 function resolveHomeDir(env: Record<string, string | undefined>): string {
   const home = env.HOME?.trim() || env.USERPROFILE?.trim();
@@ -49,7 +44,7 @@ function resolveLaunchAgentPlistPathForLabel(
 }
 
 export function resolveLaunchAgentPlistPath(env: Record<string, string | undefined>): string {
-  const label = resolveLaunchAgentLabel({ env });
+  const label = resolveLaunchAgentLabel(env.CLAWDBOT_PROFILE, env.CLAWDBOT_LAUNCHD_LABEL);
   return resolveLaunchAgentPlistPathForLabel(env, label);
 }
 
@@ -188,7 +183,10 @@ export async function isLaunchAgentLoaded(params?: {
   profile?: string;
 }): Promise<boolean> {
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel(params);
+  const label = resolveLaunchAgentLabel(
+    params?.profile ?? params?.env?.CLAWDBOT_PROFILE,
+    params?.env?.CLAWDBOT_LAUNCHD_LABEL,
+  );
   const res = await execLaunchctl(["print", `${domain}/${label}`]);
   return res.code === 0;
 }
@@ -207,7 +205,7 @@ export async function readLaunchAgentRuntime(
   env: Record<string, string | undefined>,
 ): Promise<GatewayServiceRuntime> {
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel({ env });
+  const label = resolveLaunchAgentLabel(env.CLAWDBOT_PROFILE, env.CLAWDBOT_LAUNCHD_LABEL);
   const res = await execLaunchctl(["print", `${domain}/${label}`]);
   if (res.code !== 0) {
     return {
@@ -309,7 +307,7 @@ export async function uninstallLaunchAgent({
   stdout: NodeJS.WritableStream;
 }): Promise<void> {
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel({ env });
+  const label = resolveLaunchAgentLabel(env.CLAWDBOT_PROFILE, env.CLAWDBOT_LAUNCHD_LABEL);
   const plistPath = resolveLaunchAgentPlistPath(env);
   await execLaunchctl(["bootout", domain, plistPath]);
   await execLaunchctl(["unload", plistPath]);
@@ -352,7 +350,7 @@ export async function stopLaunchAgent({
   profile?: string;
 }): Promise<void> {
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel({ env, profile });
+  const label = resolveLaunchAgentLabel(profile ?? env?.CLAWDBOT_PROFILE, env?.CLAWDBOT_LAUNCHD_LABEL);
   const res = await execLaunchctl(["bootout", `${domain}/${label}`]);
   if (res.code !== 0 && !isLaunchctlNotLoaded(res)) {
     throw new Error(`launchctl bootout failed: ${res.stderr || res.stdout}`.trim());
@@ -377,7 +375,7 @@ export async function installLaunchAgent({
   await fs.mkdir(logDir, { recursive: true });
 
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel({ env });
+  const label = resolveLaunchAgentLabel(env.CLAWDBOT_PROFILE, env.CLAWDBOT_LAUNCHD_LABEL);
   for (const legacyLabel of LEGACY_GATEWAY_LAUNCH_AGENT_LABELS) {
     const legacyPlistPath = resolveLaunchAgentPlistPathForLabel(env, legacyLabel);
     await execLaunchctl(["bootout", domain, legacyPlistPath]);
@@ -434,7 +432,7 @@ export async function restartLaunchAgent({
   profile?: string;
 }): Promise<void> {
   const domain = resolveGuiDomain();
-  const label = resolveLaunchAgentLabel({ env, profile });
+  const label = resolveLaunchAgentLabel(profile ?? env?.CLAWDBOT_PROFILE, env?.CLAWDBOT_LAUNCHD_LABEL);
   const res = await execLaunchctl(["kickstart", "-k", `${domain}/${label}`]);
   if (res.code !== 0) {
     throw new Error(`launchctl kickstart failed: ${res.stderr || res.stdout}`.trim());
