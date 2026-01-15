@@ -27,3 +27,4 @@ beads.right.meta.json
 # Sync state (local-only)
 .sync.lock
 sync_base.jsonl
+metadata.json
