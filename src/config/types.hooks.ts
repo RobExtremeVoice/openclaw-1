@@ -64,6 +64,22 @@ export type HooksGmailConfig = {
   thinking?: "off" | "minimal" | "low" | "medium" | "high";
 };
 
+export type InternalHookHandlerConfig = {
+  /** Event key to listen for (e.g., 'command:new', 'session:start') */
+  event: string;
+  /** Path to handler module (absolute or relative to cwd) */
+  module: string;
+  /** Export name from module (default: 'default') */
+  export?: string;
+};
+
+export type InternalHooksConfig = {
+  /** Enable internal hooks system */
+  enabled?: boolean;
+  /** List of internal hook handlers to register */
+  handlers?: InternalHookHandlerConfig[];
+};
+
 export type HooksConfig = {
   enabled?: boolean;
   path?: string;
@@ -73,4 +89,6 @@ export type HooksConfig = {
   transformsDir?: string;
   mappings?: HookMappingConfig[];
   gmail?: HooksGmailConfig;
+  /** Internal agent event hooks */
+  internal?: InternalHooksConfig;
 };

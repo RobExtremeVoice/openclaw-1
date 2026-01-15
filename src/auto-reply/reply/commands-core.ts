@@ -1,6 +1,7 @@
 import { logVerbose } from "../../globals.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { shouldHandleTextCommands } from "../commands-registry.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { handleBashCommand } from "./commands-bash.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
@@ -50,6 +51,22 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       `Ignoring /reset from unauthorized sender: ${params.command.senderId || "<unknown>"}`,
     );
     return { shouldContinue: false };
+  }
+
+  // Trigger internal hook for reset/new commands
+  if (resetRequested && params.command.isAuthorizedSender) {
+    const commandAction = params.command.commandBodyNormalized.slice(1); // 'new' or 'reset'
+    const hookEvent = createInternalHookEvent(
+      'command',
+      commandAction,
+      params.sessionKey ?? '',
+      {
+        sessionEntry: params.sessionEntry,
+        commandSource: params.command.surface,
+        senderId: params.command.senderId,
+      }
+    );
+    await triggerInternalHook(hookEvent);
   }
 
   const allowTextCommands = shouldHandleTextCommands({

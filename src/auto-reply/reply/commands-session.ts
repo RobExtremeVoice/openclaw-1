@@ -2,6 +2,7 @@ import { abortEmbeddedPiRun } from "../../agents/pi-embedded.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionStore } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { scheduleGatewaySigusr1Restart, triggerClawdbotRestart } from "../../infra/restart.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import { parseActivationCommand } from "../group-activation.js";
@@ -201,6 +202,21 @@ export const handleStopCommand: CommandHandler = async (params, allowTextCommand
   } else if (params.command.abortKey) {
     setAbortMemory(params.command.abortKey, true);
   }
+
+  // Trigger internal hook for stop command
+  const hookEvent = createInternalHookEvent(
+    'command',
+    'stop',
+    abortTarget.key ?? params.sessionKey ?? '',
+    {
+      sessionEntry: abortTarget.entry ?? params.sessionEntry,
+      sessionId: abortTarget.sessionId,
+      commandSource: params.command.surface,
+      senderId: params.command.senderId,
+    }
+  );
+  await triggerInternalHook(hookEvent);
+
   return { shouldContinue: false, reply: { text: "⚙️ Agent was aborted." } };
 };
 
