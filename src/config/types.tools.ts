@@ -1,4 +1,20 @@
-import type { AgentElevatedAllowFromConfig } from "./types.base.js";
+import type { AgentElevatedAllowFromConfig, SessionSendPolicyAction } from "./types.base.js";
+
+export type MediaUnderstandingScopeMatch = {
+  channel?: string;
+  chatType?: "direct" | "group" | "room";
+  keyPrefix?: string;
+};
+
+export type MediaUnderstandingScopeRule = {
+  action: SessionSendPolicyAction;
+  match?: MediaUnderstandingScopeMatch;
+};
+
+export type MediaUnderstandingScopeConfig = {
+  default?: SessionSendPolicyAction;
+  rules?: MediaUnderstandingScopeRule[];
+};
 
 export type ToolProfileId = "minimal" | "coding" | "messaging" | "full";
 
@@ -116,6 +132,45 @@ export type ToolsConfig = {
       /** CLI args (template-enabled). */
       args?: string[];
       timeoutSeconds?: number;
+      /** API provider id (e.g. groq, openai). */
+      provider?: string;
+      /** Transcription model id. */
+      model?: string;
+      /** Optional audio language hint. */
+      language?: string;
+      /** Optional transcription prompt. */
+      prompt?: string;
+      /** Disable transcription even if configured. */
+      enabled?: boolean;
+      /** Max audio bytes to send (default: 20MB). */
+      maxBytes?: number;
+      /** Auth profile id to use for this provider. */
+      profile?: string;
+      /** Preferred profile id if multiple are available. */
+      preferredProfile?: string;
+      /** Optional scope gating for transcription. */
+      scope?: MediaUnderstandingScopeConfig;
+    };
+  };
+  video?: {
+    understanding?: {
+      /** Enable video understanding (default: false unless provider set). */
+      enabled?: boolean;
+      /** API provider id (e.g. google). */
+      provider?: string;
+      /** Model id for video understanding. */
+      model?: string;
+      /** Prompt to send with the video. */
+      prompt?: string;
+      timeoutSeconds?: number;
+      /** Max video bytes to send (default: 50MB). */
+      maxBytes?: number;
+      /** Auth profile id to use for this provider. */
+      profile?: string;
+      /** Preferred profile id if multiple are available. */
+      preferredProfile?: string;
+      /** Optional scope gating for understanding. */
+      scope?: MediaUnderstandingScopeConfig;
     };
   };
   agentToAgent?: {

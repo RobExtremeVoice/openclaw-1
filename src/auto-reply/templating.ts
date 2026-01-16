@@ -1,6 +1,7 @@
 import type { ChannelId } from "../channels/plugins/types.js";
 import type { InternalMessageChannel } from "../utils/message-channel.js";
 import type { CommandArgs } from "./commands-registry.types.js";
+import type { MediaUnderstandingOutput } from "../media-understanding/types.js";
 
 /** Valid message channels for routing. */
 export type OriginatingChannelType = ChannelId | InternalMessageChannel;
@@ -39,6 +40,7 @@ export type MsgContext = {
   MediaUrls?: string[];
   MediaTypes?: string[];
   Transcript?: string;
+  MediaUnderstanding?: MediaUnderstandingOutput[];
   ChatType?: string;
   GroupSubject?: string;
   GroupRoom?: string;

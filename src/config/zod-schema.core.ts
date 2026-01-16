@@ -240,10 +240,53 @@ export const ExecutableTokenSchema = z
   .string()
   .refine(isSafeExecutableValue, "expected safe executable name or path");
 
+export const MediaUnderstandingScopeSchema = z
+  .object({
+    default: z.union([z.literal("allow"), z.literal("deny")]).optional(),
+    rules: z
+      .array(
+        z.object({
+          action: z.union([z.literal("allow"), z.literal("deny")]),
+          match: z
+            .object({
+              channel: z.string().optional(),
+              chatType: z.union([z.literal("direct"), z.literal("group"), z.literal("room")]).optional(),
+              keyPrefix: z.string().optional(),
+            })
+            .optional(),
+        }),
+      )
+      .optional(),
+  })
+  .optional();
+
 export const ToolsAudioTranscriptionSchema = z
   .object({
     args: z.array(z.string()).optional(),
     timeoutSeconds: z.number().int().positive().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    language: z.string().optional(),
+    prompt: z.string().optional(),
+    enabled: z.boolean().optional(),
+    maxBytes: z.number().int().positive().optional(),
+    profile: z.string().optional(),
+    preferredProfile: z.string().optional(),
+    scope: MediaUnderstandingScopeSchema,
+  })
+  .optional();
+
+export const ToolsVideoUnderstandingSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    prompt: z.string().optional(),
+    timeoutSeconds: z.number().int().positive().optional(),
+    maxBytes: z.number().int().positive().optional(),
+    profile: z.string().optional(),
+    preferredProfile: z.string().optional(),
+    scope: MediaUnderstandingScopeSchema,
   })
   .optional();
 

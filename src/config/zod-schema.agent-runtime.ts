@@ -6,6 +6,7 @@ import {
   HumanDelaySchema,
   IdentitySchema,
   ToolsAudioTranscriptionSchema,
+  ToolsVideoUnderstandingSchema,
 } from "./zod-schema.core.js";
 
 export const HeartbeatSchema = z
@@ -286,6 +287,11 @@ export const ToolsSchema = z
     audio: z
       .object({
         transcription: ToolsAudioTranscriptionSchema,
+      })
+      .optional(),
+    video: z
+      .object({
+        understanding: ToolsVideoUnderstandingSchema,
       })
       .optional(),
     agentToAgent: z

@@ -16,6 +16,7 @@ export function isAudio(mediaType?: string | null) {
 }
 
 export function hasAudioTranscriptionConfig(cfg: ClawdbotConfig): boolean {
+  if (cfg.tools?.audio?.transcription?.enabled === false) return false;
   if (cfg.tools?.audio?.transcription?.args?.length) return true;
   return Boolean(cfg.audio?.transcription?.command?.length);
 }
@@ -27,6 +28,7 @@ export async function transcribeInboundAudio(
 ): Promise<{ text: string } | undefined> {
   const toolTranscriber = cfg.tools?.audio?.transcription;
   const legacyTranscriber = cfg.audio?.transcription;
+  if (toolTranscriber?.enabled === false) return undefined;
   const hasToolTranscriber = Boolean(toolTranscriber?.args?.length);
   if (!hasToolTranscriber && !legacyTranscriber?.command?.length) {
     return undefined;

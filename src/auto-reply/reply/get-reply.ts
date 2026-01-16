@@ -21,6 +21,8 @@ import { runPreparedReply } from "./get-reply-run.js";
 import { initSessionState } from "./session.js";
 import { stageSandboxMedia } from "./stage-sandbox-media.js";
 import { createTypingController } from "./typing.js";
+import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
+import { isAudioFileName } from "../../media/mime.js";
 
 export async function getReplyFromConfig(
   ctx: MsgContext,
@@ -75,9 +77,22 @@ export async function getReplyFromConfig(
   });
   opts?.onTypingController?.(typing);
 
+  const mediaUnderstanding = await applyMediaUnderstanding({
+    ctx,
+    cfg,
+    agentDir,
+  });
+
+  const audioAttachment = resolveAudioAttachment(ctx);
   let transcribedText: string | undefined;
-  if (hasAudioTranscriptionConfig(cfg) && isAudio(ctx.MediaType)) {
-    const transcribed = await transcribeInboundAudio(cfg, ctx, defaultRuntime);
+  if (hasAudioTranscriptionConfig(cfg) && audioAttachment && !mediaUnderstanding.appliedAudio) {
+    const transcriptionCtx: MsgContext = {
+      ...ctx,
+      MediaPath: audioAttachment.path ?? ctx.MediaPath,
+      MediaUrl: audioAttachment.url ?? ctx.MediaUrl,
+      MediaType: audioAttachment.type ?? ctx.MediaType,
+    };
+    const transcribed = await transcribeInboundAudio(cfg, transcriptionCtx, defaultRuntime);
     if (transcribed?.text) {
       transcribedText = transcribed.text;
       ctx.Body = transcribed.text;
@@ -261,4 +276,48 @@ export async function getReplyFromConfig(
     workspaceDir,
     abortedLastRun,
   });
+}
+
+function resolveAudioAttachment(
+  ctx: MsgContext,
+): { path?: string; url?: string; type?: string } | undefined {
+  const paths = Array.isArray(ctx.MediaPaths) ? ctx.MediaPaths : [];
+  const urls = Array.isArray(ctx.MediaUrls) ? ctx.MediaUrls : [];
+  const types = Array.isArray(ctx.MediaTypes) ? ctx.MediaTypes : [];
+
+  const scan = (entries: Array<{ path?: string; url?: string; type?: string }>) => {
+    for (const entry of entries) {
+      if (entry.type && isAudio(entry.type)) return entry;
+      if (entry.path && isAudioFileName(entry.path)) return entry;
+      if (entry.url && isAudioFileName(entry.url)) return entry;
+    }
+    return undefined;
+  };
+
+  if (paths.length > 0) {
+    const entries = paths.map((pathValue, index) => ({
+      path: pathValue,
+      url: urls[index] ?? ctx.MediaUrl,
+      type: types[index] ?? ctx.MediaType,
+    }));
+    const found = scan(entries);
+    if (found) return found;
+  }
+
+  if (urls.length > 0) {
+    const entries = urls.map((urlValue, index) => ({
+      path: undefined,
+      url: urlValue,
+      type: types[index] ?? ctx.MediaType,
+    }));
+    const found = scan(entries);
+    if (found) return found;
+  }
+
+  const fallback = {
+    path: ctx.MediaPath,
+    url: ctx.MediaUrl,
+    type: ctx.MediaType,
+  };
+  return scan([fallback]) ?? undefined;
 }
