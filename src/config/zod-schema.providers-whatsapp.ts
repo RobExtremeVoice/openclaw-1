@@ -13,6 +13,7 @@ export const WhatsAppAccountSchema = z
     capabilities: z.array(z.string()).optional(),
     configWrites: z.boolean().optional(),
     enabled: z.boolean().optional(),
+    sendReadReceipts: z.boolean().optional(),
     messagePrefix: z.string().optional(),
     /** Override auth directory for this WhatsApp account (Baileys multi-file auth state). */
     authDir: z.string().optional(),
@@ -45,6 +46,7 @@ export const WhatsAppAccountSchema = z
         group: z.enum(["always", "mentions", "never"]).optional().default("mentions"),
       })
       .optional(),
+    debounceMs: z.number().int().nonnegative().optional().default(0),
   })
   .superRefine((value, ctx) => {
     if (value.dmPolicy !== "open") return;
@@ -62,6 +64,7 @@ export const WhatsAppConfigSchema = z
     accounts: z.record(z.string(), WhatsAppAccountSchema.optional()).optional(),
     capabilities: z.array(z.string()).optional(),
     configWrites: z.boolean().optional(),
+    sendReadReceipts: z.boolean().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     messagePrefix: z.string().optional(),
     selfChatMode: z.boolean().optional(),
@@ -99,6 +102,7 @@ export const WhatsAppConfigSchema = z
         group: z.enum(["always", "mentions", "never"]).optional().default("mentions"),
       })
       .optional(),
+    debounceMs: z.number().int().nonnegative().optional().default(0),
   })
   .superRefine((value, ctx) => {
     if (value.dmPolicy !== "open") return;

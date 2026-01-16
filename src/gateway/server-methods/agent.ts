@@ -6,7 +6,7 @@ import {
   resolveAgentIdFromSessionKey,
   resolveAgentMainSessionKey,
   type SessionEntry,
-  saveSessionStore,
+  updateSessionStore,
 } from "../../config/sessions.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { resolveOutboundTarget } from "../../infra/outbound/targets.js";
@@ -111,14 +111,15 @@ export const agentHandlers: GatewayRequestHandlers = {
     }
     const rawChannel = typeof request.channel === "string" ? request.channel.trim() : "";
     if (rawChannel) {
+      const isKnownGatewayChannel = (value: string): boolean => isGatewayMessageChannel(value);
       const normalized = normalizeMessageChannel(rawChannel);
-      if (normalized && normalized !== "last" && !isGatewayMessageChannel(normalized)) {
+      if (normalized && normalized !== "last" && !isKnownGatewayChannel(normalized)) {
         respond(
           false,
           undefined,
           errorShape(
             ErrorCodes.INVALID_REQUEST,
-            `invalid agent params: unknown channel: ${normalized}`,
+            `invalid agent params: unknown channel: ${String(normalized)}`,
           ),
         );
         return;
@@ -135,7 +136,7 @@ export const agentHandlers: GatewayRequestHandlers = {
     let cfgForAgent: ReturnType<typeof loadConfig> | undefined;
 
     if (requestedSessionKey) {
-      const { cfg, storePath, store, entry, canonicalKey } = loadSessionEntry(requestedSessionKey);
+      const { cfg, storePath, entry, canonicalKey } = loadSessionEntry(requestedSessionKey);
       cfgForAgent = cfg;
       const now = Date.now();
       const sessionId = entry?.sessionId ?? randomUUID();
@@ -177,11 +178,10 @@ export const agentHandlers: GatewayRequestHandlers = {
       const canonicalSessionKey = canonicalKey;
       const agentId = resolveAgentIdFromSessionKey(canonicalSessionKey);
       const mainSessionKey = resolveAgentMainSessionKey({ cfg, agentId });
-      if (store) {
-        store[canonicalSessionKey] = nextEntry;
-        if (storePath) {
-          await saveSessionStore(storePath, store);
-        }
+      if (storePath) {
+        await updateSessionStore(storePath, (store) => {
+          store[canonicalSessionKey] = nextEntry;
+        });
       }
       if (canonicalSessionKey === mainSessionKey || canonicalSessionKey === "global") {
         context.addChatRun(idem, {

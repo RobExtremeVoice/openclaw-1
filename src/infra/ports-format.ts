@@ -2,7 +2,7 @@ import type { PortListener, PortListenerKind, PortUsage } from "./ports-types.js
 
 export function classifyPortListener(listener: PortListener, port: number): PortListenerKind {
   const raw = `${listener.commandLine ?? ""} ${listener.command ?? ""}`.trim().toLowerCase();
-  if (raw.includes("clawdbot") || raw.includes("clawdis")) return "gateway";
+  if (raw.includes("clawdbot")) return "gateway";
   if (raw.includes("ssh")) {
     const portToken = String(port);
     const tunnelPattern = new RegExp(
@@ -32,7 +32,9 @@ export function buildPortHints(listeners: PortListener[], port: number): string[
     hints.push("Another process is listening on this port.");
   }
   if (listeners.length > 1) {
-    hints.push("Multiple listeners detected; ensure only one gateway/tunnel.");
+    hints.push(
+      "Multiple listeners detected; ensure only one gateway/tunnel per port unless intentionally running isolated profiles.",
+    );
   }
   return hints;
 }

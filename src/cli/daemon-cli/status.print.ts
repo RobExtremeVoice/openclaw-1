@@ -240,7 +240,7 @@ export function printDaemonStatus(status: DaemonStatus, opts: { json: boolean })
   }
 
   if (legacyServices.length > 0) {
-    defaultRuntime.error(errorText("Legacy Clawdis services detected:"));
+    defaultRuntime.error(errorText("Legacy gateway services detected:"));
     for (const svc of legacyServices) {
       defaultRuntime.error(`- ${errorText(svc.label)} (${svc.detail})`);
     }
@@ -262,12 +262,12 @@ export function printDaemonStatus(status: DaemonStatus, opts: { json: boolean })
   if (legacyServices.length > 0 || extraServices.length > 0) {
     defaultRuntime.error(
       errorText(
-        "Recommendation: run a single gateway per machine. One gateway supports multiple agents.",
+        "Recommendation: run a single gateway per machine for most setups. One gateway supports multiple agents (see docs: /gateway#multiple-gateways-same-host).",
       ),
     );
     defaultRuntime.error(
       errorText(
-        "If you need multiple gateways, isolate ports + config/state (see docs: /gateway#multiple-gateways-same-host).",
+        "If you need multiple gateways (e.g., a rescue bot on the same host), isolate ports + config/state (see docs: /gateway#multiple-gateways-same-host).",
       ),
     );
     spacer();

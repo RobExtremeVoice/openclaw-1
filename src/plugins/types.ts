@@ -1,9 +1,15 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Command } from "commander";
 
+import type { AuthProfileCredential, OAuthCredential } from "../agents/auth-profiles/types.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { ClawdbotConfig } from "../config/config.js";
+import type { ModelProviderConfig } from "../config/types.js";
+import type { RuntimeEnv } from "../runtime.js";
+import type { WizardPrompter } from "../wizard/prompts.js";
+import type { createVpsAwareOAuthHandlers } from "../commands/oauth-flow.js";
 import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 
 export type PluginLogger = {
@@ -53,10 +59,57 @@ export type ClawdbotPluginToolFactory = (
   ctx: ClawdbotPluginToolContext,
 ) => AnyAgentTool | AnyAgentTool[] | null | undefined;
 
+export type ProviderAuthKind = "oauth" | "api_key" | "token" | "device_code" | "custom";
+
+export type ProviderAuthResult = {
+  profiles: Array<{ profileId: string; credential: AuthProfileCredential }>;
+  configPatch?: Partial<ClawdbotConfig>;
+  defaultModel?: string;
+  notes?: string[];
+};
+
+export type ProviderAuthContext = {
+  config: ClawdbotConfig;
+  agentDir?: string;
+  workspaceDir?: string;
+  prompter: WizardPrompter;
+  runtime: RuntimeEnv;
+  isRemote: boolean;
+  openUrl: (url: string) => Promise<void>;
+  oauth: {
+    createVpsAwareHandlers: typeof createVpsAwareOAuthHandlers;
+  };
+};
+
+export type ProviderAuthMethod = {
+  id: string;
+  label: string;
+  hint?: string;
+  kind: ProviderAuthKind;
+  run: (ctx: ProviderAuthContext) => Promise<ProviderAuthResult>;
+};
+
+export type ProviderPlugin = {
+  id: string;
+  label: string;
+  docsPath?: string;
+  aliases?: string[];
+  envVars?: string[];
+  models?: ModelProviderConfig;
+  auth: ProviderAuthMethod[];
+  formatApiKey?: (cred: AuthProfileCredential) => string;
+  refreshOAuth?: (cred: OAuthCredential) => Promise<OAuthCredential>;
+};
+
 export type ClawdbotPluginGatewayMethod = {
   method: string;
   handler: GatewayRequestHandler;
 };
+
+export type ClawdbotPluginHttpHandler = (
+  req: IncomingMessage,
+  res: ServerResponse,
+) => Promise<boolean> | boolean;
 
 export type ClawdbotPluginCliContext = {
   program: Command;
@@ -112,12 +165,12 @@ export type ClawdbotPluginApi = {
     tool: AnyAgentTool | ClawdbotPluginToolFactory,
     opts?: { name?: string; names?: string[] },
   ) => void;
-  registerChannel: (
-    registration: ClawdbotPluginChannelRegistration | ChannelPlugin,
-  ) => void;
+  registerHttpHandler: (handler: ClawdbotPluginHttpHandler) => void;
+  registerChannel: (registration: ClawdbotPluginChannelRegistration | ChannelPlugin) => void;
   registerGatewayMethod: (method: string, handler: GatewayRequestHandler) => void;
   registerCli: (registrar: ClawdbotPluginCliRegistrar, opts?: { commands?: string[] }) => void;
   registerService: (service: ClawdbotPluginService) => void;
+  registerProvider: (provider: ProviderPlugin) => void;
   resolvePath: (input: string) => string;
 };
 

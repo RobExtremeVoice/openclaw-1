@@ -37,10 +37,7 @@ export async function maybeRepairGatewayDaemon(params: {
   if (params.healthOk) return;
 
   const service = resolveGatewayService();
-  const loaded = await service.isLoaded({
-    env: process.env,
-    profile: process.env.CLAWDBOT_PROFILE,
-  });
+  const loaded = await service.isLoaded({ env: process.env });
   let serviceRuntime: Awaited<ReturnType<typeof service.readRuntime>> | undefined;
   if (loaded) {
     serviceRuntime = await service.readRuntime(process.env).catch(() => undefined);
@@ -133,7 +130,6 @@ export async function maybeRepairGatewayDaemon(params: {
     if (start) {
       await service.restart({
         env: process.env,
-        profile: process.env.CLAWDBOT_PROFILE,
         stdout: process.stdout,
       });
       await sleep(1500);
@@ -156,7 +152,6 @@ export async function maybeRepairGatewayDaemon(params: {
     if (restart) {
       await service.restart({
         env: process.env,
-        profile: process.env.CLAWDBOT_PROFILE,
         stdout: process.stdout,
       });
       await sleep(1500);

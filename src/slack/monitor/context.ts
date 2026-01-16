@@ -13,6 +13,33 @@ import { normalizeAllowList, normalizeAllowListLower, normalizeSlackSlug } from 
 import { resolveSlackChannelConfig } from "./channel-config.js";
 import { isSlackRoomAllowedByPolicy } from "./policy.js";
 
+export function inferSlackChannelType(
+  channelId?: string | null,
+): SlackMessageEvent["channel_type"] | undefined {
+  const trimmed = channelId?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("D")) return "im";
+  if (trimmed.startsWith("C")) return "channel";
+  if (trimmed.startsWith("G")) return "group";
+  return undefined;
+}
+
+export function normalizeSlackChannelType(
+  channelType?: string | null,
+  channelId?: string | null,
+): SlackMessageEvent["channel_type"] {
+  const normalized = channelType?.trim().toLowerCase();
+  if (
+    normalized === "im" ||
+    normalized === "mpim" ||
+    normalized === "channel" ||
+    normalized === "group"
+  ) {
+    return normalized;
+  }
+  return inferSlackChannelType(channelId) ?? "channel";
+}
+
 export type SlackMonitorContext = {
   cfg: ClawdbotConfig;
   accountId: string;
@@ -52,6 +79,8 @@ export type SlackMonitorContext = {
   reactionMode: SlackReactionNotificationMode;
   reactionAllowlist: Array<string | number>;
   replyToMode: "off" | "first" | "all";
+  threadHistoryScope: "thread" | "channel";
+  threadInheritParent: boolean;
   slashCommand: Required<import("../../config/config.js").SlackSlashCommandConfig>;
   textLimit: number;
   ackReactionScope: string;
@@ -111,6 +140,8 @@ export function createSlackMonitorContext(params: {
   reactionMode: SlackReactionNotificationMode;
   reactionAllowlist: Array<string | number>;
   replyToMode: SlackMonitorContext["replyToMode"];
+  threadHistoryScope: SlackMonitorContext["threadHistoryScope"];
+  threadInheritParent: SlackMonitorContext["threadInheritParent"];
   slashCommand: SlackMonitorContext["slashCommand"];
   textLimit: number;
   ackReactionScope: string;
@@ -147,15 +178,15 @@ export function createSlackMonitorContext(params: {
   }) => {
     const channelId = p.channelId?.trim() ?? "";
     if (!channelId) return params.mainKey;
-    const channelType = p.channelType?.trim().toLowerCase() ?? "";
-    const isRoom = channelType === "channel" || channelType === "group";
+    const channelType = normalizeSlackChannelType(p.channelType, channelId);
+    const isDirectMessage = channelType === "im";
     const isGroup = channelType === "mpim";
-    const from = isRoom
-      ? `slack:channel:${channelId}`
+    const from = isDirectMessage
+      ? `slack:${channelId}`
       : isGroup
         ? `slack:group:${channelId}`
-        : `slack:${channelId}`;
-    const chatType = isRoom ? "room" : isGroup ? "group" : "direct";
+        : `slack:channel:${channelId}`;
+    const chatType = isDirectMessage ? "direct" : isGroup ? "group" : "room";
     return resolveSessionKey(
       params.sessionScope,
       { From: from, ChatType: chatType, Provider: "slack" },
@@ -249,7 +280,7 @@ export function createSlackMonitorContext(params: {
     channelName?: string;
     channelType?: SlackMessageEvent["channel_type"];
   }) => {
-    const channelType = p.channelType;
+    const channelType = normalizeSlackChannelType(p.channelType, p.channelId);
     const isDirectMessage = channelType === "im";
     const isGroupDm = channelType === "mpim";
     const isRoom = channelType === "channel" || channelType === "group";
@@ -341,6 +372,8 @@ export function createSlackMonitorContext(params: {
     reactionMode: params.reactionMode,
     reactionAllowlist: params.reactionAllowlist,
     replyToMode: params.replyToMode,
+    threadHistoryScope: params.threadHistoryScope,
+    threadInheritParent: params.threadInheritParent,
     slashCommand: params.slashCommand,
     textLimit: params.textLimit,
     ackReactionScope: params.ackReactionScope,

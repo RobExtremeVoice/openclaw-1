@@ -103,11 +103,14 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
     },
     threading: {
       resolveReplyToMode: ({ cfg }) => cfg.channels?.telegram?.replyToMode ?? "first",
-      buildToolContext: ({ context, hasRepliedRef }) => ({
-        currentChannelId: context.To?.trim() || undefined,
-        currentThreadTs: context.ReplyToId,
-        hasRepliedRef,
-      }),
+      buildToolContext: ({ context, hasRepliedRef }) => {
+        const threadId = context.MessageThreadId ?? context.ReplyToId;
+        return {
+          currentChannelId: context.To?.trim() || undefined,
+          currentThreadTs: threadId != null ? String(threadId) : undefined,
+          hasRepliedRef,
+        };
+      },
     },
   },
   whatsapp: {
@@ -281,27 +284,6 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
     },
     groups: {
       resolveRequireMention: resolveIMessageGroupRequireMention,
-    },
-    threading: {
-      buildToolContext: ({ context, hasRepliedRef }) => ({
-        currentChannelId: context.To?.trim() || undefined,
-        currentThreadTs: context.ReplyToId,
-        hasRepliedRef,
-      }),
-    },
-  },
-  msteams: {
-    id: "msteams",
-    capabilities: {
-      chatTypes: ["direct", "channel", "thread"],
-      polls: true,
-      threads: true,
-      media: true,
-    },
-    outbound: { textChunkLimit: 4000 },
-    config: {
-      resolveAllowFrom: ({ cfg }) => cfg.channels?.msteams?.allowFrom ?? [],
-      formatAllowFrom: ({ allowFrom }) => formatLower(allowFrom),
     },
     threading: {
       buildToolContext: ({ context, hasRepliedRef }) => ({

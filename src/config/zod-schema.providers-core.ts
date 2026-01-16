@@ -63,8 +63,12 @@ export const TelegramAccountSchemaBase = z.object({
   actions: z
     .object({
       reactions: z.boolean().optional(),
+      sendMessage: z.boolean().optional(),
+      deleteMessage: z.boolean().optional(),
     })
     .optional(),
+  reactionNotifications: z.enum(["off", "own", "all"]).optional(),
+  reactionLevel: z.enum(["off", "ack", "minimal", "extensive"]).optional(),
 });
 
 export const TelegramAccountSchema = TelegramAccountSchemaBase.superRefine((value, ctx) => {
@@ -203,6 +207,11 @@ export const SlackChannelSchema = z.object({
   systemPrompt: z.string().optional(),
 });
 
+export const SlackThreadSchema = z.object({
+  historyScope: z.enum(["thread", "channel"]).optional(),
+  inheritParent: z.boolean().optional(),
+});
+
 export const SlackAccountSchema = z.object({
   name: z.string().optional(),
   capabilities: z.array(z.string()).optional(),
@@ -211,6 +220,8 @@ export const SlackAccountSchema = z.object({
   configWrites: z.boolean().optional(),
   botToken: z.string().optional(),
   appToken: z.string().optional(),
+  userToken: z.string().optional(),
+  userTokenReadOnly: z.boolean().optional().default(true),
   allowBots: z.boolean().optional(),
   requireMention: z.boolean().optional(),
   groupPolicy: GroupPolicySchema.optional().default("allowlist"),
@@ -224,6 +235,7 @@ export const SlackAccountSchema = z.object({
   reactionNotifications: z.enum(["off", "own", "all", "allowlist"]).optional(),
   reactionAllowlist: z.array(z.union([z.string(), z.number()])).optional(),
   replyToMode: ReplyToModeSchema.optional(),
+  thread: SlackThreadSchema.optional(),
   actions: z
     .object({
       reactions: z.boolean().optional(),

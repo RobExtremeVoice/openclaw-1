@@ -11,7 +11,7 @@ export type MessageChannelId = DeliverableMessageChannel;
 
 const getMessageChannels = () => listDeliverableMessageChannels();
 
-function isKnownChannel(value: string): value is MessageChannelId {
+function isKnownChannel(value: string): boolean {
   return getMessageChannels().includes(value as MessageChannelId);
 }
 
@@ -46,7 +46,7 @@ export async function listConfiguredMessageChannels(
   for (const plugin of listChannelPlugins()) {
     if (!isKnownChannel(plugin.id)) continue;
     if (await isPluginConfigured(plugin, cfg)) {
-      channels.push(plugin.id);
+      channels.push(plugin.id as MessageChannelId);
     }
   }
   return channels;
@@ -59,10 +59,10 @@ export async function resolveMessageChannelSelection(params: {
   const normalized = normalizeMessageChannel(params.channel);
   if (normalized) {
     if (!isKnownChannel(normalized)) {
-      throw new Error(`Unknown channel: ${normalized}`);
+      throw new Error(`Unknown channel: ${String(normalized)}`);
     }
     return {
-      channel: normalized,
+      channel: normalized as MessageChannelId,
       configured: await listConfiguredMessageChannels(params.cfg),
     };
   }

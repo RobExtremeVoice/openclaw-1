@@ -14,7 +14,7 @@ import {
   resolveAgentIdFromSessionKey,
   resolveSessionTranscriptPath,
   type SessionEntry,
-  saveSessionStore,
+  updateSessionStore,
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
@@ -125,6 +125,14 @@ export async function runAgentTurnWithFallback(params: {
           resolveAgentIdFromSessionKey(params.followupRun.run.sessionKey),
         ),
         run: (provider, model) => {
+          // Notify that model selection is complete (including after fallback).
+          // This allows responsePrefix template interpolation with the actual model.
+          params.opts?.onModelSelected?.({
+            provider,
+            model,
+            thinkLevel: params.followupRun.run.thinkLevel,
+          });
+
           if (isCliProvider(provider, params.followupRun.run.config)) {
             const startedAt = Date.now();
             emitAgentEvent({
@@ -375,6 +383,7 @@ export async function runAgentTurnWithFallback(params: {
         params.activeSessionStore &&
         params.storePath
       ) {
+        const sessionKey = params.sessionKey;
         const corruptedSessionId = params.getActiveSessionEntry()?.sessionId;
         defaultRuntime.error(
           `Session history corrupted (Gemini function call ordering). Resetting session: ${params.sessionKey}`,
@@ -391,9 +400,13 @@ export async function runAgentTurnWithFallback(params: {
             }
           }
 
-          // Remove session entry from store
-          delete params.activeSessionStore[params.sessionKey];
-          await saveSessionStore(params.storePath, params.activeSessionStore);
+          // Keep the in-memory snapshot consistent with the on-disk store reset.
+          delete params.activeSessionStore[sessionKey];
+
+          // Remove session entry from store using a fresh, locked snapshot.
+          await updateSessionStore(params.storePath, (store) => {
+            delete store[sessionKey];
+          });
         } catch (cleanupErr) {
           defaultRuntime.error(
             `Failed to reset corrupted session ${params.sessionKey}: ${String(cleanupErr)}`,

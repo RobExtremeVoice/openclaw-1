@@ -19,7 +19,7 @@ import type { SlackMessageEvent } from "../../types.js";
 import { allowListMatches, resolveSlackUserAllowed } from "../allow-list.js";
 import { isSlackSenderAllowListed, resolveSlackEffectiveAllowFrom } from "../auth.js";
 import { resolveSlackChannelConfig } from "../channel-config.js";
-import type { SlackMonitorContext } from "../context.js";
+import { normalizeSlackChannelType, type SlackMonitorContext } from "../context.js";
 import { resolveSlackMedia, resolveSlackThreadStarter } from "../media.js";
 
 import type { PreparedSlackMessage } from "./types.js";
@@ -45,7 +45,7 @@ export async function prepareSlackMessage(params: {
     channelType = channelType ?? channelInfo.type;
   }
   const channelName = channelInfo?.name;
-  const resolvedChannelType = channelType;
+  const resolvedChannelType = normalizeSlackChannelType(channelType, message.channel);
   const isDirectMessage = resolvedChannelType === "im";
   const isGroupDm = resolvedChannelType === "mpim";
   const isRoom = resolvedChannelType === "channel" || resolvedChannelType === "group";
@@ -263,7 +263,6 @@ export async function prepareSlackMessage(params: {
       : null;
 
   const roomLabel = channelName ? `#${channelName}` : `#${message.channel}`;
-  const historyKey = message.channel;
   const historyEntry =
     isRoomish && ctx.historyLimit > 0
       ? {
@@ -291,9 +290,11 @@ export async function prepareSlackMessage(params: {
   const threadKeys = resolveThreadSessionKeys({
     baseSessionKey,
     threadId: isThreadReply ? threadTs : undefined,
-    parentSessionKey: isThreadReply ? baseSessionKey : undefined,
+    parentSessionKey: isThreadReply && ctx.threadInheritParent ? baseSessionKey : undefined,
   });
   const sessionKey = threadKeys.sessionKey;
+  const historyKey =
+    isThreadReply && ctx.threadHistoryScope === "thread" ? sessionKey : message.channel;
   enqueueSystemEvent(`${inboundLabel}: ${preview}`, {
     sessionKey,
     contextKey: `slack:message:${message.channel}:${message.ts ?? "unknown"}`,

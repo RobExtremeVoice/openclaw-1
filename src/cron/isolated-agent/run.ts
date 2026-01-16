@@ -28,9 +28,9 @@ import {
   normalizeThinkLevel,
   supportsXHighThinking,
 } from "../../auto-reply/thinking.js";
-import type { CliDeps } from "../../cli/deps.js";
+import { createOutboundSendDeps, type CliDeps } from "../../cli/deps.js";
 import type { ClawdbotConfig } from "../../config/config.js";
-import { resolveSessionTranscriptPath, saveSessionStore } from "../../config/sessions.js";
+import { resolveSessionTranscriptPath, updateSessionStore } from "../../config/sessions.js";
 import type { AgentDefaultsConfig } from "../../config/types.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { deliverOutboundPayloads } from "../../infra/outbound/deliver.js";
@@ -217,13 +217,17 @@ export async function runCronIsolatedAgentTurn(params: {
       skillsSnapshot,
     };
     cronSession.store[agentSessionKey] = cronSession.sessionEntry;
-    await saveSessionStore(cronSession.storePath, cronSession.store);
+    await updateSessionStore(cronSession.storePath, (store) => {
+      store[agentSessionKey] = cronSession.sessionEntry;
+    });
   }
 
   // Persist systemSent before the run, mirroring the inbound auto-reply behavior.
   cronSession.sessionEntry.systemSent = true;
   cronSession.store[agentSessionKey] = cronSession.sessionEntry;
-  await saveSessionStore(cronSession.storePath, cronSession.store);
+  await updateSessionStore(cronSession.storePath, (store) => {
+    store[agentSessionKey] = cronSession.sessionEntry;
+  });
 
   let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
   let fallbackProvider = provider;
@@ -316,7 +320,9 @@ export async function runCronIsolatedAgentTurn(params: {
         promptTokens > 0 ? promptTokens : (usage.total ?? input);
     }
     cronSession.store[agentSessionKey] = cronSession.sessionEntry;
-    await saveSessionStore(cronSession.storePath, cronSession.store);
+    await updateSessionStore(cronSession.storePath, (store) => {
+      store[agentSessionKey] = cronSession.sessionEntry;
+    });
   }
   const firstText = payloads[0]?.text ?? "";
   const summary = pickSummaryFromPayloads(payloads) ?? pickSummaryFromOutput(firstText);
@@ -349,23 +355,7 @@ export async function runCronIsolatedAgentTurn(params: {
         accountId: resolvedDelivery.accountId,
         payloads,
         bestEffort: bestEffortDeliver,
-        deps: {
-          sendWhatsApp: params.deps.sendMessageWhatsApp,
-          sendTelegram: params.deps.sendMessageTelegram,
-          sendDiscord: params.deps.sendMessageDiscord,
-          sendSlack: params.deps.sendMessageSlack,
-          sendSignal: params.deps.sendMessageSignal,
-          sendIMessage: params.deps.sendMessageIMessage,
-          sendMSTeams: params.deps.sendMessageMSTeams
-            ? async (to, text, opts) =>
-                await params.deps.sendMessageMSTeams({
-                  cfg: params.cfg,
-                  to,
-                  text,
-                  mediaUrl: opts?.mediaUrl,
-                })
-            : undefined,
-        },
+        deps: createOutboundSendDeps(params.deps),
       });
     } catch (err) {
       if (!bestEffortDeliver) {

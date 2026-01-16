@@ -285,9 +285,12 @@ export function loadCombinedSessionStoreForGateway(cfg: ClawdbotConfig): {
     const store = loadSessionStore(storePath);
     for (const [key, entry] of Object.entries(store)) {
       const canonicalKey = canonicalizeSessionKeyForAgent(agentId, key);
+      // Merge with existing entry if present (avoid overwriting with less complete data)
+      const existing = combined[canonicalKey];
       combined[canonicalKey] = {
+        ...existing,
         ...entry,
-        spawnedBy: canonicalizeSpawnedByForAgent(agentId, entry.spawnedBy),
+        spawnedBy: canonicalizeSpawnedByForAgent(agentId, entry.spawnedBy ?? existing?.spawnedBy),
       };
     }
   }
@@ -308,6 +311,7 @@ export function getSessionDefaults(cfg: ClawdbotConfig): GatewaySessionsDefaults
     lookupContextTokens(resolved.model) ??
     DEFAULT_CONTEXT_TOKENS;
   return {
+    modelProvider: resolved.provider ?? null,
     model: resolved.model ?? null,
     contextTokens: contextTokens ?? null,
   };

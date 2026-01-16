@@ -10,6 +10,8 @@ import type {
   ClawdbotPluginApi,
   ClawdbotPluginChannelRegistration,
   ClawdbotPluginCliRegistrar,
+  ClawdbotPluginHttpHandler,
+  ProviderPlugin,
   ClawdbotPluginService,
   ClawdbotPluginToolContext,
   ClawdbotPluginToolFactory,
@@ -33,10 +35,22 @@ export type PluginCliRegistration = {
   source: string;
 };
 
+export type PluginHttpRegistration = {
+  pluginId: string;
+  handler: ClawdbotPluginHttpHandler;
+  source: string;
+};
+
 export type PluginChannelRegistration = {
   pluginId: string;
   plugin: ChannelPlugin;
   dock?: ChannelDock;
+  source: string;
+};
+
+export type PluginProviderRegistration = {
+  pluginId: string;
+  provider: ProviderPlugin;
   source: string;
 };
 
@@ -59,9 +73,11 @@ export type PluginRecord = {
   error?: string;
   toolNames: string[];
   channelIds: string[];
+  providerIds: string[];
   gatewayMethods: string[];
   cliCommands: string[];
   services: string[];
+  httpHandlers: number;
   configSchema: boolean;
   configUiHints?: Record<string, PluginConfigUiHint>;
 };
@@ -70,7 +86,9 @@ export type PluginRegistry = {
   plugins: PluginRecord[];
   tools: PluginToolRegistration[];
   channels: PluginChannelRegistration[];
+  providers: PluginProviderRegistration[];
   gatewayHandlers: GatewayRequestHandlers;
+  httpHandlers: PluginHttpRegistration[];
   cliRegistrars: PluginCliRegistration[];
   services: PluginServiceRegistration[];
   diagnostics: PluginDiagnostic[];
@@ -86,7 +104,9 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     plugins: [],
     tools: [],
     channels: [],
+    providers: [],
     gatewayHandlers: {},
+    httpHandlers: [],
     cliRegistrars: [],
     services: [],
     diagnostics: [],
@@ -142,6 +162,15 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     record.gatewayMethods.push(trimmed);
   };
 
+  const registerHttpHandler = (record: PluginRecord, handler: ClawdbotPluginHttpHandler) => {
+    record.httpHandlers += 1;
+    registry.httpHandlers.push({
+      pluginId: record.id,
+      handler,
+      source: record.source,
+    });
+  };
+
   const registerChannel = (
     record: PluginRecord,
     registration: ClawdbotPluginChannelRegistration | ChannelPlugin,
@@ -166,6 +195,35 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       pluginId: record.id,
       plugin,
       dock: normalized.dock,
+      source: record.source,
+    });
+  };
+
+  const registerProvider = (record: PluginRecord, provider: ProviderPlugin) => {
+    const id = typeof provider?.id === "string" ? provider.id.trim() : "";
+    if (!id) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "provider registration missing id",
+      });
+      return;
+    }
+    const existing = registry.providers.find((entry) => entry.provider.id === id);
+    if (existing) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `provider already registered: ${id} (${existing.pluginId})`,
+      });
+      return;
+    }
+    record.providerIds.push(id);
+    registry.providers.push({
+      pluginId: record.id,
+      provider,
       source: record.source,
     });
   };
@@ -220,7 +278,9 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       pluginConfig: params.pluginConfig,
       logger: normalizeLogger(registryParams.logger),
       registerTool: (tool, opts) => registerTool(record, tool, opts),
+      registerHttpHandler: (handler) => registerHttpHandler(record, handler),
       registerChannel: (registration) => registerChannel(record, registration),
+      registerProvider: (provider) => registerProvider(record, provider),
       registerGatewayMethod: (method, handler) => registerGatewayMethod(record, method, handler),
       registerCli: (registrar, opts) => registerCli(record, registrar, opts),
       registerService: (service) => registerService(record, service),
@@ -234,6 +294,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     pushDiagnostic,
     registerTool,
     registerChannel,
+    registerProvider,
     registerGatewayMethod,
     registerCli,
     registerService,

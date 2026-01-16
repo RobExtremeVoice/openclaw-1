@@ -17,6 +17,22 @@ export type QueueConfig = {
   drop?: QueueDropPolicy;
 };
 
+export type InboundDebounceByProvider = {
+  whatsapp?: number;
+  telegram?: number;
+  discord?: number;
+  slack?: number;
+  signal?: number;
+  imessage?: number;
+  msteams?: number;
+  webchat?: number;
+};
+
+export type InboundDebounceConfig = {
+  debounceMs?: number;
+  byChannel?: InboundDebounceByProvider;
+};
+
 export type BroadcastStrategy = "parallel" | "sequential";
 
 export type BroadcastConfig = {
@@ -44,13 +60,28 @@ export type MessagesConfig = {
   messagePrefix?: string;
   /**
    * Prefix auto-added to all outbound replies.
-   * - string: explicit prefix
+   *
+   * - string: explicit prefix (may include template variables)
    * - special value: `"auto"` derives `[{agents.list[].identity.name}]` for the routed agent (when set)
+   *
+   * Supported template variables (case-insensitive):
+   * - `{model}` - short model name (e.g., `claude-opus-4-5`, `gpt-4o`)
+   * - `{modelFull}` - full model identifier (e.g., `anthropic/claude-opus-4-5`)
+   * - `{provider}` - provider name (e.g., `anthropic`, `openai`)
+   * - `{thinkingLevel}` or `{think}` - current thinking level (`high`, `low`, `off`)
+   * - `{identity.name}` or `{identityName}` - agent identity name
+   *
+   * Example: `"[{model} | think:{thinkingLevel}]"` → `"[claude-opus-4-5 | think:high]"`
+   *
+   * Unresolved variables remain as literal text (e.g., `{model}` if context unavailable).
+   *
    * Default: none
    */
   responsePrefix?: string;
   groupChat?: GroupChatConfig;
   queue?: QueueConfig;
+  /** Debounce rapid inbound messages per sender (global + per-channel overrides). */
+  inbound?: InboundDebounceConfig;
   /** Emoji reaction used to acknowledge inbound messages (empty disables). */
   ackReaction?: string;
   /** When to send ack reactions. Default: "group-mentions". */

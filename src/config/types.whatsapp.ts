@@ -14,6 +14,8 @@ export type WhatsAppConfig = {
   capabilities?: string[];
   /** Allow channel-initiated config writes (default: true). */
   configWrites?: boolean;
+  /** Send read receipts for incoming messages (default true). */
+  sendReadReceipts?: boolean;
   /**
    * Inbound message prefix (WhatsApp only).
    * Default: `[{agents.list[].identity.name}]` (or `[clawdbot]`) when allowFrom is empty, else `""`.
@@ -73,6 +75,8 @@ export type WhatsAppConfig = {
      */
     group?: "always" | "mentions" | "never";
   };
+  /** Debounce window (ms) for batching rapid consecutive messages from the same sender (0 to disable). */
+  debounceMs?: number;
 };
 
 export type WhatsAppAccountConfig = {
@@ -84,6 +88,8 @@ export type WhatsAppAccountConfig = {
   configWrites?: boolean;
   /** If false, do not start this WhatsApp account provider. Default: true. */
   enabled?: boolean;
+  /** Send read receipts for incoming messages (default true). */
+  sendReadReceipts?: boolean;
   /** Inbound message prefix override for this account (WhatsApp only). */
   messagePrefix?: string;
   /** Override auth directory (Baileys multi-file auth state). */
@@ -127,4 +133,6 @@ export type WhatsAppAccountConfig = {
      */
     group?: "always" | "mentions" | "never";
   };
+  /** Debounce window (ms) for batching rapid consecutive messages from the same sender (0 to disable). */
+  debounceMs?: number;
 };

@@ -33,14 +33,16 @@ actor GatewayEndpointStore {
                 return GatewayEndpointStore.resolveGatewayToken(
                     isRemote: CommandResolver.connectionModeIsRemote(),
                     root: root,
-                    env: ProcessInfo.processInfo.environment)
+                    env: ProcessInfo.processInfo.environment,
+                    launchdSnapshot: GatewayLaunchAgentManager.launchdConfigSnapshot())
             },
             password: {
                 let root = ClawdbotConfigFile.loadDict()
                 return GatewayEndpointStore.resolveGatewayPassword(
                     isRemote: CommandResolver.connectionModeIsRemote(),
                     root: root,
-                    env: ProcessInfo.processInfo.environment)
+                    env: ProcessInfo.processInfo.environment,
+                    launchdSnapshot: GatewayLaunchAgentManager.launchdConfigSnapshot())
             },
             localPort: { GatewayEnvironment.gatewayPort() },
             localHost: {
@@ -60,7 +62,8 @@ actor GatewayEndpointStore {
     private static func resolveGatewayPassword(
         isRemote: Bool,
         root: [String: Any],
-        env: [String: String]) -> String?
+        env: [String: String],
+        launchdSnapshot: LaunchAgentPlistSnapshot?) -> String?
     {
         let raw = env["CLAWDBOT_GATEWAY_PASSWORD"] ?? ""
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -88,13 +91,19 @@ actor GatewayEndpointStore {
                 return pw
             }
         }
+        if let password = launchdSnapshot?.password?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !password.isEmpty
+        {
+            return password
+        }
         return nil
     }
 
     private static func resolveGatewayToken(
         isRemote: Bool,
         root: [String: Any],
-        env: [String: String]) -> String?
+        env: [String: String],
+        launchdSnapshot: LaunchAgentPlistSnapshot?) -> String?
     {
         let raw = env["CLAWDBOT_GATEWAY_TOKEN"] ?? ""
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -121,6 +130,11 @@ actor GatewayEndpointStore {
             if !value.isEmpty {
                 return value
             }
+        }
+        if let token = launchdSnapshot?.token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !token.isEmpty
+        {
+            return token
         }
         return nil
     }
@@ -430,9 +444,19 @@ extension GatewayEndpointStore {
     static func _testResolveGatewayPassword(
         isRemote: Bool,
         root: [String: Any],
-        env: [String: String]) -> String?
+        env: [String: String],
+        launchdSnapshot: LaunchAgentPlistSnapshot? = nil) -> String?
     {
-        self.resolveGatewayPassword(isRemote: isRemote, root: root, env: env)
+        self.resolveGatewayPassword(isRemote: isRemote, root: root, env: env, launchdSnapshot: launchdSnapshot)
+    }
+
+    static func _testResolveGatewayToken(
+        isRemote: Bool,
+        root: [String: Any],
+        env: [String: String],
+        launchdSnapshot: LaunchAgentPlistSnapshot? = nil) -> String?
+    {
+        self.resolveGatewayToken(isRemote: isRemote, root: root, env: env, launchdSnapshot: launchdSnapshot)
     }
 
     static func _testResolveGatewayBindMode(

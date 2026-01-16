@@ -1,14 +1,33 @@
-import fs from "node:fs/promises";
-
 import { listChannelPlugins } from "../channels/plugins/index.js";
 import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
 import type { ChannelId } from "../channels/plugins/types.js";
 import type { ClawdbotConfig } from "../config/config.js";
-import { CONFIG_PATH_CLAWDBOT } from "../config/config.js";
+import { resolveBrowserConfig } from "../browser/config.js";
+import { resolveConfigPath, resolveStateDir } from "../config/paths.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { probeGateway } from "../gateway/probe.js";
-import { CONFIG_DIR } from "../utils.js";
+import {
+  collectAttackSurfaceSummaryFindings,
+  collectExposureMatrixFindings,
+  collectHooksHardeningFindings,
+  collectIncludeFilePermFindings,
+  collectModelHygieneFindings,
+  collectPluginsTrustFindings,
+  collectSecretsInConfigFindings,
+  collectStateDeepFilesystemFindings,
+  collectSyncedFolderFindings,
+  readConfigSnapshotForAudit,
+} from "./audit-extra.js";
+import {
+  formatOctal,
+  isGroupReadable,
+  isGroupWritable,
+  isWorldReadable,
+  isWorldWritable,
+  modeBits,
+  safeStat,
+} from "./audit-fs.js";
 
 export type SecurityAuditSeverity = "info" | "warn" | "critical";
 
@@ -46,9 +65,9 @@ export type SecurityAuditOptions = {
   deep?: boolean;
   includeFilesystem?: boolean;
   includeChannelSecurity?: boolean;
-  /** Override where to check state (default: CONFIG_DIR). */
+  /** Override where to check state (default: resolveStateDir()). */
   stateDir?: string;
-  /** Override config path check (default: CONFIG_PATH_CLAWDBOT). */
+  /** Override config path check (default: resolveConfigPath()). */
   configPath?: string;
   /** Time limit for deep gateway probe. */
   deepTimeoutMs?: number;
@@ -91,68 +110,6 @@ function classifyChannelWarningSeverity(message: string): SecurityAuditSeverity 
     return "info";
   }
   return "warn";
-}
-
-async function safeStat(targetPath: string): Promise<{
-  ok: boolean;
-  isSymlink: boolean;
-  isDir: boolean;
-  mode: number | null;
-  uid: number | null;
-  gid: number | null;
-  error?: string;
-}> {
-  try {
-    const lst = await fs.lstat(targetPath);
-    return {
-      ok: true,
-      isSymlink: lst.isSymbolicLink(),
-      isDir: lst.isDirectory(),
-      mode: typeof lst.mode === "number" ? lst.mode : null,
-      uid: typeof lst.uid === "number" ? lst.uid : null,
-      gid: typeof lst.gid === "number" ? lst.gid : null,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      isSymlink: false,
-      isDir: false,
-      mode: null,
-      uid: null,
-      gid: null,
-      error: String(err),
-    };
-  }
-}
-
-function modeBits(mode: number | null): number | null {
-  if (mode == null) return null;
-  return mode & 0o777;
-}
-
-function formatOctal(bits: number | null): string {
-  if (bits == null) return "unknown";
-  return bits.toString(8).padStart(3, "0");
-}
-
-function isWorldWritable(bits: number | null): boolean {
-  if (bits == null) return false;
-  return (bits & 0o002) !== 0;
-}
-
-function isGroupWritable(bits: number | null): boolean {
-  if (bits == null) return false;
-  return (bits & 0o020) !== 0;
-}
-
-function isWorldReadable(bits: number | null): boolean {
-  if (bits == null) return false;
-  return (bits & 0o004) !== 0;
-}
-
-function isGroupReadable(bits: number | null): boolean {
-  if (bits == null) return false;
-  return (bits & 0o040) !== 0;
 }
 
 async function collectFilesystemFindings(params: {
@@ -283,6 +240,89 @@ function collectGatewayConfigFindings(cfg: ClawdbotConfig): SecurityAuditFinding
       title: "Gateway token looks short",
       detail: `gateway auth token is ${token.length} chars; prefer a long random token.`,
     });
+  }
+
+  return findings;
+}
+
+function isLoopbackClientHost(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase();
+  return h === "localhost" || h === "127.0.0.1" || h === "::1";
+}
+
+function collectBrowserControlFindings(cfg: ClawdbotConfig): SecurityAuditFinding[] {
+  const findings: SecurityAuditFinding[] = [];
+
+  let resolved: ReturnType<typeof resolveBrowserConfig>;
+  try {
+    resolved = resolveBrowserConfig(cfg.browser);
+  } catch (err) {
+    findings.push({
+      checkId: "browser.control_invalid_config",
+      severity: "warn",
+      title: "Browser control config looks invalid",
+      detail: String(err),
+      remediation: `Fix browser.controlUrl/browser.cdpUrl in ${resolveConfigPath()} and re-run "clawdbot security audit --deep".`,
+    });
+    return findings;
+  }
+
+  if (!resolved.enabled) return findings;
+
+  const url = new URL(resolved.controlUrl);
+  const isLoopback = isLoopbackClientHost(url.hostname);
+  const envToken = process.env.CLAWDBOT_BROWSER_CONTROL_TOKEN?.trim();
+  const controlToken = (envToken || resolved.controlToken)?.trim() || null;
+
+  if (!isLoopback) {
+    if (!controlToken) {
+      findings.push({
+        checkId: "browser.control_remote_no_token",
+        severity: "critical",
+        title: "Remote browser control is missing an auth token",
+        detail: `browser.controlUrl is non-loopback (${resolved.controlUrl}) but no browser.controlToken (or CLAWDBOT_BROWSER_CONTROL_TOKEN) is configured.`,
+        remediation:
+          "Set browser.controlToken (or export CLAWDBOT_BROWSER_CONTROL_TOKEN) and prefer serving over Tailscale Serve or HTTPS reverse proxy.",
+      });
+    }
+
+    if (url.protocol === "http:") {
+      findings.push({
+        checkId: "browser.control_remote_http",
+        severity: "warn",
+        title: "Remote browser control uses HTTP",
+        detail: `browser.controlUrl=${resolved.controlUrl} is http; this is OK only if it's tailnet-only (Tailscale) or behind another encrypted tunnel.`,
+        remediation: `Prefer HTTPS termination (Tailscale Serve) and keep the endpoint tailnet-only.`,
+      });
+    }
+
+    if (controlToken && controlToken.length < 24) {
+      findings.push({
+        checkId: "browser.control_token_too_short",
+        severity: "warn",
+        title: "Browser control token looks short",
+        detail: `browser control token is ${controlToken.length} chars; prefer a long random token.`,
+      });
+    }
+
+    const tailscaleMode = cfg.gateway?.tailscale?.mode ?? "off";
+    const gatewayAuth = resolveGatewayAuth({ authConfig: cfg.gateway?.auth, tailscaleMode });
+    const gatewayToken =
+      gatewayAuth.mode === "token" &&
+      typeof gatewayAuth.token === "string" &&
+      gatewayAuth.token.trim()
+        ? gatewayAuth.token.trim()
+        : null;
+
+    if (controlToken && gatewayToken && controlToken === gatewayToken) {
+      findings.push({
+        checkId: "browser.control_token_reuse_gateway_token",
+        severity: "warn",
+        title: "Browser control token reuses the Gateway token",
+        detail: `browser.controlToken matches gateway.auth token; compromise of browser control expands blast radius to the Gateway API.`,
+        remediation: `Use a separate browser.controlToken dedicated to browser control.`,
+      });
+    }
   }
 
   return findings;
@@ -497,15 +537,34 @@ async function maybeProbeGateway(params: {
 export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<SecurityAuditReport> {
   const findings: SecurityAuditFinding[] = [];
   const cfg = opts.config;
-  const stateDir = opts.stateDir ?? CONFIG_DIR;
-  const configPath = opts.configPath ?? CONFIG_PATH_CLAWDBOT;
+  const env = process.env;
+  const stateDir = opts.stateDir ?? resolveStateDir(env);
+  const configPath = opts.configPath ?? resolveConfigPath(env, stateDir);
+
+  findings.push(...collectAttackSurfaceSummaryFindings(cfg));
+  findings.push(...collectSyncedFolderFindings({ stateDir, configPath }));
 
   findings.push(...collectGatewayConfigFindings(cfg));
+  findings.push(...collectBrowserControlFindings(cfg));
   findings.push(...collectLoggingFindings(cfg));
   findings.push(...collectElevatedFindings(cfg));
+  findings.push(...collectHooksHardeningFindings(cfg));
+  findings.push(...collectSecretsInConfigFindings(cfg));
+  findings.push(...collectModelHygieneFindings(cfg));
+  findings.push(...collectExposureMatrixFindings(cfg));
+
+  const configSnapshot =
+    opts.includeFilesystem !== false
+      ? await readConfigSnapshotForAudit({ env, configPath }).catch(() => null)
+      : null;
 
   if (opts.includeFilesystem !== false) {
     findings.push(...(await collectFilesystemFindings({ stateDir, configPath })));
+    if (configSnapshot) {
+      findings.push(...(await collectIncludeFilePermFindings({ configSnapshot })));
+    }
+    findings.push(...(await collectStateDeepFilesystemFindings({ cfg, env, stateDir })));
+    findings.push(...(await collectPluginsTrustFindings({ cfg, stateDir })));
   }
 
   if (opts.includeChannelSecurity !== false) {

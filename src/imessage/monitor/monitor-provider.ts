@@ -1,7 +1,19 @@
-import { resolveEffectiveMessagesConfig, resolveHumanDelayConfig } from "../../agents/identity.js";
+import {
+  resolveEffectiveMessagesConfig,
+  resolveHumanDelayConfig,
+  resolveIdentityName,
+} from "../../agents/identity.js";
+import {
+  extractShortModelName,
+  type ResponsePrefixContext,
+} from "../../auto-reply/reply/response-prefix-template.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import { hasControlCommand } from "../../auto-reply/command-detection.js";
 import { formatAgentEnvelope } from "../../auto-reply/envelope.js";
+import {
+  createInboundDebouncer,
+  resolveInboundDebounceMs,
+} from "../../auto-reply/inbound-debounce.js";
 import { dispatchReplyFromConfig } from "../../auto-reply/reply/dispatch-from-config.js";
 import {
   buildHistoryContextFromMap,
@@ -65,11 +77,48 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
   const includeAttachments = opts.includeAttachments ?? imessageCfg.includeAttachments ?? false;
   const mediaMaxBytes = (opts.mediaMaxMb ?? imessageCfg.mediaMaxMb ?? 16) * 1024 * 1024;
 
-  const handleMessage = async (raw: unknown) => {
-    const params = raw as { message?: IMessagePayload | null };
-    const message = params?.message ?? null;
-    if (!message) return;
+  const inboundDebounceMs = resolveInboundDebounceMs({ cfg, channel: "imessage" });
+  const inboundDebouncer = createInboundDebouncer<{ message: IMessagePayload }>({
+    debounceMs: inboundDebounceMs,
+    buildKey: (entry) => {
+      const sender = entry.message.sender?.trim();
+      if (!sender) return null;
+      const conversationId =
+        entry.message.chat_id != null
+          ? `chat:${entry.message.chat_id}`
+          : (entry.message.chat_guid ?? entry.message.chat_identifier ?? "unknown");
+      return `imessage:${accountInfo.accountId}:${conversationId}:${sender}`;
+    },
+    shouldDebounce: (entry) => {
+      const text = entry.message.text?.trim() ?? "";
+      if (!text) return false;
+      if (entry.message.attachments && entry.message.attachments.length > 0) return false;
+      return !hasControlCommand(text, cfg);
+    },
+    onFlush: async (entries) => {
+      const last = entries.at(-1);
+      if (!last) return;
+      if (entries.length === 1) {
+        await handleMessageNow(last.message);
+        return;
+      }
+      const combinedText = entries
+        .map((entry) => entry.message.text ?? "")
+        .filter(Boolean)
+        .join("\n");
+      const syntheticMessage: IMessagePayload = {
+        ...last.message,
+        text: combinedText,
+        attachments: null,
+      };
+      await handleMessageNow(syntheticMessage);
+    },
+    onError: (err) => {
+      runtime.error?.(`imessage debounce flush failed: ${String(err)}`);
+    },
+  });
 
+  async function handleMessageNow(message: IMessagePayload) {
     const senderRaw = message.sender ?? "";
     const sender = senderRaw.trim();
     if (!sender) return;
@@ -288,7 +337,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       });
     }
 
-    const imessageTo = chatTarget || `imessage:${sender}`;
+    const imessageTo = (isGroup ? chatTarget : undefined) || `imessage:${sender}`;
     const ctxPayload = {
       Body: combinedBody,
       RawBody: bodyText,
@@ -321,7 +370,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       const storePath = resolveStorePath(sessionCfg?.store, {
         agentId: route.agentId,
       });
-      const to = chatTarget || sender;
+      const to = (isGroup ? chatTarget : undefined) || sender;
       if (to) {
         await updateLastRoute({
           storePath,
@@ -341,8 +390,15 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     }
 
     let didSendReply = false;
+
+    // Create mutable context for response prefix template interpolation
+    let prefixContext: ResponsePrefixContext = {
+      identityName: resolveIdentityName(cfg, route.agentId),
+    };
+
     const dispatcher = createReplyDispatcher({
       responsePrefix: resolveEffectiveMessagesConfig(cfg, route.agentId).responsePrefix,
+      responsePrefixContextProvider: () => prefixContext,
       humanDelay: resolveHumanDelayConfig(cfg, route.agentId),
       deliver: async (payload) => {
         await deliverReplies({
@@ -370,6 +426,13 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
           typeof accountInfo.config.blockStreaming === "boolean"
             ? !accountInfo.config.blockStreaming
             : undefined,
+        onModelSelected: (ctx) => {
+          // Mutate the object directly instead of reassigning to ensure the closure sees updates
+          prefixContext.provider = ctx.provider;
+          prefixContext.model = extractShortModelName(ctx.model);
+          prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
+          prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
+        },
       },
     });
     if (!queuedFinal) {
@@ -381,6 +444,13 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     if (isGroup && historyKey && historyLimit > 0 && didSendReply) {
       clearHistoryEntries({ historyMap: groupHistories, historyKey });
     }
+  }
+
+  const handleMessage = async (raw: unknown) => {
+    const params = raw as { message?: IMessagePayload | null };
+    const message = params?.message ?? null;
+    if (!message) return;
+    await inboundDebouncer.enqueue({ message });
   };
 
   const client = await createIMessageRpcClient({

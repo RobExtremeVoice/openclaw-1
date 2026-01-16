@@ -67,8 +67,11 @@ final class MacNodeModeCoordinator {
                 try await self.session.connect(
                     endpoint: endpoint,
                     hello: hello,
-                    onConnected: { [weak self] serverName in
+                    onConnected: { [weak self] serverName, mainSessionKey in
                         self?.logger.info("mac node connected to \(serverName, privacy: .public)")
+                        if let mainSessionKey {
+                            await self?.runtime.updateMainSessionKey(mainSessionKey)
+                        }
                     },
                     onDisconnected: { reason in
                         await MacNodeModeCoordinator.handleBridgeDisconnect(reason: reason)
@@ -309,9 +312,23 @@ final class MacNodeModeCoordinator {
                 }
 
                 let remotePort = Self.remoteBridgePort()
+                let preferredLocalPort = Self.loopbackBridgePort()
+                if let preferredLocalPort {
+                    self.logger.info(
+                        "mac node bridge tunnel starting " +
+                            "preferredLocalPort=\(preferredLocalPort, privacy: .public) " +
+                            "remotePort=\(remotePort, privacy: .public)")
+                } else {
+                    self.logger.info(
+                        "mac node bridge tunnel starting " +
+                            "preferredLocalPort=none " +
+                            "remotePort=\(remotePort, privacy: .public)")
+                }
                 self.tunnel = try await RemotePortTunnel.create(
                     remotePort: remotePort,
-                    allowRemoteUrlOverride: false)
+                    preferredLocalPort: preferredLocalPort,
+                    allowRemoteUrlOverride: false,
+                    allowRandomLocalPort: true)
                 if let localPort = self.tunnel?.localPort,
                    let port = NWEndpoint.Port(rawValue: localPort)
                 {

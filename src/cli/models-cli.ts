@@ -4,13 +4,14 @@ import {
   githubCopilotLoginCommand,
   modelsAliasesAddCommand,
   modelsAliasesListCommand,
-  modelsAliasesRemoveCommand,
-  modelsAuthAddCommand,
-  modelsAuthOrderClearCommand,
-  modelsAuthOrderGetCommand,
-  modelsAuthOrderSetCommand,
-  modelsAuthPasteTokenCommand,
-  modelsAuthSetupTokenCommand,
+    modelsAliasesRemoveCommand,
+    modelsAuthAddCommand,
+    modelsAuthLoginCommand,
+    modelsAuthOrderClearCommand,
+    modelsAuthOrderGetCommand,
+    modelsAuthOrderSetCommand,
+    modelsAuthPasteTokenCommand,
+    modelsAuthSetupTokenCommand,
   modelsFallbacksAddCommand,
   modelsFallbacksClearCommand,
   modelsFallbacksListCommand,
@@ -37,7 +38,8 @@ export function registerModelsCli(program: Command) {
     .option("--status-plain", "Plain output (alias for `models status --plain`)", false)
     .addHelpText(
       "after",
-      () => `\n${theme.muted("Docs:")} ${formatDocsLink("/models", "docs.clawd.bot/models")}\n`,
+      () =>
+        `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/models", "docs.clawd.bot/cli/models")}\n`,
     );
 
   models
@@ -302,6 +304,28 @@ export function registerModelsCli(program: Command) {
     .action(async () => {
       try {
         await modelsAuthAddCommand({}, defaultRuntime);
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  auth
+    .command("login")
+    .description("Run a provider plugin auth flow (OAuth/API key)")
+    .option("--provider <id>", "Provider id registered by a plugin")
+    .option("--method <id>", "Provider auth method id")
+    .option("--set-default", "Apply the provider's default model recommendation", false)
+    .action(async (opts) => {
+      try {
+        await modelsAuthLoginCommand(
+          {
+            provider: opts.provider as string | undefined,
+            method: opts.method as string | undefined,
+            setDefault: Boolean(opts.setDefault),
+          },
+          defaultRuntime,
+        );
       } catch (err) {
         defaultRuntime.error(String(err));
         defaultRuntime.exit(1);

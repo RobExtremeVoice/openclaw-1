@@ -12,6 +12,7 @@ import {
   resolveSessionTranscriptPath,
   resolveSessionTranscriptsDir,
   updateLastRoute,
+  updateSessionStore,
   updateSessionStoreEntry,
 } from "./sessions.js";
 
@@ -137,6 +138,56 @@ describe("sessions", () => {
     expect(store[mainSessionKey]?.compactionCount).toBe(2);
   });
 
+  it("updateSessionStore preserves concurrent additions", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(storePath, "{}", "utf-8");
+
+    await Promise.all([
+      updateSessionStore(storePath, (store) => {
+        store["agent:main:one"] = { sessionId: "sess-1", updatedAt: 1 };
+      }),
+      updateSessionStore(storePath, (store) => {
+        store["agent:main:two"] = { sessionId: "sess-2", updatedAt: 2 };
+      }),
+    ]);
+
+    const store = loadSessionStore(storePath);
+    expect(store["agent:main:one"]?.sessionId).toBe("sess-1");
+    expect(store["agent:main:two"]?.sessionId).toBe("sess-2");
+  });
+
+  it("updateSessionStore keeps deletions when concurrent writes happen", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          "agent:main:old": { sessionId: "sess-old", updatedAt: 1 },
+          "agent:main:keep": { sessionId: "sess-keep", updatedAt: 2 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    await Promise.all([
+      updateSessionStore(storePath, (store) => {
+        delete store["agent:main:old"];
+      }),
+      updateSessionStore(storePath, (store) => {
+        store["agent:main:new"] = { sessionId: "sess-new", updatedAt: 3 };
+      }),
+    ]);
+
+    const store = loadSessionStore(storePath);
+    expect(store["agent:main:old"]).toBeUndefined();
+    expect(store["agent:main:keep"]?.sessionId).toBe("sess-keep");
+    expect(store["agent:main:new"]?.sessionId).toBe("sess-new");
+  });
+
   it("loadSessionStore auto-migrates legacy provider keys to channel keys", async () => {
     const mainSessionKey = "agent:main:main";
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
@@ -173,14 +224,6 @@ describe("sessions", () => {
       () => "/home/ignored",
     );
     expect(dir).toBe(path.join(path.resolve("/custom/state"), "agents", "main", "sessions"));
-  });
-
-  it("falls back to CLAWDIS_STATE_DIR for session transcripts dir", () => {
-    const dir = resolveSessionTranscriptsDir(
-      { CLAWDIS_STATE_DIR: "/legacy/state" } as NodeJS.ProcessEnv,
-      () => "/home/ignored",
-    );
-    expect(dir).toBe(path.join(path.resolve("/legacy/state"), "agents", "main", "sessions"));
   });
 
   it("includes topic ids in session transcript filenames", () => {

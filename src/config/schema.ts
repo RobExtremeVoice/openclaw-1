@@ -101,8 +101,21 @@ const FIELD_LABELS: Record<string, string> = {
   "tools.audio.transcription.timeoutSeconds": "Audio Transcription Timeout (sec)",
   "tools.profile": "Tool Profile",
   "agents.list[].tools.profile": "Agent Tool Profile",
+  "tools.byProvider": "Tool Policy by Provider",
+  "agents.list[].tools.byProvider": "Agent Tool Policy by Provider",
   "tools.exec.applyPatch.enabled": "Enable apply_patch",
   "tools.exec.applyPatch.allowModels": "apply_patch Model Allowlist",
+  "tools.web.search.enabled": "Enable Web Search Tool",
+  "tools.web.search.provider": "Web Search Provider",
+  "tools.web.search.apiKey": "Brave Search API Key",
+  "tools.web.search.maxResults": "Web Search Max Results",
+  "tools.web.search.timeoutSeconds": "Web Search Timeout (sec)",
+  "tools.web.search.cacheTtlMinutes": "Web Search Cache TTL (min)",
+  "tools.web.fetch.enabled": "Enable Web Fetch Tool",
+  "tools.web.fetch.maxChars": "Web Fetch Max Chars",
+  "tools.web.fetch.timeoutSeconds": "Web Fetch Timeout (sec)",
+  "tools.web.fetch.cacheTtlMinutes": "Web Fetch Cache TTL (min)",
+  "tools.web.fetch.userAgent": "Web Fetch User-Agent",
   "gateway.controlUi.basePath": "Control UI Base Path",
   "gateway.http.endpoints.chatCompletions.enabled": "OpenAI Chat Completions Endpoint",
   "gateway.reload.mode": "Config Reload Mode",
@@ -155,6 +168,7 @@ const FIELD_LABELS: Record<string, string> = {
   "session.agentToAgent.maxPingPongTurns": "Agent-to-Agent Ping-Pong Turns",
   "messages.ackReaction": "Ack Reaction Emoji",
   "messages.ackReactionScope": "Ack Reaction Scope",
+  "messages.inbound.debounceMs": "Inbound Message Debounce (ms)",
   "talk.apiKey": "Talk API Key",
   "channels.whatsapp": "WhatsApp",
   "channels.telegram": "Telegram",
@@ -176,6 +190,7 @@ const FIELD_LABELS: Record<string, string> = {
   "channels.telegram.timeoutSeconds": "Telegram API Timeout (seconds)",
   "channels.whatsapp.dmPolicy": "WhatsApp DM Policy",
   "channels.whatsapp.selfChatMode": "WhatsApp Self-Phone Mode",
+  "channels.whatsapp.debounceMs": "WhatsApp Message Debounce (ms)",
   "channels.signal.dmPolicy": "Signal DM Policy",
   "channels.imessage.dmPolicy": "iMessage DM Policy",
   "channels.discord.dm.policy": "Discord DM Policy",
@@ -189,6 +204,10 @@ const FIELD_LABELS: Record<string, string> = {
   "channels.discord.token": "Discord Bot Token",
   "channels.slack.botToken": "Slack Bot Token",
   "channels.slack.appToken": "Slack App Token",
+  "channels.slack.userToken": "Slack User Token",
+  "channels.slack.userTokenReadOnly": "Slack User Token Read Only",
+  "channels.slack.thread.historyScope": "Slack Thread History Scope",
+  "channels.slack.thread.inheritParent": "Slack Thread Parent Inheritance",
   "channels.signal.account": "Signal Account",
   "channels.imessage.cliPath": "iMessage CLI Path",
   "plugins.enabled": "Enable Plugins",
@@ -217,8 +236,23 @@ const FIELD_HELP: Record<string, string> = {
     "Experimental. Enables apply_patch for OpenAI models when allowed by tool policy.",
   "tools.exec.applyPatch.allowModels":
     'Optional allowlist of model ids (e.g. "gpt-5.2" or "openai/gpt-5.2").',
+  "tools.web.search.enabled": "Enable the web_search tool (requires Brave API key).",
+  "tools.web.search.provider": 'Search provider (only "brave" supported today).',
+  "tools.web.search.apiKey": "Brave Search API key (fallback: BRAVE_API_KEY env var).",
+  "tools.web.search.maxResults": "Default number of results to return (1-10).",
+  "tools.web.search.timeoutSeconds": "Timeout in seconds for web_search requests.",
+  "tools.web.search.cacheTtlMinutes": "Cache TTL in minutes for web_search results.",
+  "tools.web.fetch.enabled": "Enable the web_fetch tool (lightweight HTTP fetch).",
+  "tools.web.fetch.maxChars": "Max characters returned by web_fetch (truncated).",
+  "tools.web.fetch.timeoutSeconds": "Timeout in seconds for web_fetch requests.",
+  "tools.web.fetch.cacheTtlMinutes": "Cache TTL in minutes for web_fetch results.",
+  "tools.web.fetch.userAgent": "Override User-Agent header for web_fetch requests.",
   "channels.slack.allowBots":
     "Allow bot-authored messages to trigger Slack replies (default: false).",
+  "channels.slack.thread.historyScope":
+    'Scope for Slack thread history context ("thread" isolates per thread; "channel" reuses channel history).',
+  "channels.slack.thread.inheritParent":
+    "If true, Slack thread sessions inherit the parent channel transcript (default: false).",
   "auth.profiles": "Named auth profiles (provider + mode + optional email).",
   "auth.order": "Ordered auth profile IDs per provider (used for automatic failover).",
   "auth.cooldowns.billingBackoffHours":
@@ -297,6 +331,8 @@ const FIELD_HELP: Record<string, string> = {
   "messages.ackReaction": "Emoji reaction used to acknowledge inbound messages (empty disables).",
   "messages.ackReactionScope":
     'When to send ack reactions ("group-mentions", "group-all", "direct", "all").',
+  "messages.inbound.debounceMs":
+    "Debounce window (ms) for batching rapid inbound messages from the same sender (0 to disable).",
   "channels.telegram.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.telegram.allowFrom=["*"].',
   "channels.telegram.streamMode":
@@ -318,6 +354,8 @@ const FIELD_HELP: Record<string, string> = {
   "channels.whatsapp.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.whatsapp.allowFrom=["*"].',
   "channels.whatsapp.selfChatMode": "Same-phone setup (bot uses your personal WhatsApp number).",
+  "channels.whatsapp.debounceMs":
+    "Debounce window (ms) for batching rapid consecutive messages from the same sender (0 to disable).",
   "channels.signal.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.signal.allowFrom=["*"].',
   "channels.imessage.dmPolicy":

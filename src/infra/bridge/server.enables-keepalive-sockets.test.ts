@@ -9,6 +9,9 @@ import { pollUntil } from "../../../test/helpers/poll.js";
 import { approveNodePairing, listNodePairing } from "../node-pairing.js";
 import { configureNodeBridgeSocket, startNodeBridgeServer } from "./server.js";
 
+const pairingTimeoutMs = process.platform === "win32" ? 8000 : 3000;
+const suiteTimeoutMs = process.platform === "win32" ? 20000 : 10000;
+
 function createLineReader(socket: net.Socket) {
   let buffer = "";
   const pending: Array<(line: string) => void> = [];
@@ -55,7 +58,7 @@ async function waitForSocketConnect(socket: net.Socket) {
   });
 }
 
-describe("node bridge server", () => {
+describe("node bridge server", { timeout: suiteTimeoutMs }, () => {
   let baseDir = "";
 
   const pickNonLoopbackIPv4 = () => {
@@ -174,7 +177,7 @@ describe("node bridge server", () => {
         const list = await listNodePairing(baseDir);
         return list.pending.find((p) => p.nodeId === "n2");
       },
-      { timeoutMs: 3000 },
+      { timeoutMs: pairingTimeoutMs },
     );
     expect(pending).toBeTruthy();
     if (!pending) throw new Error("expected a pending request");
@@ -220,7 +223,7 @@ describe("node bridge server", () => {
     await waitForSocketConnect(socket);
     sendLine(socket, { type: "pair-request", nodeId: "n3", platform: "ios" });
 
-    await pollUntil(async () => requested, { timeoutMs: 3000 });
+    await pollUntil(async () => requested, { timeoutMs: pairingTimeoutMs });
 
     expect(requested?.nodeId).toBe("n3");
     expect(typeof requested?.requestId).toBe("string");
@@ -257,7 +260,7 @@ describe("node bridge server", () => {
         const list = await listNodePairing(baseDir);
         return list.pending.find((p) => p.nodeId === "n3-rpc");
       },
-      { timeoutMs: 3000 },
+      { timeoutMs: pairingTimeoutMs },
     );
     expect(pending).toBeTruthy();
     if (!pending) throw new Error("expected a pending request");
@@ -353,7 +356,7 @@ describe("node bridge server", () => {
         const list = await listNodePairing(baseDir);
         return list.pending.find((p) => p.nodeId === "n4");
       },
-      { timeoutMs: 3000 },
+      { timeoutMs: pairingTimeoutMs },
     );
     expect(pending).toBeTruthy();
     if (!pending) throw new Error("expected a pending request");
@@ -385,7 +388,7 @@ describe("node bridge server", () => {
     expect(line3.type).toBe("hello-ok");
 
     await pollUntil(async () => (lastAuthed?.nodeId === "n4" ? lastAuthed : null), {
-      timeoutMs: 3000,
+      timeoutMs: pairingTimeoutMs,
     });
 
     expect(lastAuthed?.nodeId).toBe("n4");
