@@ -26,7 +26,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import type { InternalHookHandler } from '../../src/hooks/internal-hooks.js';
+import type { InternalHookHandler } from '../../internal-hooks.js';
 
 /**
  * Log all command events to a file

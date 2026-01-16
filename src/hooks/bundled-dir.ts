@@ -15,12 +15,23 @@ export function resolveBundledHooksDir(): string | undefined {
     // ignore
   }
 
-  // npm/dev: resolve `<packageRoot>/hooks/bundled` relative to this module.
+  // npm: resolve `<packageRoot>/dist/hooks/bundled` relative to this module (compiled hooks).
+  // This path works when installed via npm: node_modules/clawdbot/dist/hooks/bundled-dir.js
+  try {
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const distBundled = path.join(moduleDir, "bundled");
+    if (fs.existsSync(distBundled)) return distBundled;
+  } catch {
+    // ignore
+  }
+
+  // dev: resolve `<packageRoot>/src/hooks/bundled` relative to dist/hooks/bundled-dir.js
+  // This path works in dev: dist/hooks/bundled-dir.js -> ../../src/hooks/bundled
   try {
     const moduleDir = path.dirname(fileURLToPath(import.meta.url));
     const root = path.resolve(moduleDir, "..", "..");
-    const candidate = path.join(root, "hooks", "bundled");
-    if (fs.existsSync(candidate)) return candidate;
+    const srcBundled = path.join(root, "src", "hooks", "bundled");
+    if (fs.existsSync(srcBundled)) return srcBundled;
   } catch {
     // ignore
   }

@@ -8,7 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import type { InternalHookHandler } from '../../src/hooks/internal-hooks.js';
+import type { InternalHookHandler } from '../../internal-hooks.js';
 
 /**
  * Read recent messages from session file for slug generation
