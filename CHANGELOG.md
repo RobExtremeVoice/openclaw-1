@@ -57,6 +57,7 @@
 
 ### Fixes
 - Messages: make `/stop` clear queued followups and pending session lane work for a hard abort.
+- Messages: make `/stop` abort active sub-agent runs spawned from the requester session and report how many were stopped.
 - WhatsApp: default response prefix only for self-chat, using identity name when set.
 - Signal/iMessage: bound transport readiness waits to 30s with periodic logging. (#1014) — thanks @Szpadel.
 - Auth: merge main auth profiles into per-agent stores for sub-agents and document inheritance. (#1013) — thanks @marcmarg.
@@ -89,6 +90,7 @@
 - Discord: truncate skill command descriptions for slash command limits. (#1018) — thanks @evalexpr.
 - macOS: resolve gateway token/password using config mode/remote URL, and warn when `launchctl setenv` overrides config. (#1022, #1021) — thanks @kkarimi.
 - Telegram: allow reply-chain messages to bypass mention gating in groups. (#1038) — thanks @adityashaw2.
+- Groups: treat replies to the bot as implicit mentions across supported channels.
 
 ## 2026.1.14-1
 
