@@ -184,6 +184,14 @@ export function registerCronAddCommand(cron: Command) {
                     typeof opts.postPrefix === "string" && opts.postPrefix.trim()
                       ? opts.postPrefix.trim()
                       : "Cron",
+                  postToMainMode:
+                    opts.postMode === "full" || opts.postMode === "summary"
+                      ? opts.postMode
+                      : undefined,
+                  postToMainMaxChars:
+                    typeof opts.postMaxChars === "string" && /^\d+$/.test(opts.postMaxChars)
+                      ? Number.parseInt(opts.postMaxChars, 10)
+                      : undefined,
                 }
               : undefined;
 
