@@ -288,6 +288,11 @@ export const ToolsSchema = z
         transcription: ToolsAudioTranscriptionSchema,
       })
       .optional(),
+    message: z
+      .object({
+        allowCrossContextSend: z.boolean().optional(),
+      })
+      .optional(),
     agentToAgent: z
       .object({
         enabled: z.boolean().optional(),

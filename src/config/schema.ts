@@ -105,6 +105,7 @@ const FIELD_LABELS: Record<string, string> = {
   "agents.list[].tools.byProvider": "Agent Tool Policy by Provider",
   "tools.exec.applyPatch.enabled": "Enable apply_patch",
   "tools.exec.applyPatch.allowModels": "apply_patch Model Allowlist",
+  "tools.message.allowCrossContextSend": "Allow Cross-Context Messaging",
   "tools.web.search.enabled": "Enable Web Search Tool",
   "tools.web.search.provider": "Web Search Provider",
   "tools.web.search.apiKey": "Brave Search API Key",
@@ -249,6 +250,8 @@ const FIELD_HELP: Record<string, string> = {
     "Experimental. Enables apply_patch for OpenAI models when allowed by tool policy.",
   "tools.exec.applyPatch.allowModels":
     'Optional allowlist of model ids (e.g. "gpt-5.2" or "openai/gpt-5.2").',
+  "tools.message.allowCrossContextSend":
+    "Allow the message tool to send outside the current chat context (default: false).",
   "tools.web.search.enabled": "Enable the web_search tool (requires Brave API key).",
   "tools.web.search.provider": 'Search provider (only "brave" supported today).',
   "tools.web.search.apiKey": "Brave Search API key (fallback: BRAVE_API_KEY env var).",
