@@ -154,7 +154,8 @@ async function waitForLocalCallback(params: {
   onProgress?: (message: string) => void;
 }): Promise<{ code: string; state: string }> {
   const port = 8085;
-  const hostname = "127.0.0.1";
+  // Bind to localhost so IPv4/IPv6 resolution matches the browser's localhost.
+  const hostname = "localhost";
   const expectedPath = "/oauth2callback";
 
   return new Promise<{ code: string; state: string }>((resolve, reject) => {
