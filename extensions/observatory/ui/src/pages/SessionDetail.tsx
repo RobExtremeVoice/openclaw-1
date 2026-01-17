@@ -34,15 +34,29 @@ export function SessionDetail() {
     .filter((entry: any) => entry.type === "message" && entry.message)
     .map((entry: any) => {
       const msg = entry.message
-      // Transform content types: toolCall -> tool_use, toolResult -> tool_result
+      
+      // Handle toolResult role (convert to tool role with tool_result content)
+      if (msg.role === "toolResult") {
+        const resultContent = Array.isArray(msg.content) 
+          ? msg.content.map((c: any) => c.text).join('\n')
+          : msg.content
+        return {
+          role: "tool",
+          name: msg.toolName,
+          tool_call_id: msg.toolCallId,
+          content: resultContent,
+          details: msg.details,
+          isError: msg.isError,
+          timestamp: entry.timestamp,
+        }
+      }
+      
+      // Transform content types: toolCall -> tool_use
       let content = msg.content
       if (Array.isArray(content)) {
         content = content.map((c: any) => {
           if (c.type === "toolCall") {
             return { ...c, type: "tool_use", input: c.arguments }
-          }
-          if (c.type === "toolResult") {
-            return { ...c, type: "tool_result" }
           }
           return c
         })
