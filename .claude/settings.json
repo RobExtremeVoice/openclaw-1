@@ -35,9 +35,7 @@
       "Bash(git stash clear:*)",
       "Bash(git stash branch:*)",
       "Bash(git stash save:*)",
-      "Bash(git stash push:*)",
-      "Bash(git checkout:*)",
-      "Bash(git switch:*)"
+      "Bash(git stash push:*)"
     ]
   },
   "hooks": {

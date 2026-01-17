@@ -30,10 +30,29 @@ if [[ "$BASE_CMD" == "git" ]]; then
     exit 2
   fi
 
-  # Block git checkout and git switch
+  # Detect if we're operating on a git worktree (not the main working tree)
+  IN_WORKTREE=0
+
+  # Simple heuristic: if command includes "cd" to a path containing ".worktrees/", allow it
+  # Use .* instead of [^&]* to properly capture paths in compound commands
+  if echo "$COMMAND" | grep -qE 'cd\s+.*\.worktrees'; then
+    IN_WORKTREE=1
+  # Or if the current directory is a worktree
+  elif git rev-parse --git-dir &>/dev/null 2>&1; then
+    GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+    if [[ -f ".git" ]] || [[ "$GIT_DIR" == *"/worktrees/"* ]]; then
+      IN_WORKTREE=1
+    fi
+  fi
+
+  # Block git checkout and git switch in main working tree only
+  # Allow in worktrees since they're isolated
   if [[ "$GIT_SUBCMD" == "checkout" ]] || [[ "$GIT_SUBCMD" == "switch" ]]; then
-    echo '{"decision": "block", "reason": "Command blocked by pre-bash hook: branch switching not allowed"}' >&2
-    exit 2
+    if [[ "$IN_WORKTREE" -eq 0 ]]; then
+      echo '{"decision": "block", "reason": "Command blocked by pre-bash hook: branch switching not allowed in main working tree (use worktrees for isolated work)"}' >&2
+      exit 2
+    fi
+    # Allow in worktrees - they're isolated
   fi
 
   # Block mutating git stash operations (allow list/show/drop)
