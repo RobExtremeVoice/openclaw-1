@@ -29,6 +29,7 @@ export async function handleInlineActions(params: {
   cfg: ClawdbotConfig;
   agentId: string;
   sessionEntry?: SessionEntry;
+  previousSessionEntry?: SessionEntry;
   sessionStore?: Record<string, SessionEntry>;
   sessionKey: string;
   storePath?: string;

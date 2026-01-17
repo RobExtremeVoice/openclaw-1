@@ -173,6 +173,8 @@ export async function getReplyFromConfig(
   provider = resolvedProvider;
   model = resolvedModel;
 
+  const previousSessionEntry = sessionStore?.[sessionKey];
+
   const inlineActionResult = await handleInlineActions({
     ctx,
     sessionCtx,
