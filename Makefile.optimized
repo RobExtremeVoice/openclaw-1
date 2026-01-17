@@ -1,0 +1,203 @@
+# Clawdbot Optimized Build System
+# Orchestrates Docker, Rust, and Go builds
+
+.PHONY: all clean build docker rust go test help
+
+# Configuration
+DOCKER_IMAGE ?= clawdbot
+DOCKER_TAG ?= optimized
+RUST_TARGET ?= x86_64-unknown-linux-musl
+GO_LDFLAGS ?= -ldflags="-s -w"
+
+# Directories
+RUST_DIR := rust/clawdbot-image-ops
+GO_DIR := go/clawdbot-proxy
+DIST_DIR := dist/bin
+
+# Default target
+all: rust go docker
+
+help:
+	@echo "Clawdbot Optimized Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all          - Build everything (rust, go, docker)"
+	@echo "  docker       - Build optimized Docker image"
+	@echo "  docker-slim  - Build with Debian slim runtime"
+	@echo "  rust         - Build Rust image-ops CLI"
+	@echo "  rust-local   - Build Rust for local platform"
+	@echo "  go           - Build Go proxy"
+	@echo "  go-local     - Build Go proxy for local platform"
+	@echo "  test         - Run all tests"
+	@echo "  test-rust    - Run Rust tests"
+	@echo "  test-go      - Run Go tests"
+	@echo "  clean        - Remove build artifacts"
+	@echo "  install      - Install binaries locally"
+	@echo ""
+	@echo "Variables:"
+	@echo "  DOCKER_IMAGE  - Docker image name (default: clawdbot)"
+	@echo "  DOCKER_TAG    - Docker image tag (default: optimized)"
+	@echo "  RUST_TARGET   - Rust cross-compile target"
+
+# =============================================================================
+# Docker Builds
+# =============================================================================
+
+docker: docker-chainguard
+
+docker-chainguard:
+	@echo "Building Docker image with Chainguard base..."
+	docker build \
+		-f Dockerfile.optimized \
+		--target runtime \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+		.
+	@echo "Image size:"
+	@docker images $(DOCKER_IMAGE):$(DOCKER_TAG) --format "{{.Size}}"
+
+docker-slim:
+	@echo "Building Docker image with Debian slim base..."
+	docker build \
+		-f Dockerfile.optimized \
+		--target runtime-debian \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG)-slim \
+		.
+	@echo "Image size:"
+	@docker images $(DOCKER_IMAGE):$(DOCKER_TAG)-slim --format "{{.Size}}"
+
+docker-with-rust: rust-static
+	@echo "Building Docker image with Rust binary..."
+	docker build \
+		-f Dockerfile.optimized \
+		--build-arg INCLUDE_RUST=true \
+		--target runtime \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG)-full \
+		.
+
+# =============================================================================
+# Rust Builds
+# =============================================================================
+
+rust: rust-static
+
+rust-static:
+	@echo "Building Rust image-ops (static musl)..."
+	cd $(RUST_DIR) && \
+		cargo build --release --target $(RUST_TARGET)
+	@mkdir -p $(DIST_DIR)
+	cp $(RUST_DIR)/target/$(RUST_TARGET)/release/clawdbot-image-ops $(DIST_DIR)/
+	@echo "Binary size:"
+	@ls -lh $(DIST_DIR)/clawdbot-image-ops | awk '{print $$5}'
+
+rust-local:
+	@echo "Building Rust image-ops (local platform)..."
+	cd $(RUST_DIR) && cargo build --release
+	@mkdir -p $(DIST_DIR)
+	cp $(RUST_DIR)/target/release/clawdbot-image-ops $(DIST_DIR)/
+	@echo "Binary size:"
+	@ls -lh $(DIST_DIR)/clawdbot-image-ops | awk '{print $$5}'
+
+rust-fast:
+	@echo "Building Rust image-ops (optimized for speed)..."
+	cd $(RUST_DIR) && cargo build --profile release-fast
+	@mkdir -p $(DIST_DIR)
+	cp $(RUST_DIR)/target/release-fast/clawdbot-image-ops $(DIST_DIR)/
+
+test-rust:
+	@echo "Running Rust tests..."
+	cd $(RUST_DIR) && cargo test
+
+# =============================================================================
+# Go Builds
+# =============================================================================
+
+go: go-static
+
+go-static:
+	@echo "Building Go proxy (static)..."
+	cd $(GO_DIR) && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build $(GO_LDFLAGS) -o ../../$(DIST_DIR)/clawdbot-proxy .
+	@echo "Binary size:"
+	@ls -lh $(DIST_DIR)/clawdbot-proxy | awk '{print $$5}'
+
+go-local:
+	@echo "Building Go proxy (local platform)..."
+	cd $(GO_DIR) && go build $(GO_LDFLAGS) -o ../../$(DIST_DIR)/clawdbot-proxy .
+	@echo "Binary size:"
+	@ls -lh $(DIST_DIR)/clawdbot-proxy | awk '{print $$5}'
+
+test-go:
+	@echo "Running Go tests..."
+	cd $(GO_DIR) && go test -v ./...
+
+go-deps:
+	@echo "Downloading Go dependencies..."
+	cd $(GO_DIR) && go mod download && go mod tidy
+
+# =============================================================================
+# Combined Operations
+# =============================================================================
+
+test: test-rust test-go
+	@echo "Running Node.js tests..."
+	pnpm test
+
+install: rust-local go-local
+	@echo "Installing binaries to /usr/local/bin..."
+	sudo cp $(DIST_DIR)/clawdbot-image-ops /usr/local/bin/
+	sudo cp $(DIST_DIR)/clawdbot-proxy /usr/local/bin/
+	@echo "Installed:"
+	@which clawdbot-image-ops clawdbot-proxy
+
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -rf $(DIST_DIR)
+	cd $(RUST_DIR) && cargo clean
+	cd $(GO_DIR) && go clean
+	docker rmi $(DOCKER_IMAGE):$(DOCKER_TAG) 2>/dev/null || true
+	docker rmi $(DOCKER_IMAGE):$(DOCKER_TAG)-slim 2>/dev/null || true
+
+# =============================================================================
+# Development Helpers
+# =============================================================================
+
+dev-docker:
+	@echo "Running with docker compose (dev mode)..."
+	docker compose -f docker-compose.optimized.yml up --build
+
+dev-proxy:
+	@echo "Running Go proxy in dev mode..."
+	cd $(GO_DIR) && go run . -backend http://localhost:18790 -static ../../dist/control-ui
+
+benchmark-image:
+	@echo "Benchmarking image operations..."
+	@echo "Sharp:"
+	@time node -e "const sharp = require('sharp'); sharp('test.jpg').resize(1024).toBuffer()"
+	@echo "Rust:"
+	@time $(DIST_DIR)/clawdbot-image-ops resize test.jpg /tmp/out.jpg --max-side 1024
+
+# =============================================================================
+# CI/CD Helpers
+# =============================================================================
+
+ci-check: lint test
+	@echo "CI checks passed"
+
+lint:
+	pnpm lint
+	cd $(GO_DIR) && go vet ./...
+	cd $(RUST_DIR) && cargo clippy
+
+# Build all artifacts for release
+release: clean
+	@echo "Building release artifacts..."
+	# Linux AMD64
+	RUST_TARGET=x86_64-unknown-linux-musl $(MAKE) rust-static
+	GOOS=linux GOARCH=amd64 $(MAKE) go-static
+	tar -czvf clawdbot-$(DOCKER_TAG)-linux-amd64.tar.gz -C $(DIST_DIR) .
+	# Linux ARM64
+	RUST_TARGET=aarch64-unknown-linux-musl $(MAKE) rust-static
+	GOOS=linux GOARCH=arm64 $(MAKE) go-static
+	tar -czvf clawdbot-$(DOCKER_TAG)-linux-arm64.tar.gz -C $(DIST_DIR) .
+	@echo "Release artifacts created"

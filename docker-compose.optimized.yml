@@ -1,0 +1,75 @@
+# Clawdbot Optimized Docker Compose
+# Uses multi-stage build with layer caching
+
+services:
+  clawdbot-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: runtime  # Use chainguard base (or runtime-debian if needed)
+      cache_from:
+        - type=registry,ref=ghcr.io/clawdbot/clawdbot:cache
+      cache_to:
+        - type=inline
+    image: ${CLAWDBOT_IMAGE:-clawdbot:optimized}
+    container_name: clawdbot-gateway
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      NODE_ENV: production
+      # Gateway config
+      CLAWDBOT_GATEWAY_TOKEN: ${CLAWDBOT_GATEWAY_TOKEN}
+      # Provider credentials (passed through)
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      # Image backend (optional: rust, sharp, sips)
+      CLAWDBOT_IMAGE_BACKEND: ${CLAWDBOT_IMAGE_BACKEND:-sharp}
+    volumes:
+      # Config directory (read-write for sessions/credentials)
+      - ${CLAWDBOT_CONFIG_DIR:-~/.clawdbot}:/home/node/.clawdbot
+      # Workspace directory
+      - ${CLAWDBOT_WORKSPACE_DIR:-~/clawd}:/home/node/clawd
+    ports:
+      - "${CLAWDBOT_GATEWAY_PORT:-18789}:18789"
+      - "${CLAWDBOT_BRIDGE_PORT:-18790}:18790"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:18789/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # CLI service for one-off commands
+  clawdbot-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: runtime
+    image: ${CLAWDBOT_IMAGE:-clawdbot:optimized}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      BROWSER: echo
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+    volumes:
+      - ${CLAWDBOT_CONFIG_DIR:-~/.clawdbot}:/home/node/.clawdbot
+      - ${CLAWDBOT_WORKSPACE_DIR:-~/clawd}:/home/node/clawd
+    stdin_open: true
+    tty: true
+    init: true
+    entrypoint: ["node", "dist/index.js"]
+    profiles:
+      - cli  # Only start when explicitly requested
+
+# Development override: mount source for hot reload
+# Usage: docker compose -f docker-compose.optimized.yml -f docker-compose.dev.yml up
