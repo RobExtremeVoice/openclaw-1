@@ -291,6 +291,12 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
         baseUrl: account.baseUrl,
       });
       ctx.log?.info(`[${account.accountId}] starting provider (${account.baseUrl})`);
+
+      // Note: Signal call provider plugin is initialized separately
+      // via the voice-call extension (extensions/voice-call/src/plugins/signal/provider.ts)
+      // when inbound calls are received.
+      // Keep src/signal/voice/ for async voice MESSAGES only.
+
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
       const { monitorSignalProvider } = await import("../../signal/index.js");
       return monitorSignalProvider({

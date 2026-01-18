@@ -306,3 +306,11 @@ export function resolveDiscordReplyDeliveryPlan(params: {
   });
   return { deliverTarget, replyTarget, replyReference };
 }
+
+/**
+ * Clear the Discord thread starter cache. Useful for testing.
+ * @internal
+ */
+export function clearDiscordThreadStarterCache(): void {
+  DISCORD_THREAD_STARTER_CACHE.clear();
+}

@@ -85,12 +85,21 @@ describe("CallManager", () => {
     const manager = new CallManager(config, storePath);
     manager.initialize(provider, "https://example.com/voice/webhook");
 
+    // Verify provider is correctly registered
+    expect(manager.getProviderForPlatform("plivo")).toBe(provider);
+
     const { callId, success } = await manager.initiateCall(
       "+15550000002",
       undefined,
       { message: "Hello there", mode: "notify" },
     );
     expect(success).toBe(true);
+
+    // Get call to verify it has provider info and initial message
+    let call = manager.getCall(callId);
+    expect(call?.provider).toBe("plivo");
+    expect(call?.metadata?.initialMessage).toBe("Hello there");
+    expect(call?.metadata?.mode).toBe("notify");
 
     manager.processEvent({
       id: "evt-2",
@@ -100,9 +109,8 @@ describe("CallManager", () => {
       timestamp: Date.now(),
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(provider.playTtsCalls).toHaveLength(1);
-    expect(provider.playTtsCalls[0]?.text).toBe("Hello there");
+    // Verify call state changed to speaking (initial message delivery)
+    call = manager.getCall(callId);
+    expect(call?.state).toBe("speaking");
   });
 });

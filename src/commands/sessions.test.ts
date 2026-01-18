@@ -41,10 +41,13 @@ const makeRuntime = () => {
   } as const;
 };
 
+let writeStoreCounter = 0;
 const writeStore = (data: unknown) => {
+  // Fixed seed for test reproducibility (not random)
+  // Use deterministic counter instead of Math.random()
   const file = path.join(
     os.tmpdir(),
-    `sessions-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+    `sessions-${Date.now()}-test-${String(writeStoreCounter++).padStart(4, '0')}.json`,
   );
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
   return file;

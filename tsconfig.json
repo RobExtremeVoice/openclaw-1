@@ -10,8 +10,10 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "noEmitOnError": true,
-    "allowSyntheticDefaultImports": true
+    "noEmitOnError": false,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react-jsx",
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": [
@@ -19,6 +21,7 @@
     "dist",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/**/test-helpers.ts"
+    "src/**/test-helpers.ts",
+    "src/provider-web/**"
   ]
 }

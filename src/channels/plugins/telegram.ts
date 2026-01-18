@@ -386,6 +386,12 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount> = {
         }
       }
       ctx.log?.info(`[${account.accountId}] starting provider${telegramBotLabel}`);
+
+      // Note: Telegram group call provider plugin is initialized separately
+      // via the voice-call extension (extensions/voice-call/src/plugins/telegram/provider.ts)
+      // when inbound group calls are received.
+      // Keep src/telegram/voice/ for async voice MESSAGES only.
+
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
       const { monitorTelegramProvider } = await import("../../telegram/monitor.js");
       return monitorTelegramProvider({

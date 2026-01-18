@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveConfigSnapshotHash } from "../config/config.js";
 
@@ -12,8 +12,23 @@ import {
 installGatewayTestHooks();
 
 describe("gateway config.patch", () => {
+  let server: Awaited<ReturnType<typeof startServerWithClient>>["server"] | null = null;
+  let ws: Awaited<ReturnType<typeof startServerWithClient>>["ws"] | null = null;
+
+  async function cleanup() {
+    if (ws) ws.close();
+    if (server) await server.close();
+    server = null;
+    ws = null;
+  }
+
+  afterEach(async () => {
+    await cleanup();
+  });
   it("merges patches without clobbering unrelated config", async () => {
-    const { server, ws } = await startServerWithClient();
+    const result = await startServerWithClient();
+    server = result.server;
+    ws = result.ws;
     await connectOk(ws);
 
     const setId = "req-set";
@@ -100,13 +115,12 @@ describe("gateway config.patch", () => {
     expect(get2Res.ok).toBe(true);
     expect(get2Res.payload?.config?.gateway?.mode).toBe("local");
     expect(get2Res.payload?.config?.channels?.telegram?.botToken).toBe("token-1");
-
-    ws.close();
-    await server.close();
   });
 
   it("requires base hash when config exists", async () => {
-    const { server, ws } = await startServerWithClient();
+    const result = await startServerWithClient();
+    server = result.server;
+    ws = result.ws;
     await connectOk(ws);
 
     const setId = "req-set-2";
@@ -145,13 +159,12 @@ describe("gateway config.patch", () => {
     );
     expect(patchRes.ok).toBe(false);
     expect(patchRes.error?.message).toContain("base hash");
-
-    ws.close();
-    await server.close();
   });
 
   it("requires base hash for config.set when config exists", async () => {
-    const { server, ws } = await startServerWithClient();
+    const result = await startServerWithClient();
+    server = result.server;
+    ws = result.ws;
     await connectOk(ws);
 
     const setId = "req-set-3";
@@ -192,8 +205,5 @@ describe("gateway config.patch", () => {
     );
     expect(set2Res.ok).toBe(false);
     expect(set2Res.error?.message).toContain("base hash");
-
-    ws.close();
-    await server.close();
   });
 });

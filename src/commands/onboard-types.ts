@@ -77,6 +77,7 @@ export type OnboardOptions = {
   skipChannels?: boolean;
   /** @deprecated Legacy alias for `skipChannels`. */
   skipProviders?: boolean;
+  skipVoice?: boolean;
   skipSkills?: boolean;
   skipHealth?: boolean;
   skipUi?: boolean;

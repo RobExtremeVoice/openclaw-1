@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   connectOk,
   installGatewayTestHooks,
@@ -11,11 +11,29 @@ const loadConfigHelpers = async () => await import("../config/config.js");
 installGatewayTestHooks();
 
 describe("gateway server channels", () => {
+  let testServer: Awaited<ReturnType<typeof startServerWithClient>> | null = null;
+
+  afterEach(async () => {
+    if (testServer) {
+      if (testServer.ws.readyState !== WebSocket.CLOSED && testServer.ws.readyState !== WebSocket.CLOSING) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, 1000);
+          testServer!.ws.once("close", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          testServer!.ws.close(1000, "test cleanup");
+        });
+      }
+      await testServer.server.close();
+      testServer = null;
+    }
+  });
+
   test("channels.status returns snapshot without probe", async () => {
-    const prevToken = process.env.TELEGRAM_BOT_TOKEN;
-    delete process.env.TELEGRAM_BOT_TOKEN;
-    const { server, ws } = await startServerWithClient();
-    await connectOk(ws);
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", undefined);
+    testServer = await startServerWithClient();
+    await connectOk(testServer.ws);
 
     const res = await rpcReq<{
       channels?: Record<
@@ -28,7 +46,7 @@ describe("gateway server channels", () => {
           }
         | { linked?: boolean }
       >;
-    }>(ws, "channels.status", { probe: false, timeoutMs: 2000 });
+    }>(testServer.ws, "channels.status", { probe: false, timeoutMs: 2000 });
     expect(res.ok).toBe(true);
     const telegram = res.payload?.channels?.telegram;
     const signal = res.payload?.channels?.signal;
@@ -40,34 +58,22 @@ describe("gateway server channels", () => {
     expect(signal?.configured).toBe(false);
     expect(signal?.probe).toBeUndefined();
     expect(signal?.lastProbeAt).toBeNull();
-
-    ws.close();
-    await server.close();
-    if (prevToken === undefined) {
-      delete process.env.TELEGRAM_BOT_TOKEN;
-    } else {
-      process.env.TELEGRAM_BOT_TOKEN = prevToken;
-    }
   });
 
   test("channels.logout reports no session when missing", async () => {
-    const { server, ws } = await startServerWithClient();
-    await connectOk(ws);
+    testServer = await startServerWithClient();
+    await connectOk(testServer.ws);
 
-    const res = await rpcReq<{ cleared?: boolean; channel?: string }>(ws, "channels.logout", {
+    const res = await rpcReq<{ cleared?: boolean; channel?: string }>(testServer.ws, "channels.logout", {
       channel: "whatsapp",
     });
     expect(res.ok).toBe(true);
     expect(res.payload?.channel).toBe("whatsapp");
     expect(res.payload?.cleared).toBe(false);
-
-    ws.close();
-    await server.close();
   });
 
   test("channels.logout clears telegram bot token from config", async () => {
-    const prevToken = process.env.TELEGRAM_BOT_TOKEN;
-    delete process.env.TELEGRAM_BOT_TOKEN;
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", undefined);
     const { readConfigFileSnapshot, writeConfigFile } = await loadConfigHelpers();
     await writeConfigFile({
       channels: {
@@ -78,14 +84,14 @@ describe("gateway server channels", () => {
       },
     });
 
-    const { server, ws } = await startServerWithClient();
-    await connectOk(ws);
+    testServer = await startServerWithClient();
+    await connectOk(testServer.ws);
 
     const res = await rpcReq<{
       cleared?: boolean;
       envToken?: boolean;
       channel?: string;
-    }>(ws, "channels.logout", { channel: "telegram" });
+    }>(testServer.ws, "channels.logout", { channel: "telegram" });
     expect(res.ok).toBe(true);
     expect(res.payload?.channel).toBe("telegram");
     expect(res.payload?.cleared).toBe(true);
@@ -95,13 +101,5 @@ describe("gateway server channels", () => {
     expect(snap.valid).toBe(true);
     expect(snap.config?.channels?.telegram?.botToken).toBeUndefined();
     expect(snap.config?.channels?.telegram?.groups?.["*"]?.requireMention).toBe(false);
-
-    ws.close();
-    await server.close();
-    if (prevToken === undefined) {
-      delete process.env.TELEGRAM_BOT_TOKEN;
-    } else {
-      process.env.TELEGRAM_BOT_TOKEN = prevToken;
-    }
   });
 });

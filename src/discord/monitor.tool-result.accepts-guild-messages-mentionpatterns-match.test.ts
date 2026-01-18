@@ -33,7 +33,7 @@ vi.mock("../config/sessions.js", async (importOriginal) => {
   };
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   sendMock.mockReset().mockResolvedValue(undefined);
   updateLastRouteMock.mockReset();
   dispatchMock.mockReset().mockImplementation(async ({ dispatcher }) => {
@@ -42,6 +42,22 @@ beforeEach(() => {
   });
   readAllowFromStoreMock.mockReset().mockResolvedValue([]);
   upsertPairingRequestMock.mockReset().mockResolvedValue({ code: "PAIRCODE", created: true });
+
+  // Clear Discord caches to prevent cross-test contamination
+  try {
+    const { clearDiscordChannelInfoCache } = await import("./message-utils.js");
+    clearDiscordChannelInfoCache();
+  } catch {
+    // Ignore if module not loaded
+  }
+
+  try {
+    const { clearDiscordThreadStarterCache } = await import("./threading.js");
+    clearDiscordThreadStarterCache();
+  } catch {
+    // Ignore if module not loaded
+  }
+
   vi.resetModules();
 });
 

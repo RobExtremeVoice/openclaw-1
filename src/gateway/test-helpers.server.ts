@@ -228,7 +228,46 @@ export async function startServerWithClient(token?: string, opts?: GatewayServer
 
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
   await new Promise<void>((resolve) => ws.once("open", resolve));
+
+  // Wrap close to ensure proper cleanup
+  const originalClose = ws.close.bind(ws);
+  ws.close = function(code?: number, reason?: string) {
+    originalClose(code, reason);
+    return this;
+  };
+
   return { server, ws, port, prevToken: prev };
+}
+
+async function closeWebSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
+  if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+    return;
+  }
+
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve();
+    }, timeoutMs);
+
+    const closeHandler = () => {
+      clearTimeout(timeout);
+      ws.removeEventListener("close", closeHandler);
+      ws.removeEventListener("error", errorHandler);
+      resolve();
+    };
+
+    const errorHandler = () => {
+      clearTimeout(timeout);
+      ws.removeEventListener("close", closeHandler);
+      ws.removeEventListener("error", errorHandler);
+      resolve();
+    };
+
+    ws.addEventListener("close", closeHandler, { once: true });
+    ws.addEventListener("error", errorHandler, { once: true });
+
+    ws.close(1000, "test cleanup");
+  });
 }
 
 type ConnectResponse = {

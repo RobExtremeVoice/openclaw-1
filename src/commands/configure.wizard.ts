@@ -16,6 +16,8 @@ import { removeChannelConfigWizard } from "./configure.channels.js";
 import { maybeInstallDaemon } from "./configure.daemon.js";
 import { promptGatewayConfig } from "./configure.gateway.js";
 import { promptAuthConfig } from "./configure.gateway-auth.js";
+import { configureVoiceProviders } from "./configure.voice-providers.js";
+import { configureVoiceCalls } from "./configure.voice-calls.js";
 import type {
   ChannelsWizardMode,
   ConfigureWizardParams,
@@ -323,6 +325,27 @@ export async function runConfigureWizard(
         nextConfig = await promptWebToolsConfig(nextConfig, runtime);
       }
 
+      if (selected.includes("voice")) {
+        const voiceMode = guardCancel(
+          await select({
+            message: "Voice configuration",
+            options: [
+              { value: "providers", label: "Providers", hint: "STT/TTS (speech-to-text/text-to-speech)" },
+              { value: "calls", label: "Call providers", hint: "Discord/Telegram/Signal/Twilio" },
+              { value: "skip", label: "Skip", hint: "Configure voice later" },
+            ],
+            initialValue: "providers",
+          }),
+          runtime,
+        ) as "providers" | "calls" | "skip";
+
+        if (voiceMode === "providers") {
+          nextConfig = await configureVoiceProviders(nextConfig, runtime, prompter);
+        } else if (voiceMode === "calls") {
+          nextConfig = await configureVoiceCalls(nextConfig, runtime, prompter);
+        }
+      }
+
       if (selected.includes("gateway")) {
         const gateway = await promptGatewayConfig(nextConfig, runtime);
         nextConfig = gateway.config;
@@ -440,6 +463,28 @@ export async function runConfigureWizard(
 
         if (choice === "web") {
           nextConfig = await promptWebToolsConfig(nextConfig, runtime);
+          await persistConfig();
+        }
+
+        if (choice === "voice") {
+          const voiceMode = guardCancel(
+            await select({
+              message: "Voice configuration",
+              options: [
+                { value: "providers", label: "Providers", hint: "STT/TTS (speech-to-text/text-to-speech)" },
+                { value: "calls", label: "Call providers", hint: "Discord/Telegram/Signal/Twilio" },
+                { value: "skip", label: "Skip", hint: "Configure voice later" },
+              ],
+              initialValue: "providers",
+            }),
+            runtime,
+          ) as "providers" | "calls" | "skip";
+
+          if (voiceMode === "providers") {
+            nextConfig = await configureVoiceProviders(nextConfig, runtime, prompter);
+          } else if (voiceMode === "calls") {
+            nextConfig = await configureVoiceCalls(nextConfig, runtime, prompter);
+          }
           await persistConfig();
         }
 

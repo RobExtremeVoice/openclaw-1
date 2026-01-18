@@ -23,3 +23,15 @@ export { monitorSlackProvider } from "./monitor.js";
 export { probeSlack } from "./probe.js";
 export { sendMessageSlack } from "./send.js";
 export { resolveSlackAppToken, resolveSlackBotToken } from "./token.js";
+export {
+  SlackVoiceMessageHandler,
+  SlackVoiceResponseHandler,
+  registerSlackVoiceEvents,
+  type SlackVoiceFile,
+  type SlackVoiceContext,
+  type VoiceMessageHandlerOptions,
+  type SlackVoiceResponseOptions,
+  type SlackVoiceUploadResult,
+  type VoiceResponseConfig,
+  extractAudioMetadata,
+} from "./voice/index.js";

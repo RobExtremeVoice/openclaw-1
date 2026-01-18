@@ -18,15 +18,26 @@ import {
   type TranscriptEntry,
 } from "./types.js";
 import { escapeXml, mapVoiceToPolly } from "./voice-mapping.js";
+import type { CallCleanupScheduler } from "./scheduler.js";
+import { DefaultCallCleanupScheduler } from "./scheduler.js";
 
 /**
  * Manages voice calls: state machine, persistence, and provider coordination.
+ *
+ * Supports multiple platform-specific call providers:
+ * - Discord (voice channels)
+ * - Telegram (group calls)
+ * - Signal (direct calls)
+ * - Twilio (phone calls)
+ *
+ * Routes incoming calls to the correct provider based on platform.
  */
 export class CallManager {
   private activeCalls = new Map<CallId, CallRecord>();
   private providerCallIdMap = new Map<string, CallId>(); // providerCallId -> internal callId
   private processedEventIds = new Set<string>();
-  private provider: VoiceCallProvider | null = null;
+  private providers: Map<string, VoiceCallProvider> = new Map(); // platform -> provider
+  private primaryProvider: VoiceCallProvider | null = null; // fallback for legacy code
   private config: VoiceCallConfig;
   private storePath: string;
   private webhookUrl: string | null = null;
@@ -38,10 +49,14 @@ export class CallManager {
       timeout: NodeJS.Timeout;
     }
   >();
-  /** Max duration timers to auto-hangup calls after configured timeout */
-  private maxDurationTimers = new Map<CallId, NodeJS.Timeout>();
+  /** Cleanup scheduler for managing call timeouts (max duration and notify mode) */
+  private cleanupScheduler: CallCleanupScheduler;
 
-  constructor(config: VoiceCallConfig, storePath?: string) {
+  constructor(
+    config: VoiceCallConfig,
+    storePath?: string,
+    cleanupScheduler?: CallCleanupScheduler,
+  ) {
     this.config = config;
     // Resolve store path with tilde expansion (like other config values)
     const rawPath =
@@ -49,13 +64,26 @@ export class CallManager {
       config.store ||
       path.join(os.homedir(), "clawd", "voice-calls");
     this.storePath = resolveUserPath(rawPath);
+    // Use provided scheduler or default to real timers
+    this.cleanupScheduler = cleanupScheduler || new DefaultCallCleanupScheduler();
+    if (cleanupScheduler) {
+      console.log(
+        `[voice-call] Using injected ${cleanupScheduler.constructor.name}`,
+      );
+    } else {
+      console.log("[voice-call] Using default DefaultCallCleanupScheduler");
+    }
   }
 
   /**
    * Initialize the call manager with a provider.
+   *
+   * For backward compatibility, also supports single provider initialization.
+   * Use registerProvider() for multi-provider setup.
    */
   initialize(provider: VoiceCallProvider, webhookUrl: string): void {
-    this.provider = provider;
+    this.primaryProvider = provider;
+    this.providers.set(provider.name, provider);
     this.webhookUrl = webhookUrl;
 
     // Ensure store directory exists
@@ -66,10 +94,41 @@ export class CallManager {
   }
 
   /**
-   * Get the current provider.
+   * Register a call provider for a specific platform.
+   * Allows unified call routing through multiple providers.
+   *
+   * @param platform - Platform name (discord, telegram, signal, twilio)
+   * @param provider - VoiceCallProvider implementation
+   */
+  registerProvider(platform: string, provider: VoiceCallProvider): void {
+    this.providers.set(platform, provider);
+    if (!this.primaryProvider) {
+      this.primaryProvider = provider;
+    }
+  }
+
+  /**
+   * Get a provider by platform name.
+   * @param platform - Platform name
+   * @returns VoiceCallProvider or undefined if not registered
+   */
+  getProviderForPlatform(platform: string): VoiceCallProvider | null {
+    return this.providers.get(platform) ?? null;
+  }
+
+  /**
+   * Get the primary provider (for backward compatibility).
    */
   getProvider(): VoiceCallProvider | null {
-    return this.provider;
+    return this.primaryProvider;
+  }
+
+  /**
+   * Get all registered providers.
+   * @returns Array of registered providers
+   */
+  getAllProviders(): VoiceCallProvider[] {
+    return Array.from(this.providers.values());
   }
 
   /**
@@ -88,7 +147,14 @@ export class CallManager {
       typeof options === "string" ? { message: options } : (options ?? {});
     const initialMessage = opts.message;
     const mode = opts.mode ?? this.config.outbound.defaultMode;
-    if (!this.provider) {
+    const platformOpt = (opts as unknown as { platform?: string }).platform;
+
+    // Select provider: use platform if specified, otherwise use primary provider
+    const provider = platformOpt
+      ? this.getProviderForPlatform(platformOpt)
+      : this.primaryProvider;
+
+    if (!provider) {
       return { callId: "", success: false, error: "Provider not initialized" };
     }
 
@@ -113,7 +179,7 @@ export class CallManager {
     const callId = crypto.randomUUID();
     const from =
       this.config.fromNumber ||
-      (this.provider?.name === "mock" ? "+15550000000" : undefined);
+      (provider?.name === "mock" ? "+15550000000" : undefined);
     if (!from) {
       return { callId: "", success: false, error: "fromNumber not configured" };
     }
@@ -121,7 +187,7 @@ export class CallManager {
     // Create call record with mode in metadata
     const callRecord: CallRecord = {
       callId,
-      provider: this.provider.name,
+      provider: provider.name,
       direction: "outbound",
       state: "initiated",
       from,
@@ -150,7 +216,7 @@ export class CallManager {
         );
       }
 
-      const result = await this.provider.initiateCall({
+      const result = await provider.initiateCall({
         callId,
         from,
         to,
@@ -193,7 +259,8 @@ export class CallManager {
       return { success: false, error: "Call not found" };
     }
 
-    if (!this.provider || !call.providerCallId) {
+    const provider = this.getProviderForPlatform(call.provider);
+    if (!provider || !call.providerCallId) {
       return { success: false, error: "Call not connected" };
     }
 
@@ -210,7 +277,7 @@ export class CallManager {
       this.addTranscriptEntry(call, "bot", text);
 
       // Play TTS
-      await this.provider.playTts({
+      await provider.playTts({
         callId,
         providerCallId: call.providerCallId,
         text,
@@ -273,15 +340,26 @@ export class CallManager {
       console.log(
         `[voice-call] Notify mode: auto-hangup in ${delaySec}s for call ${call.callId}`,
       );
-      setTimeout(async () => {
-        const currentCall = this.getCall(call.callId);
-        if (currentCall && !TerminalStates.has(currentCall.state)) {
-          console.log(
-            `[voice-call] Notify mode: hanging up call ${call.callId}`,
-          );
-          await this.endCall(call.callId);
-        }
-      }, delaySec * 1000);
+      this.cleanupScheduler.schedule(
+        call.callId,
+        delaySec * 1000,
+        async () => {
+          const currentCall = this.getCall(call.callId);
+          if (currentCall && !TerminalStates.has(currentCall.state)) {
+            console.log(
+              `[voice-call] Notify mode: hanging up call ${call.callId}`,
+            );
+            // Return the Promise so tests can await it via triggerTimeoutAsync()
+            try {
+              await this.endCall(call.callId);
+            } catch (err) {
+              console.warn(
+                `[voice-call] Failed to hangup notify call ${call.callId}: ${err}`,
+              );
+            }
+          }
+        },
+      );
     }
   }
 
@@ -290,16 +368,12 @@ export class CallManager {
    * Auto-hangup when maxDurationSeconds is reached.
    */
   private startMaxDurationTimer(callId: CallId): void {
-    // Clear any existing timer
-    this.clearMaxDurationTimer(callId);
-
     const maxDurationMs = this.config.maxDurationSeconds * 1000;
     console.log(
       `[voice-call] Starting max duration timer (${this.config.maxDurationSeconds}s) for call ${callId}`,
     );
 
-    const timer = setTimeout(async () => {
-      this.maxDurationTimers.delete(callId);
+    this.cleanupScheduler.schedule(callId, maxDurationMs, async () => {
       const call = this.getCall(callId);
       if (call && !TerminalStates.has(call.state)) {
         console.log(
@@ -307,22 +381,23 @@ export class CallManager {
         );
         call.endReason = "timeout";
         this.persistCallRecord(call);
-        await this.endCall(callId);
+        // Return the Promise so tests can await it via triggerTimeoutAsync()
+        try {
+          await this.endCall(callId);
+        } catch (err) {
+          console.warn(
+            `[voice-call] Failed to end call on max duration timeout ${callId}: ${err}`,
+          );
+        }
       }
-    }, maxDurationMs);
-
-    this.maxDurationTimers.set(callId, timer);
+    });
   }
 
   /**
-   * Clear max duration timer for a call.
+   * Clear cleanup scheduler for a call (used for both max duration and notify mode).
    */
-  private clearMaxDurationTimer(callId: CallId): void {
-    const timer = this.maxDurationTimers.get(callId);
-    if (timer) {
-      clearTimeout(timer);
-      this.maxDurationTimers.delete(callId);
-    }
+  private clearCleanupScheduler(callId: CallId): void {
+    this.cleanupScheduler.cancel(callId);
   }
 
   private clearTranscriptWaiter(callId: CallId): void {
@@ -375,7 +450,8 @@ export class CallManager {
       return { success: false, error: "Call not found" };
     }
 
-    if (!this.provider || !call.providerCallId) {
+    const provider = this.getProviderForPlatform(call.provider);
+    if (!provider || !call.providerCallId) {
       return { success: false, error: "Call not connected" };
     }
 
@@ -389,7 +465,7 @@ export class CallManager {
       call.state = "listening";
       this.persistCallRecord(call);
 
-      await this.provider.startListening({
+      await provider.startListening({
         callId,
         providerCallId: call.providerCallId,
       });
@@ -397,7 +473,7 @@ export class CallManager {
       const transcript = await this.waitForFinalTranscript(callId);
 
       // Best-effort: stop listening after final transcript.
-      await this.provider.stopListening({
+      await provider.stopListening({
         callId,
         providerCallId: call.providerCallId,
       });
@@ -422,7 +498,8 @@ export class CallManager {
       return { success: false, error: "Call not found" };
     }
 
-    if (!this.provider || !call.providerCallId) {
+    const provider = this.getProviderForPlatform(call.provider);
+    if (!provider || !call.providerCallId) {
       return { success: false, error: "Call not connected" };
     }
 
@@ -431,7 +508,7 @@ export class CallManager {
     }
 
     try {
-      await this.provider.hangupCall({
+      await provider.hangupCall({
         callId,
         providerCallId: call.providerCallId,
         reason: "hangup-bot",
@@ -441,7 +518,7 @@ export class CallManager {
       call.endedAt = Date.now();
       call.endReason = "hangup-bot";
       this.persistCallRecord(call);
-      this.clearMaxDurationTimer(callId);
+      this.clearCleanupScheduler(callId);
       this.rejectTranscriptWaiter(callId, "Call ended: hangup-bot");
       this.activeCalls.delete(callId);
       if (call.providerCallId) {
@@ -507,7 +584,7 @@ export class CallManager {
     const callRecord: CallRecord = {
       callId,
       providerCallId,
-      provider: this.provider?.name || "twilio",
+      provider: this.primaryProvider?.name || "twilio",
       direction: "inbound",
       state: "ringing",
       from,
@@ -610,8 +687,7 @@ export class CallManager {
         this.transitionState(call, "answered");
         // Start max duration timer when call is answered
         this.startMaxDurationTimer(call.callId);
-        // Best-effort: speak initial message (for inbound greetings and outbound
-        // conversation mode) once the call is answered.
+        // Speak initial message for outbound calls (including notify mode auto-hangup)
         this.maybeSpeakInitialMessageOnAnswered(call);
         break;
 
@@ -635,7 +711,7 @@ export class CallManager {
         call.endedAt = event.timestamp;
         call.endReason = event.reason;
         this.transitionState(call, event.reason as CallState);
-        this.clearMaxDurationTimer(call.callId);
+        this.clearCleanupScheduler(call.callId);
         this.rejectTranscriptWaiter(call.callId, `Call ended: ${event.reason}`);
         this.activeCalls.delete(call.callId);
         if (call.providerCallId) {
@@ -648,7 +724,7 @@ export class CallManager {
           call.endedAt = event.timestamp;
           call.endReason = "error";
           this.transitionState(call, "error");
-          this.clearMaxDurationTimer(call.callId);
+          this.clearCleanupScheduler(call.callId);
           this.rejectTranscriptWaiter(
             call.callId,
             `Call error: ${event.error}`,
@@ -672,12 +748,16 @@ export class CallManager {
 
     if (!initialMessage) return;
 
-    if (!this.provider || !call.providerCallId) return;
+    // Get provider for this call's platform
+    const provider = this.getProviderForPlatform(call.provider);
+    if (!provider || !call.providerCallId) return;
 
     // Twilio has provider-specific state for speaking (<Say> fallback) and can
     // fail for inbound calls; keep existing Twilio behavior unchanged.
-    if (this.provider.name === "twilio") return;
+    if (provider.name === "twilio") return;
 
+    // For non-Twilio providers (including notify mode), speak the message
+    // which will also handle auto-hangup for notify mode
     void this.speakInitialMessage(call.providerCallId);
   }
 
@@ -814,10 +894,13 @@ export class CallManager {
   private persistCallRecord(call: CallRecord): void {
     const logPath = path.join(this.storePath, "calls.jsonl");
     const line = `${JSON.stringify(call)}\n`;
-    // Fire-and-forget async write to avoid blocking event loop
-    fsp.appendFile(logPath, line).catch((err) => {
+    // Use synchronous write to guarantee data is flushed to disk
+    // before loadActiveCalls() does synchronous read during manager restart
+    try {
+      fs.appendFileSync(logPath, line);
+    } catch (err) {
       console.error("[voice-call] Failed to persist call record:", err);
-    });
+    }
   }
 
   /**

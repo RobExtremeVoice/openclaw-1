@@ -240,3 +240,11 @@ export function buildDiscordMediaPayload(
     MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
   };
 }
+
+/**
+ * Clear the Discord channel info cache. Useful for testing.
+ * @internal
+ */
+export function clearDiscordChannelInfoCache(): void {
+  DISCORD_CHANNEL_INFO_CACHE.clear();
+}

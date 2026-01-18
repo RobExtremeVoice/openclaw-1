@@ -6,6 +6,7 @@ import type {
   ReplyToMode,
 } from "./types.base.js";
 import type { DmConfig, ProviderCommandsConfig } from "./types.messages.js";
+import type { DiscordVoiceConfig } from "../discord/voice/config.js";
 
 export type DiscordDmConfig = {
   /** If false, ignore all incoming Discord DMs. Default: true. */
@@ -113,6 +114,8 @@ export type DiscordAccountConfig = {
   dm?: DiscordDmConfig;
   /** New per-guild config keyed by guild id or slug. */
   guilds?: Record<string, DiscordGuildEntry>;
+  /** Voice message configuration (experimental). */
+  voice?: DiscordVoiceConfig;
 };
 
 export type DiscordConfig = {

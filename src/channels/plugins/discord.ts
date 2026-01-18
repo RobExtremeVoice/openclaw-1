@@ -397,6 +397,12 @@ export const discordPlugin: ChannelPlugin<ResolvedDiscordAccount> = {
         }
       }
       ctx.log?.info(`[${account.accountId}] starting provider${discordBotLabel}`);
+
+      // Note: Discord voice call provider plugin is initialized separately
+      // via the voice-call extension (extensions/voice-call/src/plugins/discord/provider.ts)
+      // when inbound voice channel calls are received.
+      // Keep src/discord/voice/ for async voice MESSAGES only.
+
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
       const { monitorDiscordProvider } = await import("../../discord/index.js");
       return monitorDiscordProvider({

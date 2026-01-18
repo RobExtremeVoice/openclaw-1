@@ -152,4 +152,5 @@ export type GatewayConfig = {
   remote?: GatewayRemoteConfig;
   reload?: GatewayReloadConfig;
   http?: GatewayHttpConfig;
+  talk?: TalkConfig;
 };

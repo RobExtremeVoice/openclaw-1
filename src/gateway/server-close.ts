@@ -37,87 +37,118 @@ export function createGatewayCloseHandler(params: {
       typeof opts?.restartExpectedMs === "number" && Number.isFinite(opts.restartExpectedMs)
         ? Math.max(0, Math.floor(opts.restartExpectedMs))
         : null;
-    if (params.bonjourStop) {
-      try {
-        await params.bonjourStop();
-      } catch {
-        /* ignore */
+
+    // Set a timeout guard to prevent hanging during close
+    const closeTimeoutMs = 10_000;
+    const closeTimeout = setTimeout(() => {
+      // Force close by destroying sockets if normal close takes too long
+      params.wss.close();
+      params.httpServer.close();
+    }, closeTimeoutMs);
+
+    try {
+      if (params.bonjourStop) {
+        try {
+          await params.bonjourStop();
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    if (params.tailscaleCleanup) {
-      await params.tailscaleCleanup();
-    }
-    if (params.canvasHost) {
-      try {
-        await params.canvasHost.close();
-      } catch {
-        /* ignore */
+      if (params.tailscaleCleanup) {
+        try {
+          await params.tailscaleCleanup();
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    if (params.canvasHostServer) {
-      try {
-        await params.canvasHostServer.close();
-      } catch {
-        /* ignore */
+      if (params.canvasHost) {
+        try {
+          await params.canvasHost.close();
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    if (params.bridge) {
-      try {
-        await params.bridge.close();
-      } catch {
-        /* ignore */
+      if (params.canvasHostServer) {
+        try {
+          await params.canvasHostServer.close();
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    for (const plugin of listChannelPlugins()) {
-      await params.stopChannel(plugin.id);
-    }
-    if (params.pluginServices) {
-      await params.pluginServices.stop().catch(() => {});
-    }
-    await stopGmailWatcher();
-    params.cron.stop();
-    params.heartbeatRunner.stop();
-    for (const timer of params.nodePresenceTimers.values()) {
-      clearInterval(timer);
-    }
-    params.nodePresenceTimers.clear();
-    params.broadcast("shutdown", {
-      reason,
-      restartExpectedMs,
-    });
-    clearInterval(params.tickInterval);
-    clearInterval(params.healthInterval);
-    clearInterval(params.dedupeCleanup);
-    if (params.agentUnsub) {
-      try {
-        params.agentUnsub();
-      } catch {
-        /* ignore */
+      if (params.bridge) {
+        try {
+          await params.bridge.close();
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    if (params.heartbeatUnsub) {
-      try {
-        params.heartbeatUnsub();
-      } catch {
-        /* ignore */
+      for (const plugin of listChannelPlugins()) {
+        try {
+          await params.stopChannel(plugin.id);
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    params.chatRunState.clear();
-    for (const c of params.clients) {
-      try {
-        c.socket.close(1012, "service restart");
-      } catch {
-        /* ignore */
+      if (params.pluginServices) {
+        await params.pluginServices.stop().catch(() => {});
       }
+      await stopGmailWatcher();
+      params.cron.stop();
+      params.heartbeatRunner.stop();
+      for (const timer of params.nodePresenceTimers.values()) {
+        clearInterval(timer);
+      }
+      params.nodePresenceTimers.clear();
+      params.broadcast("shutdown", {
+        reason,
+        restartExpectedMs,
+      });
+      clearInterval(params.tickInterval);
+      clearInterval(params.healthInterval);
+      clearInterval(params.dedupeCleanup);
+      if (params.agentUnsub) {
+        try {
+          params.agentUnsub();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (params.heartbeatUnsub) {
+        try {
+          params.heartbeatUnsub();
+        } catch {
+          /* ignore */
+        }
+      }
+      params.chatRunState.clear();
+      for (const c of params.clients) {
+        try {
+          c.socket.close(1012, "service restart");
+        } catch {
+          /* ignore */
+        }
+      }
+      params.clients.clear();
+      await params.configReloader.stop().catch(() => {});
+      if (params.browserControl) {
+        await params.browserControl.stop().catch(() => {});
+      }
+
+      // Close WebSocket server with timeout
+      await Promise.race([
+        new Promise<void>((resolve) => params.wss.close(() => resolve())),
+        new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+      ]);
+
+      // Close HTTP server with timeout
+      await Promise.race([
+        new Promise<void>((resolve, reject) =>
+          params.httpServer.close((err) => (err ? reject(err) : resolve())),
+        ),
+        new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    } finally {
+      clearTimeout(closeTimeout);
     }
-    params.clients.clear();
-    await params.configReloader.stop().catch(() => {});
-    if (params.browserControl) {
-      await params.browserControl.stop().catch(() => {});
-    }
-    await new Promise<void>((resolve) => params.wss.close(() => resolve()));
-    await new Promise<void>((resolve, reject) =>
-      params.httpServer.close((err) => (err ? reject(err) : resolve())),
-    );
   };
 }

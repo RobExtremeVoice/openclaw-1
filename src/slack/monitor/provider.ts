@@ -160,7 +160,7 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
     removeAckAfterReply,
   });
 
-  const handleSlackMessage = createSlackMessageHandler({ ctx, account });
+  const handleSlackMessage = createSlackMessageHandler({ ctx, account, runtime });
 
   registerSlackMonitorEvents({ ctx, account, handleSlackMessage });
   registerSlackMonitorSlashCommands({ ctx, account });

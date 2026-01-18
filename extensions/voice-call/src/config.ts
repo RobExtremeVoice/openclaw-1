@@ -37,27 +37,27 @@ export type InboundPolicy = z.infer<typeof InboundPolicySchema>;
 
 export const TelnyxConfigSchema = z.object({
   /** Telnyx API v2 key */
-  apiKey: z.string().min(1).optional(),
+  apiKey: z.string().optional(),
   /** Telnyx connection ID (from Call Control app) */
-  connectionId: z.string().min(1).optional(),
+  connectionId: z.string().optional(),
   /** Public key for webhook signature verification */
-  publicKey: z.string().min(1).optional(),
+  publicKey: z.string().optional(),
 });
 export type TelnyxConfig = z.infer<typeof TelnyxConfigSchema>;
 
 export const TwilioConfigSchema = z.object({
   /** Twilio Account SID */
-  accountSid: z.string().min(1).optional(),
+  accountSid: z.string().optional(),
   /** Twilio Auth Token */
-  authToken: z.string().min(1).optional(),
+  authToken: z.string().optional(),
 });
 export type TwilioConfig = z.infer<typeof TwilioConfigSchema>;
 
 export const PlivoConfigSchema = z.object({
   /** Plivo Auth ID (starts with MA/SA) */
-  authId: z.string().min(1).optional(),
+  authId: z.string().optional(),
   /** Plivo Auth Token */
-  authToken: z.string().min(1).optional(),
+  authToken: z.string().optional(),
 });
 export type PlivoConfig = z.infer<typeof PlivoConfigSchema>;
 
@@ -238,6 +238,11 @@ export const VoiceCallConfigSchema = z.object({
 
   /** Plivo-specific configuration */
   plivo: PlivoConfigSchema.optional(),
+
+  /** Fallback order for provider selection */
+  fallbackOrder: z
+    .array(z.enum(["telnyx", "twilio", "plivo", "mock"]))
+    .optional(),
 
   /** Phone number to call from (E.164) */
   fromNumber: E164Schema.optional(),
