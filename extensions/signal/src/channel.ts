@@ -1,31 +1,28 @@
-import { chunkText } from "../../auto-reply/chunk.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
-import {
-  listSignalAccountIds,
-  type ResolvedSignalAccount,
-  resolveDefaultSignalAccountId,
-  resolveSignalAccount,
-} from "../../signal/accounts.js";
-import { probeSignal } from "../../signal/probe.js";
-import { sendMessageSignal } from "../../signal/send.js";
-import { normalizeE164 } from "../../utils.js";
-import { getChatChannelMeta } from "../registry.js";
-import { SignalConfigSchema } from "../../config/zod-schema.providers-core.js";
-import { buildChannelConfigSchema } from "./config-schema.js";
-import {
-  deleteAccountFromConfigSection,
-  setAccountEnabledInConfigSection,
-} from "./config-helpers.js";
-import { formatPairingApproveHint } from "./helpers.js";
-import { resolveChannelMediaMaxBytes } from "./media-limits.js";
-import { looksLikeSignalTargetId, normalizeSignalMessagingTarget } from "./normalize/signal.js";
-import { signalOnboardingAdapter } from "./onboarding/signal.js";
-import { PAIRING_APPROVED_MESSAGE } from "./pairing-message.js";
 import {
   applyAccountNameToChannelSection,
+  buildChannelConfigSchema,
+  DEFAULT_ACCOUNT_ID,
+  deleteAccountFromConfigSection,
+  formatPairingApproveHint,
+  getChatChannelMeta,
+  listSignalAccountIds,
+  looksLikeSignalTargetId,
   migrateBaseNameToDefaultAccount,
-} from "./setup-helpers.js";
-import type { ChannelPlugin } from "./types.js";
+  normalizeAccountId,
+  normalizeE164,
+  normalizeSignalMessagingTarget,
+  PAIRING_APPROVED_MESSAGE,
+  resolveChannelMediaMaxBytes,
+  resolveDefaultSignalAccountId,
+  resolveSignalAccount,
+  setAccountEnabledInConfigSection,
+  signalOnboardingAdapter,
+  SignalConfigSchema,
+  type ChannelPlugin,
+  type ResolvedSignalAccount,
+} from "clawdbot/plugin-sdk";
+
+import { getSignalRuntime } from "./runtime.js";
 
 const meta = getChatChannelMeta("signal");
 
@@ -39,7 +36,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
     idLabel: "signalNumber",
     normalizeAllowEntry: (entry) => entry.replace(/^signal:/i, ""),
     notifyApproval: async ({ id }) => {
-      await sendMessageSignal(id, PAIRING_APPROVED_MESSAGE);
+      await getSignalRuntime().channel.signal.sendMessageSignal(id, PAIRING_APPROVED_MESSAGE);
     },
   },
   capabilities: {
@@ -199,10 +196,10 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
   },
   outbound: {
     deliveryMode: "direct",
-    chunker: chunkText,
+    chunker: (text, limit) => getSignalRuntime().channel.text.chunkText(text, limit),
     textChunkLimit: 4000,
     sendText: async ({ cfg, to, text, accountId, deps }) => {
-      const send = deps?.sendSignal ?? sendMessageSignal;
+      const send = deps?.sendSignal ?? getSignalRuntime().channel.signal.sendMessageSignal;
       const maxBytes = resolveChannelMediaMaxBytes({
         cfg,
         resolveChannelLimitMb: ({ cfg, accountId }) =>
@@ -217,7 +214,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       return { channel: "signal", ...result };
     },
     sendMedia: async ({ cfg, to, text, mediaUrl, accountId, deps }) => {
-      const send = deps?.sendSignal ?? sendMessageSignal;
+      const send = deps?.sendSignal ?? getSignalRuntime().channel.signal.sendMessageSignal;
       const maxBytes = resolveChannelMediaMaxBytes({
         cfg,
         resolveChannelLimitMb: ({ cfg, accountId }) =>
@@ -266,7 +263,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
     }),
     probeAccount: async ({ account, timeoutMs }) => {
       const baseUrl = account.baseUrl;
-      return await probeSignal(baseUrl, timeoutMs);
+      return await getSignalRuntime().channel.signal.probeSignal(baseUrl, timeoutMs);
     },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
       accountId: account.accountId,
@@ -292,8 +289,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       });
       ctx.log?.info(`[${account.accountId}] starting provider (${account.baseUrl})`);
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
-      const { monitorSignalProvider } = await import("../../signal/index.js");
-      return monitorSignalProvider({
+      return getSignalRuntime().channel.signal.monitorSignalProvider({
         accountId: account.accountId,
         config: ctx.cfg,
         runtime: ctx.runtime,

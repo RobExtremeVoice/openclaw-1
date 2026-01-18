@@ -46,7 +46,7 @@ type NodeDaemonStatusOptions = {
 };
 
 function renderNodeServiceStartHints(): string[] {
-  const base = ["clawdbot node daemon install", "clawdbot node start"];
+  const base = ["clawdbot node service install", "clawdbot node start"];
   switch (process.platform) {
     case "darwin":
       return [
@@ -81,7 +81,10 @@ function buildNodeRuntimeHints(env: NodeJS.ProcessEnv = process.env): string[] {
   return [];
 }
 
-function resolveNodeDefaults(opts: NodeDaemonInstallOptions, config: Awaited<ReturnType<typeof loadNodeHostConfig>>) {
+function resolveNodeDefaults(
+  opts: NodeDaemonInstallOptions,
+  config: Awaited<ReturnType<typeof loadNodeHostConfig>>,
+) {
   const host = opts.host?.trim() || config?.gateway?.host || "127.0.0.1";
   const portOverride = parsePort(opts.port);
   if (opts.port !== undefined && portOverride === null) {
@@ -130,7 +133,7 @@ export async function runNodeDaemonInstall(opts: NodeDaemonInstallOptions) {
   };
 
   if (resolveIsNixMode(process.env)) {
-    fail("Nix mode detected; daemon install is disabled.");
+    fail("Nix mode detected; service install is disabled.");
     return;
   }
 
@@ -165,16 +168,13 @@ export async function runNodeDaemonInstall(opts: NodeDaemonInstallOptions) {
     });
     if (!json) {
       defaultRuntime.log(`Node service already ${service.loadedText}.`);
-      defaultRuntime.log("Reinstall with: clawdbot node daemon install --force");
+      defaultRuntime.log("Reinstall with: clawdbot node service install --force");
     }
     return;
   }
 
   const tlsFingerprint = opts.tlsFingerprint?.trim() || config?.gateway?.tlsFingerprint;
-  const tls =
-    Boolean(opts.tls) ||
-    Boolean(tlsFingerprint) ||
-    Boolean(config?.gateway?.tls);
+  const tls = Boolean(opts.tls) || Boolean(tlsFingerprint) || Boolean(config?.gateway?.tls);
   const { programArguments, workingDirectory, environment, description } =
     await buildNodeInstallPlan({
       env: process.env,
@@ -244,7 +244,7 @@ export async function runNodeDaemonUninstall(opts: NodeDaemonLifecycleOptions = 
   };
 
   if (resolveIsNixMode(process.env)) {
-    fail("Nix mode detected; daemon uninstall is disabled.");
+    fail("Nix mode detected; service uninstall is disabled.");
     return;
   }
 
@@ -495,9 +495,7 @@ export async function runNodeDaemonStatus(opts: NodeDaemonStatusOptions = {}) {
     service.readCommand(process.env).catch(() => null),
     service
       .readRuntime(process.env)
-      .catch(
-        (err): GatewayServiceRuntime => ({ status: "unknown", detail: String(err) }),
-      ),
+      .catch((err): GatewayServiceRuntime => ({ status: "unknown", detail: String(err) })),
   ]);
 
   const payload = {

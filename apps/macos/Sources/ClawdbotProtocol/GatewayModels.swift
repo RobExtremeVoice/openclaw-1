@@ -530,6 +530,8 @@ public struct NodePairRequestParams: Codable, Sendable {
     public let displayname: String?
     public let platform: String?
     public let version: String?
+    public let coreversion: String?
+    public let uiversion: String?
     public let devicefamily: String?
     public let modelidentifier: String?
     public let caps: [String]?
@@ -542,6 +544,8 @@ public struct NodePairRequestParams: Codable, Sendable {
         displayname: String?,
         platform: String?,
         version: String?,
+        coreversion: String?,
+        uiversion: String?,
         devicefamily: String?,
         modelidentifier: String?,
         caps: [String]?,
@@ -553,6 +557,8 @@ public struct NodePairRequestParams: Codable, Sendable {
         self.displayname = displayname
         self.platform = platform
         self.version = version
+        self.coreversion = coreversion
+        self.uiversion = uiversion
         self.devicefamily = devicefamily
         self.modelidentifier = modelidentifier
         self.caps = caps
@@ -565,6 +571,8 @@ public struct NodePairRequestParams: Codable, Sendable {
         case displayname = "displayName"
         case platform
         case version
+        case coreversion = "coreVersion"
+        case uiversion = "uiVersion"
         case devicefamily = "deviceFamily"
         case modelidentifier = "modelIdentifier"
         case caps
@@ -1629,6 +1637,85 @@ public struct LogsTailResult: Codable, Sendable {
         case lines
         case truncated
         case reset
+    }
+}
+
+public struct ExecApprovalsGetParams: Codable, Sendable {
+}
+
+public struct ExecApprovalsSetParams: Codable, Sendable {
+    public let file: [String: AnyCodable]
+    public let basehash: String?
+
+    public init(
+        file: [String: AnyCodable],
+        basehash: String?
+    ) {
+        self.file = file
+        self.basehash = basehash
+    }
+    private enum CodingKeys: String, CodingKey {
+        case file
+        case basehash = "baseHash"
+    }
+}
+
+public struct ExecApprovalsNodeGetParams: Codable, Sendable {
+    public let nodeid: String
+
+    public init(
+        nodeid: String
+    ) {
+        self.nodeid = nodeid
+    }
+    private enum CodingKeys: String, CodingKey {
+        case nodeid = "nodeId"
+    }
+}
+
+public struct ExecApprovalsNodeSetParams: Codable, Sendable {
+    public let nodeid: String
+    public let file: [String: AnyCodable]
+    public let basehash: String?
+
+    public init(
+        nodeid: String,
+        file: [String: AnyCodable],
+        basehash: String?
+    ) {
+        self.nodeid = nodeid
+        self.file = file
+        self.basehash = basehash
+    }
+    private enum CodingKeys: String, CodingKey {
+        case nodeid = "nodeId"
+        case file
+        case basehash = "baseHash"
+    }
+}
+
+public struct ExecApprovalsSnapshot: Codable, Sendable {
+    public let path: String
+    public let exists: Bool
+    public let hash: String
+    public let file: [String: AnyCodable]
+
+    public init(
+        path: String,
+        exists: Bool,
+        hash: String,
+        file: [String: AnyCodable]
+    ) {
+        self.path = path
+        self.exists = exists
+        self.hash = hash
+        self.file = file
+    }
+    private enum CodingKeys: String, CodingKey {
+        case path
+        case exists
+        case hash
+        case file
     }
 }
 

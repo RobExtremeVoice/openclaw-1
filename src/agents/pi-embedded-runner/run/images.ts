@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { ImageContent } from "@mariozechner/pi-ai";
 
 import { assertSandboxPath } from "../../sandbox-paths.js";
+import { sanitizeImageBlocks } from "../../tool-images.js";
 import { extractTextFromMessage } from "../../../tui/tui-formatters.js";
 import { loadWebMedia } from "../../../web/media.js";
 import { resolveUserPath } from "../../../utils.js";
@@ -46,6 +47,17 @@ export interface DetectedImageRef {
 function isImageExtension(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return IMAGE_EXTENSIONS.has(ext);
+}
+
+async function sanitizeImagesWithLog(
+  images: ImageContent[],
+  label: string,
+): Promise<ImageContent[]> {
+  const { images: sanitized, dropped } = await sanitizeImageBlocks(images, label);
+  if (dropped > 0) {
+    log.warn(`Native image: dropped ${dropped} image(s) after sanitization (${label}).`);
+  }
+  return sanitized;
 }
 
 /**
@@ -102,7 +114,8 @@ export function detectImageReferences(prompt: string): DetectedImageRef[] {
   }
 
   // Pattern for [Image: source: /path/...] format from messaging systems
-  const messageImagePattern = /\[Image:\s*source:\s*([^\]]+\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif))\]/gi;
+  const messageImagePattern =
+    /\[Image:\s*source:\s*([^\]]+\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif))\]/gi;
   while ((match = messageImagePattern.exec(prompt)) !== null) {
     const raw = match[1]?.trim();
     if (raw) addPathRef(raw);
@@ -111,8 +124,7 @@ export function detectImageReferences(prompt: string): DetectedImageRef[] {
   // Remote HTTP(S) URLs are intentionally ignored. Native image injection is local-only.
 
   // Pattern for file:// URLs - treat as paths since loadWebMedia handles them
-  const fileUrlPattern =
-    /file:\/\/[^\s<>"'`\]]+\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif)/gi;
+  const fileUrlPattern = /file:\/\/[^\s<>"'`\]]+\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif)/gi;
   while ((match = fileUrlPattern.exec(prompt)) !== null) {
     const raw = match[0];
     if (seen.has(raw.toLowerCase())) continue;
@@ -132,7 +144,8 @@ export function detectImageReferences(prompt: string): DetectedImageRef[] {
   // - ./relative/path.ext
   // - ../parent/path.ext
   // - ~/home/path.ext
-  const pathPattern = /(?:^|\s|["'`(])((\.\.?\/|[~/])[^\s"'`()[\]]*\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif))/gi;
+  const pathPattern =
+    /(?:^|\s|["'`(])((\.\.?\/|[~/])[^\s"'`()[\]]*\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif))/gi;
   while ((match = pathPattern.exec(prompt)) !== null) {
     // Use capture group 1 (the path without delimiter prefix); skip if undefined
     if (match[1]) addPathRef(match[1]);
@@ -188,7 +201,9 @@ export async function loadImageFromRef(
         targetPath = validated.resolved;
       } catch (err) {
         // Log the actual error for debugging (sandbox violation or other path error)
-        log.debug(`Native image: sandbox validation failed for ${ref.resolved}: ${err instanceof Error ? err.message : String(err)}`);
+        log.debug(
+          `Native image: sandbox validation failed for ${ref.resolved}: ${err instanceof Error ? err.message : String(err)}`,
+        );
         return null;
       }
     }
@@ -219,7 +234,9 @@ export async function loadImageFromRef(
     return { type: "image", data, mimeType };
   } catch (err) {
     // Log the actual error for debugging (size limits, network failures, etc.)
-    log.debug(`Native image: failed to load ${ref.resolved}: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(
+      `Native image: failed to load ${ref.resolved}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -255,9 +272,7 @@ function detectImagesFromHistory(messages: unknown[]): DetectedImageRef[] {
     if (!Array.isArray(content)) return false;
     return content.some(
       (part) =>
-        part != null &&
-        typeof part === "object" &&
-        (part as { type?: string }).type === "image",
+        part != null && typeof part === "object" && (part as { type?: string }).type === "image",
     );
   };
 
@@ -331,18 +346,14 @@ export async function detectAndLoadPromptImages(params: {
   const promptRefs = detectImageReferences(params.prompt);
 
   // Detect images from conversation history (with message indices)
-  const historyRefs = params.historyMessages
-    ? detectImagesFromHistory(params.historyMessages)
-    : [];
+  const historyRefs = params.historyMessages ? detectImagesFromHistory(params.historyMessages) : [];
 
   // Deduplicate: if an image is in the current prompt, don't also load it from history.
   // Current prompt images are passed via the `images` parameter to prompt(), while history
   // images are injected into their original message positions. We don't want the same
   // image loaded and sent twice (wasting tokens and potentially causing confusion).
   const seenPaths = new Set(promptRefs.map((r) => r.resolved.toLowerCase()));
-  const uniqueHistoryRefs = historyRefs.filter(
-    (r) => !seenPaths.has(r.resolved.toLowerCase()),
-  );
+  const uniqueHistoryRefs = historyRefs.filter((r) => !seenPaths.has(r.resolved.toLowerCase()));
 
   const allRefs = [...promptRefs, ...uniqueHistoryRefs];
 
@@ -393,9 +404,18 @@ export async function detectAndLoadPromptImages(params: {
     }
   }
 
+  const sanitizedPromptImages = await sanitizeImagesWithLog(promptImages, "prompt:images");
+  const sanitizedHistoryImagesByIndex = new Map<number, ImageContent[]>();
+  for (const [index, images] of historyImagesByIndex) {
+    const sanitized = await sanitizeImagesWithLog(images, `history:images:${index}`);
+    if (sanitized.length > 0) {
+      sanitizedHistoryImagesByIndex.set(index, sanitized);
+    }
+  }
+
   return {
-    images: promptImages,
-    historyImagesByIndex,
+    images: sanitizedPromptImages,
+    historyImagesByIndex: sanitizedHistoryImagesByIndex,
     detectedRefs: allRefs,
     loadedCount,
     skippedCount,

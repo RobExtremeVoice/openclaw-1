@@ -1,30 +1,26 @@
-import { chunkText } from "../../auto-reply/chunk.js";
-import {
-  listIMessageAccountIds,
-  type ResolvedIMessageAccount,
-  resolveDefaultIMessageAccountId,
-  resolveIMessageAccount,
-} from "../../imessage/accounts.js";
-import { probeIMessage } from "../../imessage/probe.js";
-import { sendMessageIMessage } from "../../imessage/send.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
-import { getChatChannelMeta } from "../registry.js";
-import { IMessageConfigSchema } from "../../config/zod-schema.providers-core.js";
-import { buildChannelConfigSchema } from "./config-schema.js";
-import {
-  deleteAccountFromConfigSection,
-  setAccountEnabledInConfigSection,
-} from "./config-helpers.js";
-import { resolveIMessageGroupRequireMention } from "./group-mentions.js";
-import { formatPairingApproveHint } from "./helpers.js";
-import { resolveChannelMediaMaxBytes } from "./media-limits.js";
-import { imessageOnboardingAdapter } from "./onboarding/imessage.js";
-import { PAIRING_APPROVED_MESSAGE } from "./pairing-message.js";
 import {
   applyAccountNameToChannelSection,
+  buildChannelConfigSchema,
+  DEFAULT_ACCOUNT_ID,
+  deleteAccountFromConfigSection,
+  formatPairingApproveHint,
+  getChatChannelMeta,
+  imessageOnboardingAdapter,
+  IMessageConfigSchema,
+  listIMessageAccountIds,
   migrateBaseNameToDefaultAccount,
-} from "./setup-helpers.js";
-import type { ChannelPlugin } from "./types.js";
+  normalizeAccountId,
+  PAIRING_APPROVED_MESSAGE,
+  resolveChannelMediaMaxBytes,
+  resolveDefaultIMessageAccountId,
+  resolveIMessageAccount,
+  resolveIMessageGroupRequireMention,
+  setAccountEnabledInConfigSection,
+  type ChannelPlugin,
+  type ResolvedIMessageAccount,
+} from "clawdbot/plugin-sdk";
+
+import { getIMessageRuntime } from "./runtime.js";
 
 const meta = getChatChannelMeta("imessage");
 
@@ -32,13 +28,17 @@ export const imessagePlugin: ChannelPlugin<ResolvedIMessageAccount> = {
   id: "imessage",
   meta: {
     ...meta,
+    aliases: ["imsg"],
     showConfigured: false,
   },
   onboarding: imessageOnboardingAdapter,
   pairing: {
     idLabel: "imessageSenderId",
     notifyApproval: async ({ id }) => {
-      await sendMessageIMessage(id, PAIRING_APPROVED_MESSAGE);
+      await getIMessageRuntime().channel.imessage.sendMessageIMessage(
+        id,
+        PAIRING_APPROVED_MESSAGE,
+      );
     },
   },
   capabilities: {
@@ -183,10 +183,10 @@ export const imessagePlugin: ChannelPlugin<ResolvedIMessageAccount> = {
   },
   outbound: {
     deliveryMode: "direct",
-    chunker: chunkText,
+    chunker: (text, limit) => getIMessageRuntime().channel.text.chunkText(text, limit),
     textChunkLimit: 4000,
     sendText: async ({ cfg, to, text, accountId, deps }) => {
-      const send = deps?.sendIMessage ?? sendMessageIMessage;
+      const send = deps?.sendIMessage ?? getIMessageRuntime().channel.imessage.sendMessageIMessage;
       const maxBytes = resolveChannelMediaMaxBytes({
         cfg,
         resolveChannelLimitMb: ({ cfg, accountId }) =>
@@ -201,7 +201,7 @@ export const imessagePlugin: ChannelPlugin<ResolvedIMessageAccount> = {
       return { channel: "imessage", ...result };
     },
     sendMedia: async ({ cfg, to, text, mediaUrl, accountId, deps }) => {
-      const send = deps?.sendIMessage ?? sendMessageIMessage;
+      const send = deps?.sendIMessage ?? getIMessageRuntime().channel.imessage.sendMessageIMessage;
       const maxBytes = resolveChannelMediaMaxBytes({
         cfg,
         resolveChannelLimitMb: ({ cfg, accountId }) =>
@@ -251,7 +251,8 @@ export const imessagePlugin: ChannelPlugin<ResolvedIMessageAccount> = {
       probe: snapshot.probe,
       lastProbeAt: snapshot.lastProbeAt ?? null,
     }),
-    probeAccount: async ({ timeoutMs }) => probeIMessage(timeoutMs),
+    probeAccount: async ({ timeoutMs }) =>
+      getIMessageRuntime().channel.imessage.probeIMessage(timeoutMs),
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
       accountId: account.accountId,
       name: account.name,
@@ -282,9 +283,7 @@ export const imessagePlugin: ChannelPlugin<ResolvedIMessageAccount> = {
       ctx.log?.info(
         `[${account.accountId}] starting provider (${cliPath}${dbPath ? ` db=${dbPath}` : ""})`,
       );
-      // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
-      const { monitorIMessageProvider } = await import("../../imessage/index.js");
-      return monitorIMessageProvider({
+      return getIMessageRuntime().channel.imessage.monitorIMessageProvider({
         accountId: account.accountId,
         config: ctx.cfg,
         runtime: ctx.runtime,

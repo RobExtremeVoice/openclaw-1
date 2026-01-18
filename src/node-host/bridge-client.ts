@@ -27,6 +27,8 @@ export type BridgeClientOptions = {
   displayName?: string;
   platform?: string;
   version?: string;
+  coreVersion?: string;
+  uiVersion?: string;
   deviceFamily?: string;
   modelIdentifier?: string;
   caps?: string[];
@@ -46,7 +48,6 @@ type PendingRpc = {
   reject: (err: Error) => void;
   timer?: NodeJS.Timeout;
 };
-
 
 function normalizeFingerprint(input: string): string {
   return input.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
@@ -173,6 +174,8 @@ export class BridgeClient {
       displayName: this.opts.displayName,
       platform: this.opts.platform,
       version: this.opts.version,
+      coreVersion: this.opts.coreVersion,
+      uiVersion: this.opts.uiVersion,
       deviceFamily: this.opts.deviceFamily,
       modelIdentifier: this.opts.modelIdentifier,
       caps: this.opts.caps,
@@ -189,6 +192,8 @@ export class BridgeClient {
       displayName: this.opts.displayName,
       platform: this.opts.platform,
       version: this.opts.version,
+      coreVersion: this.opts.coreVersion,
+      uiVersion: this.opts.uiVersion,
       deviceFamily: this.opts.deviceFamily,
       modelIdentifier: this.opts.modelIdentifier,
       caps: this.opts.caps,
@@ -237,10 +242,7 @@ export class BridgeClient {
     }
   }
 
-  private handleFrame(frame: {
-    type?: string;
-    [key: string]: unknown;
-  }) {
+  private handleFrame(frame: { type?: string; [key: string]: unknown }) {
     const type = String(frame.type ?? "");
     switch (type) {
       case "hello-ok": {

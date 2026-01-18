@@ -14,6 +14,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
     private weak var statusItem: NSStatusItem?
     private var loadTask: Task<Void, Never>?
     private var nodesLoadTask: Task<Void, Never>?
+    private var previewTasks: [Task<Void, Never>] = []
     private var isMenuOpen = false
     private var lastKnownMenuWidth: CGFloat?
     private var menuOpenWidth: CGFloat?
@@ -87,6 +88,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         self.menuOpenWidth = nil
         self.loadTask?.cancel()
         self.nodesLoadTask?.cancel()
+        self.cancelPreviewTasks()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -107,6 +109,7 @@ extension MenuSessionsInjector {
     private var mainSessionKey: String { WorkActivityStore.shared.mainSessionKey }
 
     private func inject(into menu: NSMenu) {
+        self.cancelPreviewTasks()
         // Remove any previous injected items.
         for item in menu.items where item.tag == self.tag {
             menu.removeItem(item)
@@ -280,9 +283,7 @@ extension MenuSessionsInjector {
 
     private func insertUsageSection(into menu: NSMenu, at cursor: Int, width: CGFloat) -> Int {
         let rows = self.usageRows
-        let errorText = self.cachedUsageErrorText
-
-        if rows.isEmpty, errorText == nil {
+        if rows.isEmpty {
             return cursor
         }
 
@@ -305,25 +306,6 @@ extension MenuSessionsInjector {
             highlighted: false)
         menu.insertItem(headerItem, at: cursor)
         cursor += 1
-
-        if let errorText = errorText?.nonEmpty, !rows.isEmpty {
-            menu.insertItem(
-                self.makeMessageItem(
-                    text: errorText,
-                    symbolName: "exclamationmark.triangle",
-                    width: width,
-                    maxLines: 2),
-                at: cursor)
-            cursor += 1
-        }
-
-        if rows.isEmpty {
-            menu.insertItem(
-                self.makeMessageItem(text: errorText ?? "No usage available", symbolName: "minus", width: width),
-                at: cursor)
-            cursor += 1
-            return cursor
-        }
 
         if let selectedProvider = self.selectedUsageProviderId,
            let primary = rows.first(where: { $0.providerId.lowercased() == selectedProvider }),
@@ -440,6 +422,8 @@ extension MenuSessionsInjector {
             displayName: "Gateway",
             platform: platform,
             version: nil,
+            coreVersion: nil,
+            uiVersion: nil,
             deviceFamily: nil,
             modelIdentifier: nil,
             remoteIp: host,
@@ -473,13 +457,44 @@ extension MenuSessionsInjector {
         item.tag = self.tag
         item.isEnabled = false
         let view = AnyView(SessionMenuPreviewView(
-            sessionKey: sessionKey,
             width: width,
-            maxItems: 10,
             maxLines: maxLines,
-            title: title))
-        item.view = self.makeHostedView(rootView: view, width: width, highlighted: false)
+            title: title,
+            items: [],
+            status: .loading))
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame.size.width = max(1, width)
+        let size = hosting.fittingSize
+        hosting.frame = NSRect(origin: .zero, size: NSSize(width: width, height: size.height))
+        item.view = hosting
+
+        let task = Task { [weak hosting] in
+            let snapshot = await SessionMenuPreviewLoader.load(sessionKey: sessionKey, maxItems: 10)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let hosting else { return }
+                let nextView = AnyView(SessionMenuPreviewView(
+                    width: width,
+                    maxLines: maxLines,
+                    title: title,
+                    items: snapshot.items,
+                    status: snapshot.status))
+                hosting.rootView = nextView
+                hosting.invalidateIntrinsicContentSize()
+                hosting.frame.size.width = max(1, width)
+                let size = hosting.fittingSize
+                hosting.frame.size.height = size.height
+            }
+        }
+        self.previewTasks.append(task)
         return item
+    }
+
+    private func cancelPreviewTasks() {
+        for task in self.previewTasks {
+            task.cancel()
+        }
+        self.previewTasks.removeAll()
     }
 
     private func makeMessageItem(text: String, symbolName: String, width: CGFloat, maxLines: Int? = 2) -> NSMenuItem {
@@ -559,14 +574,11 @@ extension MenuSessionsInjector {
 
         do {
             self.cachedUsageSummary = try await UsageLoader.loadSummary()
-            self.cachedUsageErrorText = nil
-            self.usageCacheUpdatedAt = Date()
         } catch {
-            if self.cachedUsageSummary == nil {
-                self.cachedUsageErrorText = self.compactUsageError(error)
-            }
-            self.usageCacheUpdatedAt = Date()
+            self.cachedUsageSummary = nil
+            self.cachedUsageErrorText = nil
         }
+        self.usageCacheUpdatedAt = Date()
     }
 
     private func compactUsageError(_ error: Error) -> String {
@@ -747,8 +759,8 @@ extension MenuSessionsInjector {
             menu.addItem(self.makeNodeCopyItem(label: "Platform", value: platform))
         }
 
-        if let version = entry.version?.nonEmpty {
-            menu.addItem(self.makeNodeCopyItem(label: "Version", value: self.formatVersionLabel(version)))
+        if let version = NodeMenuEntryFormatter.detailRightVersion(entry)?.nonEmpty {
+            menu.addItem(self.makeNodeCopyItem(label: "Version", value: version))
         }
 
         menu.addItem(self.makeNodeDetailItem(label: "Connected", value: entry.isConnected ? "Yes" : "No"))
