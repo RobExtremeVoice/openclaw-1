@@ -170,3 +170,82 @@ describe("initSessionState RawBody", () => {
     expect(result.triggerBodyNormalized).toBe("/status");
   });
 });
+
+describe("initSessionState thread idle timeout bypass", () => {
+  it("thread sessions bypass idle timeout and reuse existing session", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-thread-idle-"));
+    const storePath = path.join(root, "sessions.json");
+    const threadKey = "agent:main:slack:channel:C1:thread:123";
+    const existingSessionId = "existing-thread-session-id";
+
+    // Pre-seed a "stale" session (2 hours old, past default 60min idle)
+    await saveSessionStore(storePath, {
+      [threadKey]: {
+        sessionId: existingSessionId,
+        updatedAt: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
+      },
+    });
+
+    const cfg = { session: { store: storePath, idleMinutes: 60 } } as ClawdbotConfig;
+    const result = await initSessionState({
+      ctx: { Body: "follow-up message", SessionKey: threadKey },
+      cfg,
+      commandAuthorized: true,
+    });
+
+    // Should reuse existing session despite being "stale"
+    expect(result.isNewSession).toBe(false);
+    expect(result.sessionId).toBe(existingSessionId);
+  });
+
+  it("non-thread sessions still expire after idle timeout", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-dm-idle-"));
+    const storePath = path.join(root, "sessions.json");
+    const dmKey = "agent:main:whatsapp:+1234567890";
+
+    // Pre-seed a "stale" DM session (2 hours old)
+    await saveSessionStore(storePath, {
+      [dmKey]: {
+        sessionId: "old-dm-session",
+        updatedAt: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
+      },
+    });
+
+    const cfg = { session: { store: storePath, idleMinutes: 60 } } as ClawdbotConfig;
+    const result = await initSessionState({
+      ctx: { Body: "hello", SessionKey: dmKey },
+      cfg,
+      commandAuthorized: true,
+    });
+
+    // Should create new session (idle expired)
+    expect(result.isNewSession).toBe(true);
+    expect(result.sessionId).not.toBe("old-dm-session");
+  });
+
+  it("fresh non-thread sessions are reused within idle timeout", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-dm-fresh-"));
+    const storePath = path.join(root, "sessions.json");
+    const dmKey = "agent:main:whatsapp:+1234567890";
+    const existingSessionId = "fresh-dm-session";
+
+    // Pre-seed a "fresh" DM session (10 minutes old)
+    await saveSessionStore(storePath, {
+      [dmKey]: {
+        sessionId: existingSessionId,
+        updatedAt: Date.now() - 10 * 60 * 1000, // 10 minutes ago
+      },
+    });
+
+    const cfg = { session: { store: storePath, idleMinutes: 60 } } as ClawdbotConfig;
+    const result = await initSessionState({
+      ctx: { Body: "hello", SessionKey: dmKey },
+      cfg,
+      commandAuthorized: true,
+    });
+
+    // Should reuse existing session (within idle timeout)
+    expect(result.isNewSession).toBe(false);
+    expect(result.sessionId).toBe(existingSessionId);
+  });
+});
