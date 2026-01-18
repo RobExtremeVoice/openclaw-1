@@ -1,4 +1,5 @@
 import { App } from "@slack/bolt";
+import { WebClient } from "@slack/web-api";
 
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import { DEFAULT_GROUP_HISTORY_LIMIT } from "../../auto-reply/reply/history.js";
@@ -48,12 +49,15 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
   const sessionScope: SessionScope = sessionCfg?.scope ?? "per-sender";
   const mainKey = normalizeMainKey(sessionCfg?.mainKey);
 
+  const slackMode = opts.mode ?? account.config.mode ?? "socket";
   const botToken = resolveSlackBotToken(opts.botToken ?? account.botToken);
   const appToken = resolveSlackAppToken(opts.appToken ?? account.appToken);
-  if (!botToken || !appToken) {
-    throw new Error(
-      `Slack bot + app tokens missing for account "${account.accountId}" (set channels.slack.accounts.${account.accountId}.botToken/appToken or SLACK_BOT_TOKEN/SLACK_APP_TOKEN for default).`,
-    );
+  if (!botToken || (slackMode !== "http" && !appToken)) {
+    const missing =
+      slackMode === "http"
+        ? `Slack bot token missing for account "${account.accountId}" (set channels.slack.accounts.${account.accountId}.botToken or SLACK_BOT_TOKEN for default).`
+        : `Slack bot + app tokens missing for account "${account.accountId}" (set channels.slack.accounts.${account.accountId}.botToken/appToken or SLACK_BOT_TOKEN/SLACK_APP_TOKEN for default).`;
+    throw new Error(missing);
   }
 
   const runtime: RuntimeEnv = opts.runtime ?? {
@@ -202,6 +206,13 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
   const ackReactionScope = cfg.messages?.ackReactionScope ?? "group-mentions";
   const mediaMaxBytes = (opts.mediaMaxMb ?? slackCfg.mediaMaxMb ?? 20) * 1024 * 1024;
   const removeAckAfterReply = cfg.messages?.removeAckAfterReply ?? false;
+
+  if (slackMode === "http") {
+    const client = new WebClient(botToken);
+    void client;
+    runtime.log?.("Slack HTTP webhook mode active");
+    return { stop: () => {} };
+  }
 
   const app = new App({
     token: botToken,
