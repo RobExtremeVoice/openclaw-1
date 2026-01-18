@@ -22,6 +22,11 @@ Clawdbot depends on several submodules (like `Peekaboo`). You must initialize th
 git submodule update --init --recursive
 ```
 
+> **Note**: If a shallow submodule copy is preferred, use:
+> ```bash
+> git submodule update --init --recursive --progress --verbose --depth 1 --jobs 8
+> ```
+
 ## 2. Install Dependencies
 
 Install the project-wide dependencies:
@@ -38,7 +43,7 @@ To build the macOS app and package it into `dist/Clawdbot.app`, run:
 ./scripts/package-mac-app.sh
 ```
 
-If you don't have an Apple Developer ID certificate, the script will automatically use **ad-hoc signing** (`-`). 
+If you don't have an Apple Developer ID certificate, the script will automatically use **ad-hoc signing** (`-`).
 
 > **Note**: Ad-hoc signed apps may trigger security prompts. If the app crashes immediately with "Abort trap 6", see the [Troubleshooting](#troubleshooting) section.
 

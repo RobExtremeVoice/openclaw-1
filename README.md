@@ -264,6 +264,11 @@ git submodule update --init --recursive
 ./scripts/restart-mac.sh
 ```
 
+> **Note**: If a shallow submodule copy is preferred, use:
+> ```bash
+> git submodule update --init --recursive --progress --verbose --depth 1 --jobs 8
+> ```
+
 ### macOS (Clawdbot.app) (optional)
 
 - Menu bar control for the Gateway and health.
@@ -454,7 +459,7 @@ Use these when you’re past the onboarding flow and want the deeper reference.
 
 ## Clawd
 
-Clawdbot was built for **Clawd**, a space lobster AI assistant. 🦞  
+Clawdbot was built for **Clawd**, a space lobster AI assistant. 🦞
 by Peter Steinberger and the community.
 
 - [clawd.me](https://clawd.me)
@@ -463,7 +468,7 @@ by Peter Steinberger and the community.
 
 ## Community
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, maintainers, and how to submit PRs.  
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, maintainers, and how to submit PRs.
 AI/vibe-coded PRs welcome! 🤖
 
 Special thanks to @andrewting19 for the Anthropic OAuth tool-name fix.
