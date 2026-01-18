@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { scanText } from "./scan.js";
 
 describe("scanText", () => {
+  it("returns early when mode is off", () => {
+    const input = "OPENAI_API_KEY=sk-1234567890abcdef";
+    const result = scanText(input, { config: { mode: "off" } });
+    expect(result.blocked).toBe(false);
+    expect(result.matches).toHaveLength(0);
+    expect(result.redactedText).toBeUndefined();
+  });
+
   it("blocks on detected secrets in block mode", () => {
     const input = "OPENAI_API_KEY=sk-1234567890abcdef";
     const result = scanText(input, { config: { mode: "block" } });
@@ -29,7 +37,7 @@ describe("scanText", () => {
 
   it("truncates and warns when overflow policy is truncate", () => {
     const warn = vi.fn();
-    const input = "token=abcdef1234567890ghij";
+    const input = "TOKEN=abcdef1234567890ghij";
     const result = scanText(input, {
       config: { mode: "redact", maxChars: 10, overflow: "truncate" },
       warn,
@@ -38,6 +46,7 @@ describe("scanText", () => {
     expect(result.truncated).toBe(true);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]?.message).toContain("truncated");
+    expect(result.redactedText?.length).toBe(input.length);
   });
 
   it("detects high-entropy hex strings", () => {
