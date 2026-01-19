@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 import { spawn } from "node:child_process";
-import { writeFileSync, unlinkSync, readFileSync } from "node:fs";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express, { type Request, type Response } from "express";
@@ -32,7 +32,8 @@ function sendChatMessage(spaceId: string, text: string): void {
     });
 
     proc.on("close", (code) => {
-      try { unlinkSync(tmpFile); } catch {}
+      // Small delay ensures Python has finished reading the file
+      setTimeout(() => { try { unlinkSync(tmpFile); } catch {} }, 100);
       if (code !== 0) {
         console.error(`[googlechat] Send failed with code ${code}`);
       }
@@ -40,7 +41,7 @@ function sendChatMessage(spaceId: string, text: string): void {
 
     proc.on("error", (err) => {
       console.error("[googlechat] Send error:", err.message);
-      try { unlinkSync(tmpFile); } catch {}
+      setTimeout(() => { try { unlinkSync(tmpFile); } catch {} }, 100);
     });
 
   } catch (e) {
