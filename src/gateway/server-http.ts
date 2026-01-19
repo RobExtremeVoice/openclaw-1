@@ -24,6 +24,7 @@ import {
 } from "./hooks.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
+import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -190,6 +191,7 @@ export function createGatewayHttpServer(opts: {
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   openAiChatCompletionsEnabled: boolean;
+  openResponsesEnabled: boolean;
   handleHooksRequest: HooksRequestHandler;
   handlePluginRequest?: HooksRequestHandler;
   resolvedAuth: import("./auth.js").ResolvedGatewayAuth;
@@ -199,6 +201,7 @@ export function createGatewayHttpServer(opts: {
     controlUiEnabled,
     controlUiBasePath,
     openAiChatCompletionsEnabled,
+    openResponsesEnabled,
     handleHooksRequest,
     handlePluginRequest,
     resolvedAuth,
@@ -211,6 +214,9 @@ export function createGatewayHttpServer(opts: {
       if (await handleHooksRequest(req, res)) return;
       if (await handleSlackHttpRequest(req, res)) return;
       if (handlePluginRequest && (await handlePluginRequest(req, res))) return;
+      if (openResponsesEnabled) {
+        if (await handleOpenResponsesHttpRequest(req, res, { auth: resolvedAuth })) return;
+      }
       if (openAiChatCompletionsEnabled) {
         if (await handleOpenAiHttpRequest(req, res, { auth: resolvedAuth })) return;
       }

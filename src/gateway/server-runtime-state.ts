@@ -26,6 +26,7 @@ export async function createGatewayRuntimeState(params: {
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   openAiChatCompletionsEnabled: boolean;
+  openResponsesEnabled: boolean;
   resolvedAuth: ResolvedGatewayAuth;
   hooksConfig: () => HooksConfigResolved | null;
   pluginRegistry: PluginRegistry;
@@ -101,6 +102,7 @@ export async function createGatewayRuntimeState(params: {
     controlUiEnabled: params.controlUiEnabled,
     controlUiBasePath: params.controlUiBasePath,
     openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
+    openResponsesEnabled: params.openResponsesEnabled,
     handleHooksRequest,
     handlePluginRequest,
     resolvedAuth: params.resolvedAuth,

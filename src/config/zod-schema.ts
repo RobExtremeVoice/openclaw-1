@@ -310,6 +310,12 @@ export const ClawdbotSchema = z
                   })
                   .strict()
                   .optional(),
+                responses: z
+                  .object({
+                    enabled: z.boolean().optional(),
+                  })
+                  .strict()
+                  .optional(),
               })
               .strict()
               .optional(),
