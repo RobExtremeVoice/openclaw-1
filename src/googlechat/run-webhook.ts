@@ -1,10 +1,26 @@
 #!/usr/bin/env npx tsx
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
 import express, { type Request, type Response } from "express";
 
 const PORT = 18792;
 const app = express();
 app.use(express.json());
+
+// Path to the gchat sender script
+const GCHAT_SENDER = "/Users/justinmassa/chief-of-staff/scripts/gchat_sender.py";
+const PYTHON = "/Users/justinmassa/chief-of-staff/.venv/bin/python";
+
+// Send message via Chat API (async, no timeout concerns)
+function sendChatMessage(spaceId: string, text: string): void {
+  const escapedText = text.replace(/'/g, "'\\''").replace(/\n/g, "\\n");
+  exec(
+    `${PYTHON} -c "import sys; sys.path.insert(0, '/Users/justinmassa/chief-of-staff/scripts'); from gchat_sender import send_message; send_message('${escapedText}', '${spaceId}')"`,
+    { timeout: 30000 },
+    (err) => {
+      if (err) console.error("[googlechat] Failed to send response:", err.message);
+    }
+  );
+}
 
 // Health check
 app.get("/health", (_req: Request, res: Response) => {
@@ -17,15 +33,10 @@ app.post("/webhook/googlechat", async (req: Request, res: Response) => {
     const event = req.body;
     const chat = event.chat || {};
 
-    // Detect event type from payload structure
     const isAddedToSpace = !!chat.addedToSpacePayload;
     const isMessage = !!chat.messagePayload;
 
-    const eventType = isAddedToSpace
-      ? "ADDED_TO_SPACE"
-      : isMessage
-        ? "MESSAGE"
-        : "UNKNOWN";
+    const eventType = isAddedToSpace ? "ADDED_TO_SPACE" : isMessage ? "MESSAGE" : "UNKNOWN";
     console.log(`[googlechat] Received event: ${eventType}`);
 
     if (isAddedToSpace) {
@@ -35,7 +46,7 @@ app.post("/webhook/googlechat", async (req: Request, res: Response) => {
           chatDataAction: {
             createMessageAction: {
               message: {
-                text: `Hello ${user}! I'm Clawdbot, your AI assistant. Send me a message and I'll respond!`,
+                text: `Hello ${user}! I'm Clawdette, your AI assistant. Send me a message and I'll respond!`,
               },
             },
           },
@@ -52,48 +63,36 @@ app.post("/webhook/googlechat", async (req: Request, res: Response) => {
 
       console.log(`[googlechat] Message from ${senderName}: ${text}`);
 
-      let responseText: string;
-      try {
-        // Use clawdbot CLI to get AI response
-        // Escape the text for shell
-        const escapedText = text.replace(/'/g, "'\\''");
-        const sessionId = `googlechat:${spaceId}`;
-        const result = execSync(
-          `clawdbot agent --message '${escapedText}' --session-id '${sessionId}' --local`,
-          {
-            timeout: 25000, // 25 second timeout (Google Chat times out at ~30s)
-            encoding: "utf-8",
-            maxBuffer: 1024 * 1024,
-          },
-        );
-        responseText =
-          result.trim() || "I processed your message but have no response.";
-        console.log(
-          `[googlechat] AI Response: ${responseText.slice(0, 100)}...`,
-        );
-      } catch (err: unknown) {
-        const error = err as { message?: string; killed?: boolean };
-        console.error(`[googlechat] CLI error:`, error.message);
-        if (error.killed) {
-          responseText =
-            "Sorry, the request timed out. Please try a simpler question.";
-        } else {
-          responseText =
-            "Sorry, I encountered an error processing your message.";
-        }
-      }
+      // Acknowledge immediately - no blocking!
+      res.json({});
 
-      res.json({
-        hostAppDataAction: {
-          chatDataAction: {
-            createMessageAction: {
-              message: {
-                text: responseText,
-              },
-            },
-          },
+      // Process AI response asynchronously (can take minutes, that's fine)
+      const escapedText = text.replace(/'/g, "'\\''");
+      const sessionId = `googlechat:${spaceId}`;
+
+      console.log(`[googlechat] Processing async for space ${spaceId}...`);
+
+      exec(
+        `clawdbot agent --message '${escapedText}' --session-id '${sessionId}' --local`,
+        {
+          timeout: 300000, // 5 minute timeout
+          maxBuffer: 1024 * 1024,
         },
-      });
+        (err, stdout, stderr) => {
+          if (err) {
+            console.error(`[googlechat] AI error:`, err.message);
+            sendChatMessage(spaceId, "Sorry, I encountered an error processing your message.");
+            return;
+          }
+
+          const responseText = stdout.trim() || "I processed your message but have no response.";
+          console.log(`[googlechat] AI Response (${responseText.length} chars): ${responseText.slice(0, 100)}...`);
+
+          // Send response via Chat API
+          sendChatMessage(spaceId, responseText);
+        }
+      );
+
       return;
     }
 
@@ -106,10 +105,5 @@ app.post("/webhook/googlechat", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`[googlechat] Webhook server running on port ${PORT}`);
-  console.log(
-    `[googlechat] Local: http://localhost:${PORT}/webhook/googlechat`,
-  );
-  console.log(
-    `[googlechat] Use ngrok URL + /webhook/googlechat for Google Chat config`,
-  );
+  console.log(`[googlechat] Mode: ASYNC (responds via Chat API, no timeout issues)`);
 });
