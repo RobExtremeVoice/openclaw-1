@@ -59,6 +59,32 @@ function isExternalProfileFresh(cred: AuthProfileCredential | undefined, now: nu
 }
 
 /**
+ * Find any existing openai-codex profile (other than codex-cli) that has the same
+ * access and refresh tokens. This prevents creating a duplicate codex-cli profile
+ * when the user has already set up a custom profile with the same credentials.
+ */
+export function findDuplicateCodexProfile(
+  store: AuthProfileStore,
+  creds: OAuthCredential,
+): string | undefined {
+  for (const [profileId, profile] of Object.entries(store.profiles)) {
+    // Skip the codex-cli profile itself
+    if (profileId === CODEX_CLI_PROFILE_ID) continue;
+    // Only check openai-codex profiles
+    if (!profileId.startsWith("openai-codex:")) continue;
+    // Check if it's an OAuth credential with matching tokens
+    if (
+      profile.type === "oauth" &&
+      profile.access === creds.access &&
+      profile.refresh === creds.refresh
+    ) {
+      return profileId;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Sync OAuth credentials from external CLI tools (Claude Code CLI, Codex CLI) into the store.
  * This allows clawdbot to use the same credentials as these tools without requiring
  * separate authentication, and keeps credentials in sync when CLI tools refresh tokens.
@@ -151,23 +177,32 @@ export function syncExternalCliCredentials(
     ? readCodexCliCredentialsCached({ ttlMs: EXTERNAL_CLI_SYNC_TTL_MS })
     : null;
   if (codexCreds) {
-    const existing = store.profiles[CODEX_CLI_PROFILE_ID];
-    const existingOAuth = existing?.type === "oauth" ? existing : undefined;
-
-    // Codex creds don't carry expiry; use file mtime heuristic for freshness.
-    const shouldUpdate =
-      !existingOAuth ||
-      existingOAuth.provider !== "openai-codex" ||
-      existingOAuth.expires <= now ||
-      codexCreds.expires > existingOAuth.expires;
-
-    if (shouldUpdate && !shallowEqualOAuthCredentials(existingOAuth, codexCreds)) {
-      store.profiles[CODEX_CLI_PROFILE_ID] = codexCreds;
-      mutated = true;
-      log.info("synced openai-codex credentials from codex cli", {
-        profileId: CODEX_CLI_PROFILE_ID,
-        expires: new Date(codexCreds.expires).toISOString(),
+    // Check for duplicate credentials in another openai-codex profile
+    const duplicateProfileId = findDuplicateCodexProfile(store, codexCreds);
+    if (duplicateProfileId) {
+      log.info("skipping codex-cli sync: credentials already exist in another profile", {
+        existingProfileId: duplicateProfileId,
+        skippedProfileId: CODEX_CLI_PROFILE_ID,
       });
+    } else {
+      const existing = store.profiles[CODEX_CLI_PROFILE_ID];
+      const existingOAuth = existing?.type === "oauth" ? existing : undefined;
+
+      // Codex creds don't carry expiry; use file mtime heuristic for freshness.
+      const shouldUpdate =
+        !existingOAuth ||
+        existingOAuth.provider !== "openai-codex" ||
+        existingOAuth.expires <= now ||
+        codexCreds.expires > existingOAuth.expires;
+
+      if (shouldUpdate && !shallowEqualOAuthCredentials(existingOAuth, codexCreds)) {
+        store.profiles[CODEX_CLI_PROFILE_ID] = codexCreds;
+        mutated = true;
+        log.info("synced openai-codex credentials from codex cli", {
+          profileId: CODEX_CLI_PROFILE_ID,
+          expires: new Date(codexCreds.expires).toISOString(),
+        });
+      }
     }
   }
 
