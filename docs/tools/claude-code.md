@@ -58,6 +58,7 @@ This looks for `.worktrees/experimental` inside the project directory.
 | `/claude <project> @<worktree>` | Start in worktree |
 | `/claude status` | Show active sessions |
 | `/claude cancel <token>` | Cancel a session |
+| `/claude say <token> <msg>` | Send message to session |
 | `/claude projects` | List known projects |
 | `/claude register <name> <path>` | Register project alias |
 | `/claude unregister <name>` | Remove project alias |
@@ -109,8 +110,38 @@ On Telegram, sessions show a live status bubble with:
 
 The bubble updates automatically as the session progresses.
 
+## Message forwarding
+
+Session activity is forwarded to chat with emoji indicators:
+
+- **🐶** User/DyDo messages
+- **💬** Claude Code responses
+- **▸** Tool in progress (reading, writing, running)
+- **✓** Tool completed
+
+This lets you follow the conversation between DyDo and Claude Code in real-time.
+
+## Chiming in
+
+To send a message to an active session (e.g., provide context or instructions):
+
+```
+/claude say abc123 Please also add error handling
+```
+
+Where `abc123` is the first 8 characters of the session token (shown in status bubble).
+
+## Runtime limits
+
+Sessions automatically pause after **3 hours** to prevent runaway execution. When paused:
+
+1. A warning message is sent to chat
+2. Use the **Continue** button to resume (resets the timer)
+3. Or use `/claude cancel <token>` to stop
+
 ## Notes
 
 - Sessions run in `bypassPermissions` mode by default (no permission prompts)
 - Only authorized senders can use `/claude`
 - Use `/claude projects` to see all known projects and search directories
+- Questions from Claude Code are forwarded to chat - reply with `/claude say`

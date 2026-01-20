@@ -8,6 +8,7 @@
  *   /claude juzi @experimental - Start in worktree
  *   /claude status            - Show active sessions
  *   /claude cancel <token>    - Cancel a session
+ *   /claude say <token> <msg> - Send message to session
  *   /claude projects          - List known projects
  *   /claude register <name> <path> - Register project alias
  *   /claude unregister <name> - Remove project alias
@@ -25,25 +26,37 @@ import {
   getCompletedPhases,
   listKnownProjects,
   getConfiguredProjectBases,
+  sendInput,
+  getSessionByToken,
 } from "../../agents/claude-code/index.js";
 import {
   createSessionBubble,
   updateSessionBubble,
   completeSessionBubble,
+  forwardEventToChat,
+  checkRuntimeLimit,
+  pauseSession,
+  sendRuntimeLimitWarning,
+  sendQuestionToChat,
+  isSessionPaused,
 } from "../../agents/claude-code/bubble-service.js";
 import { readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
 import type { CommandHandler } from "./commands-types.js";
+
+/** Default runtime limit in hours */
+const DEFAULT_RUNTIME_LIMIT_HOURS = 3.0;
 
 /**
  * Parse /claude command arguments.
  */
 function parseClaudeCommand(commandBody: string): {
   hasCommand: boolean;
-  action?: "start" | "status" | "cancel" | "list" | "projects" | "register" | "unregister";
+  action?: "start" | "status" | "cancel" | "list" | "projects" | "register" | "unregister" | "say";
   project?: string;
   token?: string;
   alias?: string;
   aliasPath?: string;
+  message?: string;
 } {
   const match = commandBody.match(/^\/claude(?:\s+(.*))?$/i);
   if (!match) return { hasCommand: false };
@@ -64,6 +77,17 @@ function parseClaudeCommand(commandBody: string): {
   const cancelMatch = args.match(/^cancel\s+(\S+)/i);
   if (cancelMatch) {
     return { hasCommand: true, action: "cancel", token: cancelMatch[1] };
+  }
+
+  // /claude say <token> <message> - send message to session
+  const sayMatch = args.match(/^say\s+(\S+)\s+(.+)$/i);
+  if (sayMatch) {
+    return {
+      hasCommand: true,
+      action: "say",
+      token: sayMatch[1],
+      message: sayMatch[2].trim(),
+    };
   }
 
   // /claude register <name> <path>
@@ -280,6 +304,31 @@ export const handleClaudeCommand: CommandHandler = async (params, _allowTextComm
     };
   }
 
+  // Handle say (send message to session)
+  if (parsed.action === "say" && parsed.token && parsed.message) {
+    const session = getSessionByToken(parsed.token);
+    if (!session) {
+      return {
+        shouldContinue: false,
+        reply: { text: `Session not found: ${parsed.token}` },
+      };
+    }
+
+    const success = sendInput(session.id, parsed.message);
+    if (success) {
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `Sent to session: "${parsed.message.slice(0, 50)}${parsed.message.length > 50 ? "..." : ""}"`,
+        },
+      };
+    }
+    return {
+      shouldContinue: false,
+      reply: { text: `Failed to send message to session` },
+    };
+  }
+
   // Handle start
   if (parsed.action === "start" && parsed.project) {
     // Extract chat info for bubble creation
@@ -297,10 +346,42 @@ export const handleClaudeCommand: CommandHandler = async (params, _allowTextComm
 
     // Track session ID for bubble updates
     let sessionId: string | undefined;
+    let eventIndex = 0;
+    let runtimeLimitWarned = false;
 
     const result = await startSession({
       project: parsed.project,
       permissionMode: "bypassPermissions",
+      onEvent: async (event) => {
+        if (!sessionId) return;
+
+        // Forward events to chat with emoji formatting
+        await forwardEventToChat({
+          sessionId,
+          event,
+          eventIndex: eventIndex++,
+        });
+
+        // Check runtime limit (every 10 events to reduce overhead)
+        if (eventIndex % 10 === 0 && !runtimeLimitWarned) {
+          const { exceeded, elapsedHours, limitHours } = checkRuntimeLimit(sessionId);
+          if (exceeded && !isSessionPaused(sessionId)) {
+            runtimeLimitWarned = true;
+            pauseSession(sessionId);
+            await sendRuntimeLimitWarning({ sessionId, elapsedHours, limitHours });
+          }
+        }
+      },
+      onQuestion: async (questionText) => {
+        if (!sessionId) return null;
+
+        // Forward question to chat
+        await sendQuestionToChat({ sessionId, questionText });
+
+        // For now, return null - user will reply via /claude say
+        // In future: could wait for reply via Telegram reply detection
+        return null;
+      },
       onStateChange: async (state) => {
         if (!sessionId) return;
 
@@ -345,6 +426,7 @@ export const handleClaudeCommand: CommandHandler = async (params, _allowTextComm
           accountId,
           resumeToken: result.resumeToken,
           state,
+          runtimeLimitHours: DEFAULT_RUNTIME_LIMIT_HOURS,
         });
 
         // Return minimal confirmation since bubble shows the status
@@ -377,11 +459,14 @@ export const handleClaudeCommand: CommandHandler = async (params, _allowTextComm
         "`/claude <project> @<worktree>` - Start in worktree",
         "`/claude status` - Show active sessions",
         "`/claude cancel <token>` - Cancel a session",
+        "`/claude say <token> <msg>` - Send message to session",
         "",
         "**Project Management:**",
         "`/claude projects` - List known projects",
         "`/claude register <name> <path>` - Register alias",
         "`/claude unregister <name>` - Remove alias",
+        "",
+        "_Sessions auto-pause after 3 hours. Use Continue button to resume._",
       ].join("\n"),
     },
   };

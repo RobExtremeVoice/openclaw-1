@@ -101,6 +101,13 @@ export {
   completeSessionBubble,
   getSessionBubble,
   removeSessionBubble,
+  forwardEventToChat,
+  checkRuntimeLimit,
+  pauseSession,
+  resumeSession,
+  isSessionPaused,
+  sendRuntimeLimitWarning,
+  sendQuestionToChat,
 } from "./bubble-service.js";
 
 // Bubble manager (Telegram status messages)
