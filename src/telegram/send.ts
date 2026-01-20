@@ -438,6 +438,65 @@ export async function deleteMessageTelegram(
   return { ok: true };
 }
 
+type TelegramEditOpts = {
+  token?: string;
+  accountId?: string;
+  verbose?: boolean;
+  api?: Bot["api"];
+  retry?: RetryConfig;
+  textMode?: "markdown" | "html";
+  /** Inline keyboard buttons (reply markup). */
+  buttons?: Array<Array<{ text: string; callback_data: string }>>;
+};
+
+export async function editMessageTelegram(
+  chatIdInput: string | number,
+  messageIdInput: string | number,
+  text: string,
+  opts: TelegramEditOpts = {},
+): Promise<{ ok: true; messageId: string }> {
+  const cfg = loadConfig();
+  const account = resolveTelegramAccount({
+    cfg,
+    accountId: opts.accountId,
+  });
+  const token = resolveToken(opts.token, account);
+  const chatId = normalizeChatId(String(chatIdInput));
+  const messageId = normalizeMessageId(messageIdInput);
+  const fetchImpl = resolveTelegramFetch();
+  const client: ApiClientOptions | undefined = fetchImpl
+    ? { fetch: fetchImpl as unknown as ApiClientOptions["fetch"] }
+    : undefined;
+  const api = opts.api ?? new Bot(token, client ? { client } : undefined).api;
+  const request = createTelegramRetryRunner({
+    retry: opts.retry,
+    configRetry: account.config.retry,
+    verbose: opts.verbose,
+  });
+  const replyMarkup = buildInlineKeyboard(opts.buttons);
+  const textMode = opts.textMode ?? "markdown";
+  const htmlText = textMode === "html" ? text : markdownToTelegramHtml(text);
+
+  await request(
+    () =>
+      api.editMessageText(chatId, messageId, htmlText, {
+        parse_mode: "HTML",
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      }),
+    "editMessage",
+  ).catch((err) => {
+    // Ignore "message is not modified" errors
+    const errText = formatErrorMessage(err);
+    if (/message is not modified/i.test(errText)) {
+      return;
+    }
+    throw err;
+  });
+
+  logVerbose(`[telegram] Edited message ${messageId} in chat ${chatId}`);
+  return { ok: true, messageId: String(messageId) };
+}
+
 function inferFilename(kind: ReturnType<typeof mediaKindFromMime>) {
   switch (kind) {
     case "image":

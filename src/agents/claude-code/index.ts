@@ -90,6 +90,15 @@ export {
   getProgressSummary,
 } from "./progress-tracker.js";
 
+// Bubble service (high-level Telegram integration)
+export {
+  createSessionBubble,
+  updateSessionBubble,
+  completeSessionBubble,
+  getSessionBubble,
+  removeSessionBubble,
+} from "./bubble-service.js";
+
 // Bubble manager (Telegram status messages)
 export {
   BubbleManager,

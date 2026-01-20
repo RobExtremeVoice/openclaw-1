@@ -16,7 +16,13 @@ import {
   cancelSessionByToken,
   listSessions,
   getSessionState,
+  getCompletedPhases,
 } from "../../agents/claude-code/index.js";
+import {
+  createSessionBubble,
+  updateSessionBubble,
+  completeSessionBubble,
+} from "../../agents/claude-code/bubble-service.js";
 import type { CommandHandler } from "./commands-types.js";
 
 /**
@@ -110,13 +116,45 @@ export const handleClaudeCommand: CommandHandler = async (params, allowTextComma
 
   // Handle start
   if (parsed.action === "start" && parsed.project) {
+    // Extract chat info for bubble creation
+    const fromField = params.ctx.From ?? params.command.from ?? "";
+    const chatIdMatch = fromField.match(/telegram:(?:group:)?(-?\d+)/);
+    const chatId = chatIdMatch?.[1];
+    const threadId =
+      typeof params.ctx.MessageThreadId === "number"
+        ? params.ctx.MessageThreadId
+        : typeof params.ctx.MessageThreadId === "string"
+          ? parseInt(params.ctx.MessageThreadId, 10)
+          : undefined;
+    const accountId = params.ctx.AccountId;
+    const isTelegram = params.command.channel === "telegram" || params.ctx.Surface === "telegram";
+
+    // Track session ID for bubble updates
+    let sessionId: string | undefined;
+
     const result = await startSession({
       project: parsed.project,
       permissionMode: "bypassPermissions",
-      onStateChange: (state) => {
-        // State changes will be handled by the bubble manager
-        // This is a placeholder for now - bubble integration in Phase 6
-        logVerbose(`[claude-code] State change: ${state.status} - ${state.phaseStatus}`);
+      onStateChange: async (state) => {
+        if (!sessionId) return;
+
+        // Update bubble on state changes
+        if (
+          state.status === "completed" ||
+          state.status === "cancelled" ||
+          state.status === "failed"
+        ) {
+          // Session ended - show completion message
+          const completedPhases = getCompletedPhases(params.workspaceDir);
+          await completeSessionBubble({
+            sessionId,
+            state,
+            completedPhases,
+          });
+        } else {
+          // Session running - update bubble
+          await updateSessionBubble({ sessionId, state });
+        }
       },
     });
 
@@ -127,6 +165,33 @@ export const handleClaudeCommand: CommandHandler = async (params, allowTextComma
       };
     }
 
+    sessionId = result.sessionId;
+
+    // Create bubble for Telegram
+    if (isTelegram && chatId && result.sessionId && result.resumeToken) {
+      const session = listSessions().find((s) => s.id === result.sessionId);
+      if (session) {
+        const state = getSessionState(session);
+        await createSessionBubble({
+          sessionId: result.sessionId,
+          chatId,
+          threadId: Number.isFinite(threadId) ? threadId : undefined,
+          accountId,
+          resumeToken: result.resumeToken,
+          state,
+        });
+
+        // Return minimal confirmation since bubble shows the status
+        return {
+          shouldContinue: false,
+          reply: {
+            text: `Starting Claude Code for **${parsed.project}**...`,
+          },
+        };
+      }
+    }
+
+    // Fallback for non-Telegram or if bubble creation failed
     return {
       shouldContinue: false,
       reply: {
