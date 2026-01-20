@@ -190,4 +190,68 @@ describe("cron cli", () => {
 
     expect(patch?.patch?.payload).toBeUndefined();
   });
+
+  it("updates delivery settings without requiring --message flag", async () => {
+    callGatewayFromCli.mockClear();
+
+    const { registerCronCli } = await import("./cron-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerCronCli(program);
+
+    // Test updating only delivery flags (without --message)
+    await program.parseAsync(
+      ["cron", "edit", "job-1", "--deliver", "--channel", "telegram", "--to", "19098680"],
+      { from: "user" },
+    );
+
+    const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
+    const patch = updateCall?.[2] as {
+      patch?: {
+        payload?: {
+          deliver?: boolean;
+          channel?: string;
+          to?: string;
+        };
+      };
+    };
+
+    // Delivery flags should be patched even without --message
+    expect(patch?.patch?.payload?.deliver).toBe(true);
+    expect(patch?.patch?.payload?.channel).toBe("telegram");
+    expect(patch?.patch?.payload?.to).toBe("19098680");
+  });
+
+  it("preserves existing message when updating only delivery settings", async () => {
+    callGatewayFromCli.mockClear();
+
+    const { registerCronCli } = await import("./cron-cli.js");
+    const program = new Command();
+    program.exitOverride();
+    registerCronCli(program);
+
+    // Update delivery without changing message - should not include message in patch
+    await program.parseAsync(
+      ["cron", "edit", "job-1", "--deliver", "--channel", "telegram"],
+      { from: "user" },
+    );
+
+    const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
+    const patch = updateCall?.[2] as {
+      patch?: {
+        payload?: {
+          message?: string;
+          deliver?: boolean;
+          channel?: string;
+        };
+      };
+    };
+
+    // Should patch delivery settings
+    expect(patch?.patch?.payload?.deliver).toBe(true);
+    expect(patch?.patch?.payload?.channel).toBe("telegram");
+    
+    // Should NOT include message (to preserve existing one)
+    expect(patch?.patch?.payload?.message).toBeUndefined();
+  });
 });

@@ -107,6 +107,10 @@ export function registerCronEditCommand(cron: Command) {
 
           const payloadChosen = [opts.systemEvent, opts.message].filter(Boolean).length;
           if (payloadChosen > 1) throw new Error("Choose at most one payload change");
+          
+          // Handle delivery flags - can be set independently or with message
+          const hasDeliveryFlags = opts.deliver || opts.channel || opts.to || opts.bestEffortDeliver;
+          
           if (opts.systemEvent) {
             patch.payload = {
               kind: "systemEvent",
@@ -129,6 +133,14 @@ export function registerCronEditCommand(cron: Command) {
               thinking,
               timeoutSeconds:
                 timeoutSeconds && Number.isFinite(timeoutSeconds) ? timeoutSeconds : undefined,
+              deliver: opts.deliver ? true : undefined,
+              channel: typeof opts.channel === "string" ? opts.channel : undefined,
+              to: typeof opts.to === "string" ? opts.to : undefined,
+              bestEffortDeliver: opts.bestEffortDeliver ? true : undefined,
+            };
+          } else if (hasDeliveryFlags) {
+            // Allow updating delivery settings without changing the message
+            patch.payload = {
               deliver: opts.deliver ? true : undefined,
               channel: typeof opts.channel === "string" ? opts.channel : undefined,
               to: typeof opts.to === "string" ? opts.to : undefined,
