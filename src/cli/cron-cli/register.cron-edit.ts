@@ -107,10 +107,11 @@ export function registerCronEditCommand(cron: Command) {
 
           const payloadChosen = [opts.systemEvent, opts.message].filter(Boolean).length;
           if (payloadChosen > 1) throw new Error("Choose at most one payload change");
-          
+
           // Handle delivery flags - can be set independently or with message
-          const hasDeliveryFlags = opts.deliver || opts.channel || opts.to || opts.bestEffortDeliver;
-          
+          const hasDeliveryFlags =
+            opts.deliver || opts.channel || opts.to || opts.bestEffortDeliver;
+
           if (opts.systemEvent) {
             patch.payload = {
               kind: "systemEvent",

@@ -231,10 +231,9 @@ describe("cron cli", () => {
     registerCronCli(program);
 
     // Update delivery without changing message - should not include message in patch
-    await program.parseAsync(
-      ["cron", "edit", "job-1", "--deliver", "--channel", "telegram"],
-      { from: "user" },
-    );
+    await program.parseAsync(["cron", "edit", "job-1", "--deliver", "--channel", "telegram"], {
+      from: "user",
+    });
 
     const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
     const patch = updateCall?.[2] as {
@@ -250,7 +249,7 @@ describe("cron cli", () => {
     // Should patch delivery settings
     expect(patch?.patch?.payload?.deliver).toBe(true);
     expect(patch?.patch?.payload?.channel).toBe("telegram");
-    
+
     // Should NOT include message (to preserve existing one)
     expect(patch?.patch?.payload?.message).toBeUndefined();
   });
