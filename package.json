@@ -65,7 +65,8 @@
     "dist/memory/**",
     "dist/markdown/**",
     "dist/pairing/**",
-    "dist/whatsapp/**"
+    "dist/whatsapp/**",
+    "dist/node-host/**"
   ],
   "scripts": {
     "dev": "node scripts/run-node.mjs",
