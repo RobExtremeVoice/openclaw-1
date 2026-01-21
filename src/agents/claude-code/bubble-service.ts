@@ -6,16 +6,239 @@
  *
  * Features:
  * - Status bubble with live updates and Continue/Cancel buttons
- * - Message forwarding with emoji convention (🐶/💬/▸/✓)
- * - Runtime limit enforcement
+ * - Takopi-style debouncing (signal-based, content comparison)
+ * - Hybrid format: summarized actions + expanded Q&A when active
+ * - Runtime limit enforcement (3 hours default)
+ *
+ * Takopi patterns applied:
+ * - Signal-based update triggering (event_seq vs rendered_seq)
+ * - Content comparison before editing
+ * - Pending update coalescing
+ * - Non-blocking edits
  */
 
 import { sendMessageTelegram, editMessageTelegram } from "../../telegram/send.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { formatBubbleMessage, buildBubbleKeyboard } from "./bubble-manager.js";
+import { buildBubbleKeyboard } from "./bubble-manager.js";
+import { logDyDoCommand, getLatestDyDoCommand } from "./orchestrator.js";
 import type { SessionState, SessionEvent } from "./types.js";
 
 const log = createSubsystemLogger("claude-code/bubble-service");
+
+// ============================================================================
+// Takopi-style Hybrid Bubble Format
+// ============================================================================
+
+/**
+ * Q&A state for tracking DyDo↔CC conversations.
+ */
+interface QAState {
+  /** Current question from CC (if any) */
+  currentQuestion?: string;
+  /** DyDo's pending answer (if thinking) */
+  dydoThinking?: boolean;
+  /** Recent answered Q&As (for summarization) */
+  answeredCount: number;
+}
+
+const qaStates = new Map<string, QAState>();
+
+/**
+ * Format session state into hybrid bubble message.
+ *
+ * Takopi-style format:
+ * - **working** / **done** header with project and runtime
+ * - Summarized actions (last 5-6)
+ * - Expanded Q&A when active, collapsed when answered
+ * - Footer with context and resume command
+ */
+function formatHybridBubbleMessage(state: SessionState, sessionId: string): string {
+  const lines: string[] = [];
+  const qaState = qaStates.get(sessionId) || { answeredCount: 0 };
+
+  // Header: "**working** · project · 45m" or "**done** · project · 45m"
+  const status = state.isIdle ? "done" : "working";
+  const runtime = compactRuntime(state.runtimeStr);
+  lines.push(`**${status}** · ${state.projectName} · ${runtime}`);
+  lines.push("");
+
+  // Get DyDo's command for this session
+  const dydoCommand = state.resumeToken ? getLatestDyDoCommand(state.resumeToken) : undefined;
+
+  if (state.isIdle) {
+    // === DONE STATE ===
+    // Show DyDo's task and last Claude message (summary)
+    if (dydoCommand) {
+      lines.push(`🐶 ${dydoCommand}`);
+      lines.push("");
+    }
+
+    // Find last Claude message for summary
+    const lastMessage = state.recentActions
+      .slice()
+      .reverse()
+      .find((a) => a.icon === "💬");
+    if (lastMessage) {
+      const msg =
+        lastMessage.description.length > 600
+          ? lastMessage.description.slice(0, 597) + "..."
+          : lastMessage.description;
+      lines.push(`💬 ${msg}`);
+    } else {
+      lines.push("_(session complete)_");
+    }
+  } else {
+    // === WORKING STATE ===
+    // DyDo's task at top
+    if (dydoCommand) {
+      lines.push(`- 🐶 ${dydoCommand}`);
+    }
+
+    // Summarize answered Q&As if any
+    if (qaState.answeredCount > 0) {
+      lines.push(
+        `- ✓ DyDo answered ${qaState.answeredCount} question${qaState.answeredCount > 1 ? "s" : ""}`,
+      );
+    }
+
+    // Check if Q&A is currently active
+    if (qaState.currentQuestion && qaState.dydoThinking) {
+      // === EXPANDED Q&A (active) ===
+      lines.push("");
+      const questionPreview =
+        qaState.currentQuestion.length > 150
+          ? qaState.currentQuestion.slice(0, 147) + "..."
+          : qaState.currentQuestion;
+      lines.push(`💬 **CC asking:**`);
+      lines.push(questionPreview);
+      lines.push("");
+      lines.push(`🐶 **DyDo thinking...**`);
+      lines.push("");
+    }
+
+    // Show recent actions (last 5)
+    const actionsToShow = state.recentActions.slice(-5);
+    if (actionsToShow.length > 0) {
+      for (const action of actionsToShow) {
+        lines.push(`- ${action.icon} ${action.description}`);
+      }
+    } else if (!dydoCommand && !qaState.currentQuestion) {
+      lines.push("_(waiting for activity...)_");
+    }
+  }
+
+  // Footer: context and resume command
+  lines.push("");
+  lines.push("---");
+  const ctxLine = state.projectName.includes("@")
+    ? `ctx: ${state.projectName}`
+    : `ctx: ${state.projectName} @${state.branch}`;
+  lines.push(ctxLine);
+  lines.push(`\`claude --resume ${state.resumeToken}\``);
+
+  return lines.join("\n");
+}
+
+/**
+ * Compact runtime format: "0h 5m" → "5m", "1h 30m" → "1h 30m"
+ */
+function compactRuntime(runtime: string): string {
+  if (runtime.startsWith("0h ")) {
+    return runtime.slice(3);
+  }
+  return runtime;
+}
+
+/**
+ * Record that CC asked a question (for hybrid display).
+ */
+export function recordCCQuestion(sessionId: string, question: string): void {
+  const qaState = qaStates.get(sessionId) || { answeredCount: 0 };
+  qaState.currentQuestion = question;
+  qaState.dydoThinking = true;
+  qaStates.set(sessionId, qaState);
+}
+
+/**
+ * Record that DyDo answered (collapse Q&A in display).
+ */
+export function recordDyDoAnswer(sessionId: string): void {
+  const qaState = qaStates.get(sessionId) || { answeredCount: 0 };
+  qaState.currentQuestion = undefined;
+  qaState.dydoThinking = false;
+  qaState.answeredCount++;
+  qaStates.set(sessionId, qaState);
+}
+
+/**
+ * Clear Q&A state for a session.
+ */
+export function clearQAState(sessionId: string): void {
+  qaStates.delete(sessionId);
+}
+
+// ============================================================================
+// Takopi-style Debouncing
+// ============================================================================
+
+/**
+ * Pending update state for debouncing.
+ * Implements takopi's signal-based approach.
+ */
+interface PendingUpdate {
+  /** Event sequence number (incremented on each update) */
+  eventSeq: number;
+  /** Rendered sequence number (what's currently displayed) */
+  renderedSeq: number;
+  /** Last rendered content (for comparison) */
+  lastRenderedContent: string;
+  /** Timer for coalescing rapid updates */
+  coalescingTimer?: ReturnType<typeof setTimeout>;
+  /** Minimum interval between edits (ms) */
+  minEditInterval: number;
+  /** Last edit timestamp */
+  lastEditAt: number;
+}
+
+const pendingUpdates = new Map<string, PendingUpdate>();
+
+/**
+ * Get or create pending update state for a session.
+ */
+function getPendingUpdate(sessionId: string): PendingUpdate {
+  let pending = pendingUpdates.get(sessionId);
+  if (!pending) {
+    pending = {
+      eventSeq: 0,
+      renderedSeq: 0,
+      lastRenderedContent: "",
+      minEditInterval: 1500, // 1.5s minimum between edits
+      lastEditAt: 0,
+    };
+    pendingUpdates.set(sessionId, pending);
+  }
+  return pending;
+}
+
+/**
+ * Signal that an update is needed (takopi-style).
+ * Uses coalescing to batch rapid updates.
+ */
+function signalUpdate(sessionId: string): void {
+  const pending = getPendingUpdate(sessionId);
+  pending.eventSeq++;
+
+  // Clear existing timer (coalescing)
+  if (pending.coalescingTimer) {
+    clearTimeout(pending.coalescingTimer);
+  }
+
+  // Schedule update with small delay for coalescing
+  pending.coalescingTimer = setTimeout(() => {
+    pending.coalescingTimer = undefined;
+    // The actual update will be triggered by the next updateSessionBubble call
+  }, 100); // 100ms coalescing window
+}
 
 /**
  * Active bubble tracking.
@@ -27,6 +250,9 @@ interface ActiveBubble {
   resumeToken: string;
   lastUpdate: number;
   accountId?: string;
+  // Project info for resume
+  workingDir: string;
+  projectName: string;
   // Runtime limit tracking
   startedAt: number;
   runtimeLimitHours: number;
@@ -118,7 +344,10 @@ export async function createSessionBubble(params: {
   accountId?: string;
   resumeToken: string;
   state: SessionState;
+  workingDir: string;
   runtimeLimitHours?: number;
+  /** Optional DyDo command to display */
+  dydoCommand?: string;
 }): Promise<{ messageId: string } | null> {
   const {
     sessionId,
@@ -127,11 +356,25 @@ export async function createSessionBubble(params: {
     accountId,
     resumeToken,
     state,
+    workingDir,
     runtimeLimitHours = 3.0,
+    dydoCommand,
   } = params;
 
-  const text = formatBubbleMessage(state);
+  // Store DyDo command for display if provided
+  if (dydoCommand && resumeToken) {
+    logDyDoCommand({ prompt: dydoCommand, resumeToken });
+  }
+
+  // Initialize pending update state
+  const pending = getPendingUpdate(sessionId);
+
+  // Use hybrid format
+  const text = formatHybridBubbleMessage(state, sessionId);
   const keyboard = buildBubbleKeyboard(resumeToken, state, "claude");
+
+  // Store initial content for comparison
+  pending.lastRenderedContent = text;
 
   try {
     const result = await sendMessageTelegram(String(chatId), text, {
@@ -147,6 +390,8 @@ export async function createSessionBubble(params: {
       resumeToken,
       lastUpdate: Date.now(),
       accountId,
+      workingDir,
+      projectName: state.projectName,
       startedAt: Date.now(),
       runtimeLimitHours,
       isPaused: false,
@@ -164,7 +409,12 @@ export async function createSessionBubble(params: {
 }
 
 /**
- * Update an existing bubble.
+ * Update an existing bubble (takopi-style debounced).
+ *
+ * Implements:
+ * - Content comparison (skip if unchanged)
+ * - Rate limiting (1.5s minimum between edits)
+ * - Sequence tracking for coalescing
  */
 export async function updateSessionBubble(params: {
   sessionId: string;
@@ -178,14 +428,35 @@ export async function updateSessionBubble(params: {
     return false;
   }
 
-  // Throttle updates (min 2 seconds between edits)
+  // Signal update for coalescing
+  signalUpdate(sessionId);
+
+  const pending = getPendingUpdate(sessionId);
   const now = Date.now();
-  if (now - bubble.lastUpdate < 2000) {
-    return true; // Skip this update
+
+  // Rate limiting: respect minimum edit interval
+  const timeSinceLastEdit = now - pending.lastEditAt;
+  if (timeSinceLastEdit < pending.minEditInterval) {
+    // Schedule retry after interval
+    const delay = pending.minEditInterval - timeSinceLastEdit;
+    setTimeout(() => {
+      // Re-trigger update if still pending
+      if (pending.eventSeq > pending.renderedSeq) {
+        updateSessionBubble({ sessionId, state }).catch(() => {});
+      }
+    }, delay);
+    return true; // Will update later
   }
 
-  const text = formatBubbleMessage(state);
+  // Generate new content using hybrid format
+  const text = formatHybridBubbleMessage(state, sessionId);
   const keyboard = buildBubbleKeyboard(bubble.resumeToken, state, "claude");
+
+  // Content comparison: skip if unchanged (takopi pattern)
+  if (text === pending.lastRenderedContent) {
+    pending.renderedSeq = pending.eventSeq;
+    return true; // No change needed
+  }
 
   try {
     await editMessageTelegram(bubble.chatId, bubble.messageId, text, {
@@ -193,10 +464,21 @@ export async function updateSessionBubble(params: {
       buttons: keyboard,
     });
 
+    // Update tracking state
+    pending.lastRenderedContent = text;
+    pending.renderedSeq = pending.eventSeq;
+    pending.lastEditAt = now;
     bubble.lastUpdate = now;
-    log.debug(`[${sessionId}] Updated bubble`);
+
+    log.debug(`[${sessionId}] Updated bubble (seq ${pending.renderedSeq})`);
     return true;
   } catch (err) {
+    // Telegram returns error if message content hasn't changed
+    const errMsg = String(err);
+    if (errMsg.includes("message is not modified")) {
+      pending.renderedSeq = pending.eventSeq;
+      return true; // Not an error
+    }
     log.warn(`[${sessionId}] Failed to update bubble: ${err}`);
     return false;
   }
@@ -242,24 +524,45 @@ export async function completeSessionBubble(params: {
   try {
     await editMessageTelegram(bubble.chatId, bubble.messageId, text, {
       accountId: bubble.accountId,
-      buttons: [], // Remove buttons
+      buttons: [], // Remove buttons (CLEAR_MARKUP style)
     });
 
+    // Cleanup all session state
     activeBubbles.delete(sessionId);
+    pendingUpdates.delete(sessionId);
+    clearQAState(sessionId);
+
     log.info(`[${sessionId}] Completed bubble`);
     return true;
   } catch (err) {
     log.error(`[${sessionId}] Failed to complete bubble: ${err}`);
+    // Cleanup even on error
     activeBubbles.delete(sessionId);
+    pendingUpdates.delete(sessionId);
+    clearQAState(sessionId);
     return false;
   }
 }
 
 /**
- * Get bubble for a session.
+ * Get bubble for a session by ID.
  */
 export function getSessionBubble(sessionId: string): ActiveBubble | undefined {
   return activeBubbles.get(sessionId);
+}
+
+/**
+ * Get bubble by resume token prefix.
+ */
+export function getBubbleByTokenPrefix(
+  tokenPrefix: string,
+): { sessionId: string; bubble: ActiveBubble } | undefined {
+  for (const [sessionId, bubble] of activeBubbles.entries()) {
+    if (bubble.resumeToken.startsWith(tokenPrefix)) {
+      return { sessionId, bubble };
+    }
+  }
+  return undefined;
 }
 
 /**

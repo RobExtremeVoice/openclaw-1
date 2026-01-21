@@ -2,9 +2,11 @@
  * Claude Code Telegram Callback Handlers
  *
  * Handles inline keyboard callbacks for Claude Code bubbles:
- * - claude:continue:<token> - Continue/send input to session
+ * - claude:continue:<token> - Continue session (sends "continue" to DyDo/CC)
  * - claude:cancel:<token>   - Cancel a running session
- * - claude:answer:<token>   - Answer a question (prompts for input)
+ *
+ * Note: No "answer" callback - DyDo intercepts and answers CC questions automatically.
+ * User can give new instructions by replying to the bubble message directly.
  */
 
 import type { Bot, Context } from "grammy";
@@ -26,15 +28,16 @@ const log = createSubsystemLogger("telegram/claude-callbacks");
  * Callback data format: "claude:<action>:<tokenPrefix>"
  */
 type ClaudeCallbackData = {
-  action: "continue" | "cancel" | "answer";
+  action: "continue" | "cancel";
   tokenPrefix: string;
 };
 
 /**
  * Parse callback data for Claude Code actions.
+ * Note: "answer" action removed - DyDo handles CC questions automatically.
  */
 function parseClaudeCallback(data: string): ClaudeCallbackData | null {
-  const match = data.match(/^claude:(continue|cancel|answer):(\w+)$/);
+  const match = data.match(/^claude:(continue|cancel):(\w+)$/);
   if (!match) return null;
   return {
     action: match[1] as ClaudeCallbackData["action"],
@@ -166,44 +169,8 @@ export async function handleClaudeCodeCallback(
       return true;
     }
 
-    case "answer": {
-      if (!session) {
-        await api.answerCallbackQuery(callbackId ?? "", {
-          text: "Session ended",
-          show_alert: true,
-        });
-        return true;
-      }
-      // For questions, we need to prompt the user for input
-      const state = getSessionState(session);
-      if (state.hasQuestion && state.questionText) {
-        await api.answerCallbackQuery(callbackId ?? "", {
-          text: "Reply to this message with your answer",
-        });
-        // Send the question as a new message with force_reply
-        if (chatId) {
-          await api
-            .sendMessage(
-              chatId,
-              `**Question from Claude Code:**\n\n${state.questionText}\n\n_Reply to this message with your answer._`,
-              {
-                parse_mode: "Markdown",
-                reply_markup: {
-                  force_reply: true,
-                  selective: true,
-                },
-              },
-            )
-            .catch(() => {});
-        }
-      } else {
-        await api.answerCallbackQuery(callbackId ?? "", {
-          text: "No pending question",
-          show_alert: true,
-        });
-      }
-      return true;
-    }
+    // Note: "answer" case removed - DyDo handles CC questions automatically
+    // User can give new instructions by replying to the bubble message
 
     default:
       return false;

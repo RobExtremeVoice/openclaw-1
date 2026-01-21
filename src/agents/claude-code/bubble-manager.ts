@@ -36,7 +36,9 @@ export const CLEAR_MARKUP = { inline_keyboard: [] as never[] };
  * Check if status indicates a final state (no buttons needed).
  */
 export function isFinalStatus(status: string): boolean {
-  return status === "completed" || status === "cancelled" || status === "failed" || status === "done";
+  return (
+    status === "completed" || status === "cancelled" || status === "failed" || status === "done"
+  );
 }
 
 /**
@@ -177,7 +179,9 @@ export function formatBubbleMessage(state: SessionState): string {
   if (state.hasQuestion && state.questionText) {
     lines.push("");
     const questionPreview = state.questionText.slice(0, 100);
-    lines.push(`**❓ Question:** ${questionPreview}${state.questionText.length > 100 ? "..." : ""}`);
+    lines.push(
+      `**❓ Question:** ${questionPreview}${state.questionText.length > 100 ? "..." : ""}`,
+    );
   }
 
   // Footer: context and resume command (must run from project dir)
@@ -188,13 +192,20 @@ export function formatBubbleMessage(state: SessionState): string {
     ? `ctx: ${state.projectName}`
     : `ctx: ${state.projectName} @${state.branch}`;
   lines.push(ctxLine);
-  lines.push(`\`claude --resume ${state.resumeToken}\``);  // Full UUID required, run from project dir
+  lines.push(`\`claude --resume ${state.resumeToken}\``); // Full UUID required, run from project dir
 
   return lines.join("\n");
 }
 
 /**
  * Build inline keyboard for bubble (Takopi-style lowercase labels).
+ *
+ * Button states:
+ * - working: [cancel] only - DyDo handles CC questions automatically
+ * - done (idle): [continue] [cancel] - User gives next direction
+ * - finished: no buttons
+ *
+ * Note: No "answer" button - DyDo intercepts and answers CC questions.
  */
 export function buildBubbleKeyboard(
   resumeToken: string,
@@ -203,24 +214,14 @@ export function buildBubbleKeyboard(
 ): Array<Array<{ text: string; callback_data: string }>> {
   const tokenPrefix = resumeToken.slice(0, 8);
 
-  // Different buttons based on state
+  // No buttons for finished sessions
   if (state.status === "completed" || state.status === "cancelled" || state.status === "failed") {
-    // No buttons for finished sessions
     return [];
   }
 
-  if (state.hasQuestion) {
-    // When waiting for input, show answer option
-    return [
-      [
-        { text: "answer", callback_data: `${prefix}:answer:${tokenPrefix}` },
-        { text: "cancel", callback_data: `${prefix}:cancel:${tokenPrefix}` },
-      ],
-    ];
-  }
-
+  // Done state (idle): [continue] [cancel]
+  // User can continue or give new instructions by replying to bubble
   if (state.isIdle) {
-    // Done state: continue and cancel
     return [
       [
         { text: "continue", callback_data: `${prefix}:continue:${tokenPrefix}` },
@@ -229,10 +230,9 @@ export function buildBubbleKeyboard(
     ];
   }
 
-  // Working state: only cancel
-  return [
-    [{ text: "cancel", callback_data: `${prefix}:cancel:${tokenPrefix}` }],
-  ];
+  // Working state: [cancel] only
+  // DyDo handles CC questions automatically - no "answer" button needed
+  return [[{ text: "cancel", callback_data: `${prefix}:cancel:${tokenPrefix}` }]];
 }
 
 /**
