@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 import type { ImageContent } from "@mariozechner/pi-ai";
@@ -14,6 +15,65 @@ import { log } from "../logger.js";
 /**
  * Common image file extensions for detection.
  */
+type HistoryImageCacheEntry = {
+  status: "ok" | "failed";
+  atMs: number;
+};
+
+type HistoryImageCacheFile = {
+  version: 1;
+  entries: Record<string, HistoryImageCacheEntry>;
+};
+
+const HISTORY_IMAGE_CACHE_TTL_FAILED_MS = 24 * 60 * 60 * 1000; // 24h
+
+function getHistoryImageCachePath(sessionId: string): string {
+  const safe = sessionId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return path.join(os.homedir(), ".clawdbot", "cache", "history-images", `${safe}.json`);
+}
+
+async function readHistoryImageCache(
+  sessionId?: string,
+): Promise<Map<string, HistoryImageCacheEntry>> {
+  if (!sessionId) return new Map();
+  const cachePath = getHistoryImageCachePath(sessionId);
+  try {
+    const raw = await fs.readFile(cachePath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<HistoryImageCacheFile>;
+    const entries = parsed.entries && typeof parsed.entries === "object" ? parsed.entries : {};
+    const map = new Map<string, HistoryImageCacheEntry>();
+    for (const [k, v] of Object.entries(entries)) {
+      if (!v || typeof v !== "object") continue;
+      const status = (v as any).status;
+      const atMs = (v as any).atMs;
+      if ((status === "ok" || status === "failed") && typeof atMs === "number") {
+        map.set(k, { status, atMs });
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+async function writeHistoryImageCache(
+  sessionId: string,
+  cache: Map<string, HistoryImageCacheEntry>,
+): Promise<void> {
+  const cachePath = getHistoryImageCachePath(sessionId);
+  await fs.mkdir(path.dirname(cachePath), { recursive: true });
+  const obj: HistoryImageCacheFile = { version: 1, entries: {} };
+  for (const [k, v] of cache.entries()) obj.entries[k] = v;
+  await fs.writeFile(cachePath, JSON.stringify(obj, null, 2), "utf8");
+}
+
+function shouldSkipCachedRef(entry: HistoryImageCacheEntry | undefined): boolean {
+  if (!entry) return false;
+  if (entry.status === "ok") return true;
+  // failed: skip for TTL window
+  return Date.now() - entry.atMs < HISTORY_IMAGE_CACHE_TTL_FAILED_MS;
+}
+
 const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -262,7 +322,16 @@ export function modelSupportsImages(model: { input?: string[] }): boolean {
  * 2. Later references to "the image" or "that picture" will work since it's in context
  * 3. Injecting duplicates would waste tokens and potentially hit size limits
  */
-function detectImagesFromHistory(messages: unknown[]): DetectedImageRef[] {
+/**
+ * Scan conversation history for image references.
+ *
+ * Note: we rely on injected image content being persisted in the session so we can
+ * skip messages that already contain image blocks.
+ */
+function detectImagesFromHistory(
+  messages: unknown[],
+  cache: Map<string, HistoryImageCacheEntry>,
+): DetectedImageRef[] {
   const allRefs: DetectedImageRef[] = [];
   const seen = new Set<string>();
 
@@ -292,6 +361,7 @@ function detectImagesFromHistory(messages: unknown[]): DetectedImageRef[] {
     for (const ref of refs) {
       const key = ref.resolved.toLowerCase();
       if (seen.has(key)) continue;
+      if (shouldSkipCachedRef(cache.get(key))) continue;
       seen.add(key);
       allRefs.push({ ...ref, messageIndex: i });
     }
@@ -319,6 +389,8 @@ export async function detectAndLoadPromptImages(params: {
   model: { input?: string[] };
   existingImages?: ImageContent[];
   historyMessages?: unknown[];
+  /** Optional: stable session id for caching loaded history image refs */
+  sessionId?: string;
   maxBytes?: number;
   /** If set, enforce that file paths are within this sandbox root */
   sandboxRoot?: string;
@@ -345,8 +417,12 @@ export async function detectAndLoadPromptImages(params: {
   // Detect images from current prompt
   const promptRefs = detectImageReferences(params.prompt);
 
+  const historyCache = await readHistoryImageCache(params.sessionId);
+
   // Detect images from conversation history (with message indices)
-  const historyRefs = params.historyMessages ? detectImagesFromHistory(params.historyMessages) : [];
+  const historyRefs = params.historyMessages
+    ? detectImagesFromHistory(params.historyMessages, historyCache)
+    : [];
 
   // Deduplicate: if an image is in the current prompt, don't also load it from history.
   // Current prompt images are passed via the `images` parameter to prompt(), while history
@@ -380,10 +456,19 @@ export async function detectAndLoadPromptImages(params: {
   let skippedCount = 0;
 
   for (const ref of allRefs) {
+    const key = ref.resolved.toLowerCase();
+
+    // If already cached as ok/failed (recent), skip early
+    if (shouldSkipCachedRef(historyCache.get(key))) {
+      skippedCount++;
+      continue;
+    }
+
     const image = await loadImageFromRef(ref, params.workspaceDir, {
       maxBytes: params.maxBytes,
       sandboxRoot: params.sandboxRoot,
     });
+
     if (image) {
       if (ref.messageIndex !== undefined) {
         // History image - add to the appropriate message index
@@ -398,9 +483,20 @@ export async function detectAndLoadPromptImages(params: {
         promptImages.push(image);
       }
       loadedCount++;
+      historyCache.set(key, { status: "ok", atMs: Date.now() });
       log.debug(`Native image: loaded ${ref.type} ${ref.resolved}`);
     } else {
       skippedCount++;
+      historyCache.set(key, { status: "failed", atMs: Date.now() });
+    }
+  }
+
+  // Persist cache for next turns (best-effort)
+  if (params.sessionId) {
+    try {
+      await writeHistoryImageCache(params.sessionId, historyCache);
+    } catch {
+      // ignore
     }
   }
 

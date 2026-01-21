@@ -592,6 +592,7 @@ export async function runEmbeddedAttempt(
             model: params.model,
             existingImages: params.images,
             historyMessages: activeSession.messages,
+            sessionId: activeSession.sessionId,
             maxBytes: MAX_IMAGE_BYTES,
             // Enforce sandbox path restrictions when sandbox is enabled
             sandboxRoot: sandbox?.enabled ? sandbox.workspaceDir : undefined,
@@ -630,6 +631,18 @@ export async function runEmbeddedAttempt(
                   }
                 }
               }
+            }
+          }
+
+          // Persist any in-place message mutations (e.g., injected history images).
+          // Without this, image blocks injected into earlier user messages may be lost between turns,
+          // causing the image scanner to reload the same attachments on every message.
+          if (imageResult.historyImagesByIndex.size > 0) {
+            try {
+              activeSession.agent.replaceMessages(activeSession.messages);
+            } catch {
+              // Best effort: if the underlying session implementation doesn't support persistence here,
+              // continue without blocking the prompt.
             }
           }
 
