@@ -573,6 +573,37 @@ export function removeSessionBubble(sessionId: string): void {
 }
 
 /**
+ * Get bubble by chat ID and message ID (for reply detection).
+ * Returns the session ID and bubble if found.
+ */
+export function getBubbleByMessageId(
+  chatId: string | number,
+  messageId: string | number,
+): { sessionId: string; bubble: ActiveBubble } | undefined {
+  const chatIdStr = String(chatId);
+  const messageIdStr = String(messageId);
+
+  for (const [sessionId, bubble] of activeBubbles.entries()) {
+    if (bubble.chatId === chatIdStr && bubble.messageId === messageIdStr) {
+      return { sessionId, bubble };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Check if a message is a reply to a bubble and handle it.
+ * Returns true if handled, false if not a bubble reply.
+ */
+export function isReplyToBubble(
+  chatId: string | number,
+  replyToMessageId: string | number | undefined,
+): { sessionId: string; bubble: ActiveBubble } | undefined {
+  if (!replyToMessageId) return undefined;
+  return getBubbleByMessageId(chatId, replyToMessageId);
+}
+
+/**
  * Forward a session event to the chat as a message.
  * Uses emoji convention for visibility.
  */

@@ -183,3 +183,113 @@ export async function handleClaudeCodeCallback(
 export function isClaudeCodeCallback(data: string): boolean {
   return data.startsWith("claude:");
 }
+
+/**
+ * Handle a reply to a Claude Code bubble message.
+ *
+ * When user replies to a bubble with text, it's treated as new instructions:
+ * - If session is running: send the text as input
+ * - If session exited: resume with the text as prompt
+ *
+ * Returns true if handled, false if not a bubble reply.
+ */
+export async function handleBubbleReply(params: {
+  chatId: number | string;
+  replyToMessageId: number;
+  text: string;
+  api: Bot["api"];
+}): Promise<boolean> {
+  const { chatId, replyToMessageId, text, api } = params;
+
+  // Check if this is a reply to a bubble
+  const {
+    isReplyToBubble,
+    sendInput: sendSessionInput,
+    getSession,
+    startSession: startNewSession,
+    logDyDoCommand,
+  } = await import("../agents/claude-code/index.js");
+
+  const bubbleInfo = isReplyToBubble(chatId, replyToMessageId);
+  if (!bubbleInfo) {
+    return false; // Not a bubble reply
+  }
+
+  const { sessionId, bubble } = bubbleInfo;
+  log.info(`Handling bubble reply for session ${sessionId}: ${text.slice(0, 50)}...`);
+
+  // Log the new instruction as a DyDo command (for bubble display)
+  logDyDoCommand({
+    prompt: text,
+    resumeToken: bubble.resumeToken,
+    short: text.length > 50 ? `${text.slice(0, 47)}...` : text,
+    project: bubble.projectName,
+  });
+
+  // Check if session is still running
+  const session = getSession(sessionId);
+
+  if (session) {
+    // Session is running - send the text as input
+    const success = sendSessionInput(sessionId, text);
+    if (success) {
+      log.info(`[${sessionId}] Sent bubble reply as input`);
+      // Send confirmation
+      await api
+        .sendMessage(
+          chatId,
+          `📨 Sent to Claude Code: "${text.slice(0, 50)}${text.length > 50 ? "..." : ""}"`,
+          {
+            parse_mode: "Markdown",
+          },
+        )
+        .catch(() => {});
+    } else {
+      log.warn(`[${sessionId}] Failed to send bubble reply as input`);
+      // Try to resume instead
+      await resumeWithNewInstructions(bubble, text, chatId, api);
+    }
+    return true;
+  }
+
+  // Session not running - resume with the text as prompt
+  await resumeWithNewInstructions(bubble, text, chatId, api);
+  return true;
+}
+
+/**
+ * Resume a session with new instructions.
+ */
+async function resumeWithNewInstructions(
+  bubble: { resumeToken: string; workingDir: string; projectName: string },
+  instructions: string,
+  chatId: number | string,
+  api: Bot["api"],
+): Promise<void> {
+  log.info(`Resuming session with new instructions: ${instructions.slice(0, 50)}...`);
+
+  // Notify user
+  await api
+    .sendMessage(chatId, `Resuming **${bubble.projectName}** with new instructions...`, {
+      parse_mode: "Markdown",
+    })
+    .catch(() => {});
+
+  const result = await startSession({
+    workingDir: bubble.workingDir,
+    resumeToken: bubble.resumeToken,
+    prompt: instructions,
+    permissionMode: "bypassPermissions",
+  });
+
+  if (result.success) {
+    log.info(`Session resumed: ${result.sessionId}`);
+  } else {
+    log.error(`Failed to resume session: ${result.error}`);
+    await api
+      .sendMessage(chatId, `Failed to resume: ${result.error}`, {
+        parse_mode: "Markdown",
+      })
+      .catch(() => {});
+  }
+}

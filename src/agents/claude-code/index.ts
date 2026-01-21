@@ -101,6 +101,8 @@ export {
   completeSessionBubble,
   getSessionBubble,
   getBubbleByTokenPrefix,
+  getBubbleByMessageId,
+  isReplyToBubble,
   removeSessionBubble,
   forwardEventToChat,
   checkRuntimeLimit,
@@ -109,6 +111,10 @@ export {
   isSessionPaused,
   sendRuntimeLimitWarning,
   sendQuestionToChat,
+  // Q&A state for hybrid bubble format
+  recordCCQuestion,
+  recordDyDoAnswer,
+  clearQAState,
 } from "./bubble-service.js";
 
 // Bubble manager (Telegram status messages)
