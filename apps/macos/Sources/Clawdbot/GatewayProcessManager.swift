@@ -363,6 +363,10 @@ final class GatewayProcessManager {
         return false
     }
 
+    func clearLastFailure() {
+        self.lastFailureReason = nil
+    }
+
     func clearLog() {
         self.log = ""
         try? FileManager().removeItem(atPath: GatewayLaunchAgentManager.launchdGatewayLogPath())

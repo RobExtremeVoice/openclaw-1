@@ -12,9 +12,8 @@ final class ConnectionModeCoordinator {
     func apply(mode: AppState.ConnectionMode, paused: Bool) async {
         switch mode {
         case .unconfigured:
-            if let error = await NodeServiceManager.stop() {
-                NodesStore.shared.lastError = "Node service stop failed: \(error)"
-            }
+            // Best-effort stop; don't surface errors for a service that may not be running.
+            _ = await NodeServiceManager.stop()
             await RemoteTunnelManager.shared.stopAll()
             WebChatManager.shared.resetTunnels()
             GatewayProcessManager.shared.stop()
@@ -23,9 +22,8 @@ final class ConnectionModeCoordinator {
             Task.detached { await PortGuardian.shared.sweep(mode: .unconfigured) }
 
         case .local:
-            if let error = await NodeServiceManager.stop() {
-                NodesStore.shared.lastError = "Node service stop failed: \(error)"
-            }
+            // Best-effort stop; don't surface errors for a service that may not be running.
+            _ = await NodeServiceManager.stop()
             await RemoteTunnelManager.shared.stopAll()
             WebChatManager.shared.resetTunnels()
             let shouldStart = GatewayAutostartPolicy.shouldStartGateway(mode: .local, paused: paused)

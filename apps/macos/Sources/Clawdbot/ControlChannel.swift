@@ -60,6 +60,7 @@ final class ControlChannel {
             switch self.state {
             case .connected:
                 self.logger.info("control channel state -> connected")
+                GatewayProcessManager.shared.clearLastFailure()
             case .connecting:
                 self.logger.info("control channel state -> connecting")
             case .disconnected:
