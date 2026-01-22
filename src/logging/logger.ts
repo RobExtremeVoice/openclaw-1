@@ -197,8 +197,15 @@ export function registerLogTransport(transport: LogTransport): () => void {
   };
 }
 
+function formatLocalDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function defaultRollingPathForToday(): string {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = formatLocalDate(new Date()); // YYYY-MM-DD in local time
   return path.join(DEFAULT_LOG_DIR, `${LOG_PREFIX}-${today}${LOG_SUFFIX}`);
 }
 

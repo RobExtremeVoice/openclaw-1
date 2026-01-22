@@ -27,4 +27,15 @@ describe("sanitizeUserFacingText", () => {
     const raw = '{"type":"error","error":{"message":"Something exploded","type":"server_error"}}';
     expect(sanitizeUserFacingText(raw)).toBe("The AI service returned an error. Please try again.");
   });
+
+  it("strips leaked exec command syntax", () => {
+    // Gemini sometimes includes exec commands in text output
+    expect(sanitizeUserFacingText('exec: sag -l en "Hello world"')).toBe("");
+    expect(sanitizeUserFacingText("Here is your response\nexec: sag -l en 'test'")).toBe(
+      "Here is your response",
+    );
+    expect(sanitizeUserFacingText('exec: sag -l en "Hello" && sag -l ro "Salut"\nDone!')).toBe(
+      "Done!",
+    );
+  });
 });

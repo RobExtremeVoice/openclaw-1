@@ -274,7 +274,15 @@ export function formatAssistantErrorText(
 
 export function sanitizeUserFacingText(text: string): string {
   if (!text) return text;
-  const stripped = stripFinalTagsFromText(text);
+  let stripped = stripFinalTagsFromText(text);
+
+  // Strip leaked tool/exec command syntax (e.g., "exec: sag -l en '...'")
+  // Some models (notably Gemini) may include command text in their response
+  stripped = stripped
+    .replace(/^exec:\s+.+$/gim, "")
+    .replace(/\nexec:\s+.+$/gim, "")
+    .trim();
+
   const trimmed = stripped.trim();
   if (!trimmed) return stripped;
 
