@@ -6,6 +6,9 @@ ENV PATH="/root/.bun/bin:${PATH}"
 
 RUN corepack enable
 
+# Install gog CLI for Gmail
+RUN curl -sL https://github.com/steipete/gogcli/releases/download/v0.9.0/gogcli_0.9.0_linux_amd64.tar.gz | tar xz -C /usr/local/bin gog
+
 WORKDIR /app
 
 # Copy package files
@@ -22,15 +25,125 @@ ENV CLAWDBOT_PREFER_PNPM=1
 RUN pnpm ui:install
 RUN pnpm ui:build
 
-# Create minimal config for Railway
-RUN mkdir -p /root/.clawdbot/agents/main/agent
-RUN echo '{"channels":{"telegram":{"enabled":true,"dmPolicy":"allowlist","allowFrom":["6632715854"],"groupPolicy":"allowlist","streamMode":"partial"}},"gateway":{"mode":"local","bind":"lan","auth":{"mode":"token"}},"plugins":{"entries":{"telegram":{"enabled":true}}}}' > /root/.clawdbot/clawdbot.json
-RUN echo '{"version":1,"profiles":{"anthropic:default":{"type":"oauth","provider":"anthropic","access":"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","refresh":"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","expires":1769063791886}}}' > /root/.clawdbot/agents/main/agent/auth-profiles.json
+# Create config directories
+RUN mkdir -p /root/.clawdbot/agents/main/agent /root/.config/gogcli/keyring
 
 ENV NODE_ENV=production
 ENV HOME=/root
 
-# Create direct gateway startup script that bypasses buggy entry.js
+# Create startup script that generates config from environment variables
+RUN echo '#!/bin/bash\n\
+set -e\n\
+mkdir -p /root/.clawdbot/agents/main/agent /root/.config/gogcli/keyring\n\
+\n\
+# Generate clawdbot.json from environment\n\
+cat > /root/.clawdbot/clawdbot.json << EOFCONFIG\n\
+{\n\
+  "auth": {\n\
+    "profiles": {\n\
+      "minimax:default": {\n\
+        "provider": "minimax",\n\
+        "mode": "api_key"\n\
+      }\n\
+    }\n\
+  },\n\
+  "agents": {\n\
+    "defaults": {\n\
+      "model": {\n\
+        "primary": "minimax/MiniMax-M2.1"\n\
+      }\n\
+    }\n\
+  },\n\
+  "channels": {\n\
+    "telegram": {\n\
+      "enabled": true,\n\
+      "dmPolicy": "allowlist",\n\
+      "allowFrom": ["${TELEGRAM_ALLOWED_USER_ID:-6632715854}"],\n\
+      "botToken": "${TELEGRAM_BOT_TOKEN}",\n\
+      "groupPolicy": "allowlist",\n\
+      "streamMode": "partial"\n\
+    }\n\
+  },\n\
+  "gateway": {\n\
+    "mode": "local",\n\
+    "bind": "lan",\n\
+    "auth": {\n\
+      "mode": "token",\n\
+      "token": "${GATEWAY_TOKEN:-defaulttoken123}"\n\
+    }\n\
+  },\n\
+  "plugins": {\n\
+    "entries": {\n\
+      "telegram": {\n\
+        "enabled": true\n\
+      }\n\
+    }\n\
+  }\n\
+}\n\
+EOFCONFIG\n\
+\n\
+# Generate auth-profiles.json from environment\n\
+cat > /root/.clawdbot/agents/main/agent/auth-profiles.json << EOFAUTH\n\
+{\n\
+  "version": 1,\n\
+  "profiles": {\n\
+    "minimax:default": {\n\
+      "type": "api_key",\n\
+      "provider": "minimax",\n\
+      "key": "${MINIMAX_API_KEY}"\n\
+    }\n\
+  },\n\
+  "lastGood": {\n\
+    "minimax": "minimax:default"\n\
+  }\n\
+}\n\
+EOFAUTH\n\
+\n\
+# Set up gog credentials if Gmail env vars are present\n\
+if [ -n "$GMAIL_CLIENT_ID" ] && [ -n "$GMAIL_CLIENT_SECRET" ]; then\n\
+  cat > /root/.config/gogcli/credentials.json << EOFCREDS\n\
+{\n\
+  "client_id": "${GMAIL_CLIENT_ID}",\n\
+  "client_secret": "${GMAIL_CLIENT_SECRET}"\n\
+}\n\
+EOFCREDS\n\
+  echo "Gmail client credentials configured"\n\
+fi\n\
+\n\
+# Import Gmail token if present\n\
+if [ -n "$GMAIL_REFRESH_TOKEN" ] && [ -n "$GMAIL_ACCOUNT" ]; then\n\
+  cat > /tmp/gmail_token.json << EOFTOKEN\n\
+{\n\
+  "email": "${GMAIL_ACCOUNT}",\n\
+  "client": "default",\n\
+  "services": ["gmail"],\n\
+  "scopes": [\n\
+    "email",\n\
+    "https://www.googleapis.com/auth/gmail.modify",\n\
+    "https://www.googleapis.com/auth/gmail.settings.basic",\n\
+    "https://www.googleapis.com/auth/gmail.settings.sharing",\n\
+    "https://www.googleapis.com/auth/userinfo.email",\n\
+    "openid"\n\
+  ],\n\
+  "refresh_token": "${GMAIL_REFRESH_TOKEN}"\n\
+}\n\
+EOFTOKEN\n\
+  # Use plaintext keyring backend for automation\n\
+  export GOG_KEYRING_BACKEND=plaintext\n\
+  gog auth tokens import /tmp/gmail_token.json --no-input || echo "Gmail token import failed (may already exist)"\n\
+  rm -f /tmp/gmail_token.json\n\
+  echo "Gmail token configured for ${GMAIL_ACCOUNT}"\n\
+fi\n\
+\n\
+# Set gog environment for runtime\n\
+export GOG_KEYRING_BACKEND=plaintext\n\
+export GOG_ACCOUNT="${GMAIL_ACCOUNT}"\n\
+\n\
+echo "Config generated, starting gateway..."\n\
+exec node /app/railway-gateway.mjs\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Create direct gateway startup script
 RUN echo 'import { loadConfig, resolveGatewayPort } from "./dist/config/config.js"; \
 import { resolveGatewayAuth } from "./dist/gateway/auth.js"; \
 import { startGatewayServer } from "./dist/gateway/server.js"; \
@@ -47,5 +160,4 @@ console.log(`Starting gateway on port ${port}...`); \
 const server = await startGatewayServer({ port, auth, runtimeConfig: { reloadKey: null, httpPort: null, openAiProxyPort: null, remoteDebugPort: null } }); \
 console.log(`Gateway running on ws://0.0.0.0:${port}`);' > /app/railway-gateway.mjs
 
-# Use PORT from Railway
-CMD ["node", "/app/railway-gateway.mjs"]
+CMD ["/app/start.sh"]
