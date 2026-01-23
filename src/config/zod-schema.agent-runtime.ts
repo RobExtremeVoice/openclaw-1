@@ -28,6 +28,7 @@ export const HeartbeatSchema = z
         z.literal("whatsapp"),
         z.literal("telegram"),
         z.literal("discord"),
+        z.literal("googlechat"),
         z.literal("slack"),
         z.literal("msteams"),
         z.literal("signal"),

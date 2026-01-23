@@ -73,6 +73,11 @@ export type {
   DmPolicy,
   DmConfig,
   GroupPolicy,
+  GoogleChatAccountConfig,
+  GoogleChatConfig,
+  GoogleChatDmConfig,
+  GoogleChatGroupConfig,
+  GoogleChatActionConfig,
   MSTeamsChannelConfig,
   MSTeamsConfig,
   MSTeamsReplyStyle,
@@ -80,6 +85,7 @@ export type {
 } from "../config/types.js";
 export {
   DiscordConfigSchema,
+  GoogleChatConfigSchema,
   IMessageConfigSchema,
   MSTeamsConfigSchema,
   SignalConfigSchema,
@@ -119,6 +125,7 @@ export { formatLocationText, toLocationContext } from "../channels/location.js";
 export {
   resolveBlueBubblesGroupRequireMention,
   resolveDiscordGroupRequireMention,
+  resolveGoogleChatGroupRequireMention,
   resolveIMessageGroupRequireMention,
   resolveSlackGroupRequireMention,
   resolveTelegramGroupRequireMention,
