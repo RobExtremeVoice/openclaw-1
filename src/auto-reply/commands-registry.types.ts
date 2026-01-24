@@ -12,14 +12,20 @@ export type CommandArgChoiceContext = {
   arg: CommandArgDefinition;
 };
 
-export type CommandArgChoicesProvider = (context: CommandArgChoiceContext) => string[];
+/** A choice can be a plain string or an object with separate value and display label. */
+export type CommandArgChoice = string | { value: string; label: string };
+
+/** Normalized choice with both value and label always present. */
+export type ResolvedCommandArgChoice = { value: string; label: string };
+
+export type CommandArgChoicesProvider = (context: CommandArgChoiceContext) => CommandArgChoice[];
 
 export type CommandArgDefinition = {
   name: string;
   description: string;
   type: CommandArgType;
   required?: boolean;
-  choices?: string[] | CommandArgChoicesProvider;
+  choices?: CommandArgChoice[] | CommandArgChoicesProvider;
   captureRemaining?: boolean;
 };
 

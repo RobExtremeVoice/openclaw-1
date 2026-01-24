@@ -282,7 +282,16 @@ function buildChatCommands(): ChatCommandDefinition[] {
           name: "action",
           description: "on | off | status | provider | limit | summary | audio | help",
           type: "string",
-          choices: ["on", "off", "status", "provider", "limit", "summary", "audio", "help"],
+          choices: [
+            { value: "on", label: "🔊 On" },
+            { value: "off", label: "🔇 Off" },
+            { value: "status", label: "📊 Status" },
+            { value: "provider", label: "🎙️ Provider" },
+            { value: "limit", label: "📏 Limit" },
+            { value: "summary", label: "📝 Summary" },
+            { value: "audio", label: "🔈 Audio" },
+            { value: "help", label: "❓ Help" },
+          ],
         },
         {
           name: "value",

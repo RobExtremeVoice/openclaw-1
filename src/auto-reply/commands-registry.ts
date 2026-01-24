@@ -5,6 +5,7 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import type {
   ChatCommandDefinition,
+  CommandArgChoice,
   CommandArgChoiceContext,
   CommandArgDefinition,
   CommandArgMenuSpec,
@@ -13,11 +14,13 @@ import type {
   CommandDetection,
   CommandNormalizeOptions,
   NativeCommandSpec,
+  ResolvedCommandArgChoice,
   ShouldHandleTextCommandsParams,
 } from "./commands-registry.types.js";
 
 export type {
   ChatCommandDefinition,
+  CommandArgChoice,
   CommandArgChoiceContext,
   CommandArgDefinition,
   CommandArgMenuSpec,
@@ -27,6 +30,7 @@ export type {
   CommandNormalizeOptions,
   CommandScope,
   NativeCommandSpec,
+  ResolvedCommandArgChoice,
   ShouldHandleTextCommandsParams,
 } from "./commands-registry.types.js";
 
@@ -255,17 +259,27 @@ function resolveDefaultCommandContext(cfg?: ClawdbotConfig): {
   };
 }
 
+/** Normalize a choice to always have both value and label. */
+function normalizeChoice(choice: CommandArgChoice): ResolvedCommandArgChoice {
+  if (typeof choice === "string") {
+    return { value: choice, label: choice };
+  }
+  return choice;
+}
+
 export function resolveCommandArgChoices(params: {
   command: ChatCommandDefinition;
   arg: CommandArgDefinition;
   cfg?: ClawdbotConfig;
   provider?: string;
   model?: string;
-}): string[] {
+}): ResolvedCommandArgChoice[] {
   const { command, arg, cfg } = params;
   if (!arg.choices) return [];
   const provided = arg.choices;
-  if (Array.isArray(provided)) return provided;
+  if (Array.isArray(provided)) {
+    return provided.map(normalizeChoice);
+  }
   const defaults = resolveDefaultCommandContext(cfg);
   const context: CommandArgChoiceContext = {
     cfg,
@@ -274,14 +288,14 @@ export function resolveCommandArgChoices(params: {
     command,
     arg,
   };
-  return provided(context);
+  return provided(context).map(normalizeChoice);
 }
 
 export function resolveCommandArgMenu(params: {
   command: ChatCommandDefinition;
   args?: CommandArgs;
   cfg?: ClawdbotConfig;
-}): { arg: CommandArgDefinition; choices: string[]; title?: string } | null {
+}): { arg: CommandArgDefinition; choices: ResolvedCommandArgChoice[]; title?: string } | null {
   const { command, args, cfg } = params;
   if (!command.args || !command.argsMenu) return null;
   if (command.argsParsing === "none") return null;
