@@ -13,6 +13,8 @@ export function isContextOverflowError(errorMessage?: string): boolean {
     lower.includes("context length exceeded") ||
     lower.includes("maximum context length") ||
     lower.includes("prompt is too long") ||
+    lower.includes("exceeds model context window") ||
+    lower.includes("request size exceeds") ||
     lower.includes("context overflow") ||
     (lower.includes("413") && lower.includes("too large"))
   );

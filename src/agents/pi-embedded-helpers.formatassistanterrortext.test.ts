@@ -21,6 +21,16 @@ describe("formatAssistantErrorText", () => {
     const msg = makeAssistantError("request_too_large");
     expect(formatAssistantErrorText(msg)).toContain("Context overflow");
   });
+  it("returns context overflow for Anthropic 'Request size exceeds model context window'", () => {
+    // This is the new Anthropic error format that wasn't being detected.
+    // Without the fix, this falls through to the invalidRequest regex and returns
+    // "LLM request rejected: Request size exceeds model context window"
+    // instead of the context overflow message, preventing auto-compaction.
+    const msg = makeAssistantError(
+      '{"type":"error","error":{"type":"invalid_request_error","message":"Request size exceeds model context window"}}',
+    );
+    expect(formatAssistantErrorText(msg)).toContain("Context overflow");
+  });
   it("returns a friendly message for Anthropic role ordering", () => {
     const msg = makeAssistantError('messages: roles must alternate between "user" and "assistant"');
     expect(formatAssistantErrorText(msg)).toContain("Message ordering conflict");
