@@ -1,7 +1,7 @@
 import { Chalk } from "chalk";
 import type { Logger as TsLogger } from "tslog";
 
-import { CHAT_CHANNEL_ORDER } from "../channels/registry.js";
+import { CHAT_CHANNEL_ORDER } from "../channels/order.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { getConsoleSettings, shouldLogSubsystemToConsole } from "./console.js";
 import { isVerbose } from "../globals.js";
@@ -55,7 +55,14 @@ const SUBSYSTEM_COLOR_OVERRIDES: Record<string, (typeof SUBSYSTEM_COLORS)[number
 };
 const SUBSYSTEM_PREFIXES_TO_DROP = ["gateway", "channels", "providers"] as const;
 const SUBSYSTEM_MAX_SEGMENTS = 2;
-const CHANNEL_SUBSYSTEM_PREFIXES = new Set<string>(CHAT_CHANNEL_ORDER);
+let _CHANNEL_SUBSYSTEM_PREFIXES: Set<string> | null = null;
+
+function getChannelSubsystemPrefixes(): Set<string> {
+  if (!_CHANNEL_SUBSYSTEM_PREFIXES) {
+    _CHANNEL_SUBSYSTEM_PREFIXES = new Set<string>(CHAT_CHANNEL_ORDER);
+  }
+  return _CHANNEL_SUBSYSTEM_PREFIXES;
+}
 
 function pickSubsystemColor(color: ChalkInstance, subsystem: string): ChalkInstance {
   const override = SUBSYSTEM_COLOR_OVERRIDES[subsystem];
@@ -79,7 +86,7 @@ function formatSubsystemForConsole(subsystem: string): string {
     parts.shift();
   }
   if (parts.length === 0) return original;
-  if (CHANNEL_SUBSYSTEM_PREFIXES.has(parts[0])) {
+  if (getChannelSubsystemPrefixes().has(parts[0])) {
     return parts[0];
   }
   if (parts.length > SUBSYSTEM_MAX_SEGMENTS) {

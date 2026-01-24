@@ -62,7 +62,7 @@ function normalizeEnvelopeOptions(options?: EnvelopeFormatOptions): NormalizedEn
     timezone: options?.timezone?.trim() || "local",
     includeTimestamp,
     includeElapsed,
-    userTimezone: options?.userTimezone,
+    userTimezone: options?.userTimezone ?? "",
   };
 }
 

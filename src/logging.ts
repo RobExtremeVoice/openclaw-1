@@ -1,4 +1,4 @@
-import {
+export {
   enableConsoleCapture,
   getConsoleSettings,
   getResolvedConsoleSettings,
@@ -7,10 +7,10 @@ import {
   setConsoleTimestampPrefix,
   shouldLogSubsystemToConsole,
 } from "./logging/console.js";
-import type { ConsoleLoggerSettings, ConsoleStyle } from "./logging/console.js";
-import { ALLOWED_LOG_LEVELS, levelToMinLevel, normalizeLogLevel } from "./logging/levels.js";
-import type { LogLevel } from "./logging/levels.js";
-import {
+export type { ConsoleLoggerSettings, ConsoleStyle } from "./logging/console.js";
+export type { LogLevel } from "./logging/levels.js";
+export { ALLOWED_LOG_LEVELS, levelToMinLevel, normalizeLogLevel } from "./logging/levels.js";
+export {
   DEFAULT_LOG_DIR,
   DEFAULT_LOG_FILE,
   getChildLogger,
@@ -21,47 +21,14 @@ import {
   setLoggerOverride,
   toPinoLikeLogger,
 } from "./logging/logger.js";
-import type { LoggerResolvedSettings, LoggerSettings, PinoLikeLogger } from "./logging/logger.js";
-import {
+export type { LoggerResolvedSettings, LoggerSettings, PinoLikeLogger } from "./logging/logger.js";
+
+// Re-export with local name to ensure hoisted function visibility within this module's own scope
+// if it's imported back during the same execution turn.
+export {
   createSubsystemLogger,
   createSubsystemRuntime,
   runtimeForLogger,
   stripRedundantSubsystemPrefixForConsole,
 } from "./logging/subsystem.js";
-import type { SubsystemLogger } from "./logging/subsystem.js";
-
-export {
-  enableConsoleCapture,
-  getConsoleSettings,
-  getResolvedConsoleSettings,
-  routeLogsToStderr,
-  setConsoleSubsystemFilter,
-  setConsoleTimestampPrefix,
-  shouldLogSubsystemToConsole,
-  ALLOWED_LOG_LEVELS,
-  levelToMinLevel,
-  normalizeLogLevel,
-  DEFAULT_LOG_DIR,
-  DEFAULT_LOG_FILE,
-  getChildLogger,
-  getLogger,
-  getResolvedLoggerSettings,
-  isFileLogLevelEnabled,
-  resetLogger,
-  setLoggerOverride,
-  toPinoLikeLogger,
-  createSubsystemLogger,
-  createSubsystemRuntime,
-  runtimeForLogger,
-  stripRedundantSubsystemPrefixForConsole,
-};
-
-export type {
-  ConsoleLoggerSettings,
-  ConsoleStyle,
-  LogLevel,
-  LoggerResolvedSettings,
-  LoggerSettings,
-  PinoLikeLogger,
-  SubsystemLogger,
-};
+export type { SubsystemLogger } from "./logging/subsystem.js";
