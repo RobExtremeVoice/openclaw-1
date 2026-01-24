@@ -31,7 +31,7 @@ export async function createMcpServer(runtime: RuntimeEnv, opts: McpServerOption
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (request.params.name === "order_clawdbot") {
-      const args = request.params.arguments as { message: string; sessionKey?: string };
+      const args = request.params.arguments as Parameters<typeof orderClawdbotTool.handler>[0];
 
       if (opts.verbose) {
         runtime.log(
@@ -42,7 +42,11 @@ export async function createMcpServer(runtime: RuntimeEnv, opts: McpServerOption
       const result = await orderClawdbotTool.handler(args);
 
       if (opts.verbose) {
-        const responsePreview = result.content[0]?.text?.slice(0, 100) ?? "";
+        const firstBlock = result.content[0];
+        const responsePreview =
+          firstBlock?.type === "text"
+            ? firstBlock.text.slice(0, 100)
+            : `[${firstBlock?.type ?? "empty"}]`;
         runtime.log(
           `[MCP] Response: ${result.isError ? "ERROR" : "OK"}, ${responsePreview}${responsePreview.length >= 100 ? "..." : ""}`,
         );

@@ -72,7 +72,7 @@ The MCP server exposes a single tool called `order_clawdbot`.
 ```json
 {
   "name": "order_clawdbot",
-  "description": "Send a message to Clawdbot and receive a response. The message will be processed as if typed by a user.",
+  "description": "Send a message to Clawdbot and receive a response. The message will be processed as if typed by a user. Supports sending images, files (PDF, text, markdown, CSV, JSON), audio, video, and archives (ZIP, TAR.GZ) via base64 encoding.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -83,6 +83,32 @@ The MCP server exposes a single tool called `order_clawdbot`.
       "sessionKey": {
         "type": "string",
         "description": "Optional session key for conversation continuity"
+      },
+      "images": {
+        "type": "array",
+        "description": "Optional base64-encoded images (max 10, 15MB each)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "data": { "type": "string", "description": "Base64-encoded image data" },
+            "mimeType": { "type": "string", "description": "MIME type (e.g., 'image/png')" },
+            "filename": { "type": "string", "description": "Optional filename" }
+          },
+          "required": ["data", "mimeType"]
+        }
+      },
+      "files": {
+        "type": "array",
+        "description": "Optional base64-encoded files (max 5, 15MB each)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "data": { "type": "string", "description": "Base64-encoded file data" },
+            "mimeType": { "type": "string", "description": "MIME type (e.g., 'application/pdf')" },
+            "filename": { "type": "string", "description": "Optional filename" }
+          },
+          "required": ["data", "mimeType"]
+        }
       }
     },
     "required": ["message"]
@@ -96,6 +122,8 @@ The MCP server exposes a single tool called `order_clawdbot`.
 |-----------|------|----------|-------------|
 | `message` | string | Yes | The message to send to Clawdbot. Passed through unmodified. |
 | `sessionKey` | string | No | Session identifier for conversation continuity. If not provided, a unique key is generated for each call. |
+| `images` | array | No | Base64-encoded images. See [Media Support](#media-support) for details. |
+| `files` | array | No | Base64-encoded files. See [Media Support](#media-support) for details. |
 
 ### Response Format
 
@@ -170,6 +198,134 @@ Clawdbot will remember the conversation context and respond appropriately.
 - Use descriptive, unique keys per logical conversation
 - Include user/client identifiers to prevent cross-client leakage
 - Consider including timestamps for debugging: `client-123-2024-01-15`
+
+## Media Support
+
+The `order_clawdbot` tool supports sending and receiving media files via base64 encoding.
+
+### Sending Media
+
+Attach images or files to your message using base64-encoded data:
+
+```json
+{
+  "name": "order_clawdbot",
+  "arguments": {
+    "message": "What do you see in this image?",
+    "images": [{
+      "data": "<base64-encoded-image>",
+      "mimeType": "image/png"
+    }]
+  }
+}
+```
+
+### Image Attachments
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `data` | string | Yes | Base64-encoded image data |
+| `mimeType` | string | Yes | MIME type (see supported types) |
+| `filename` | string | No | Optional filename for context |
+
+**Supported MIME types:** `image/jpeg`, `image/png`, `image/gif`, `image/webp`
+
+**Limits:** Max 10 images, 15MB each
+
+### File Attachments
+
+Send files using the `files` array:
+
+```json
+{
+  "name": "order_clawdbot",
+  "arguments": {
+    "message": "Summarize this document",
+    "files": [{
+      "data": "<base64-encoded-pdf>",
+      "mimeType": "application/pdf",
+      "filename": "report.pdf"
+    }]
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `data` | string | Yes | Base64-encoded file data |
+| `mimeType` | string | Yes | MIME type (see supported types) |
+| `filename` | string | No | Optional filename for context |
+
+**Supported file types:**
+
+| Category | MIME Types |
+|----------|------------|
+| Documents | `application/pdf` |
+| Text | `text/plain`, `text/markdown`, `text/html`, `text/csv` |
+| Data | `application/json` |
+| Audio | `audio/mpeg`, `audio/wav`, `audio/ogg`, `audio/mp4`, `audio/aac`, `audio/flac`, `audio/opus` |
+| Video | `video/mp4`, `video/webm`, `video/quicktime`, `video/x-msvideo` |
+| Archives | `application/zip`, `application/gzip`, `application/x-tar`, `application/x-compressed-tar` |
+
+**Limits:** Max 5 files, 15MB each
+
+**Notes:**
+- Archives are treated as opaque blobs (no extraction). The MCP server assumes trusted users only.
+- Audio transcription requires a configured transcription provider (local Whisper, Deepgram, OpenAI, etc.). Without a provider, audio is accepted but not transcribed.
+
+### Receiving Media
+
+Responses may include multiple content blocks depending on what Clawdbot returns.
+
+#### Text Content
+
+```json
+{ "type": "text", "text": "The response text..." }
+```
+
+#### Image Content
+
+```json
+{ "type": "image", "data": "<base64>", "mimeType": "image/png" }
+```
+
+#### Audio Content
+
+```json
+{ "type": "audio", "data": "<base64>", "mimeType": "audio/mpeg" }
+```
+
+#### Embedded Resource (documents/files)
+
+```json
+{
+  "type": "resource",
+  "resource": {
+    "uri": "attachment://filename.pdf",
+    "mimeType": "application/pdf",
+    "blob": "<base64>"
+  }
+}
+```
+
+### Size Limits Summary
+
+| Limit | Value |
+|-------|-------|
+| Max media size (all types) | 15 MB |
+| Max images per request | 10 |
+| Max files per request | 5 |
+| Max response media item | 20 MB |
+| Max total response | 50 MB |
+
+### Design: Base64 Only
+
+All media is transferred as base64-encoded data. URL-based transfers are intentionally excluded because:
+
+- **Works offline**: MCP clients may not have network access to Clawdbot's media storage
+- **Self-contained**: Base64 provides portable media that works across all MCP clients
+- **Secure**: Eliminates authentication and SSRF concerns for media delivery
+- **Consistent**: Aligns with MCP SDK's native content block types
 
 ## Configuration Examples
 
@@ -273,7 +429,9 @@ This approach avoids the pitfalls of prompt-based response control (unreliable, 
 
 ## Implementation Reference
 
-The MCP server design is documented in `docs/design/mcp-server-design.md`.
+Design documentation:
+- [MCP Server Design](/design/mcp-server-design) - Core architecture and response aggregation
+- [MCP Server Media Design](/design/mcp-server-media-design) - Media handling details
 
 ### Source Files
 
@@ -284,6 +442,7 @@ The MCP server design is documented in `docs/design/mcp-server-design.md`.
 | `src/mcp-server/types.ts` | Type definitions |
 | `src/mcp-server/context.ts` | Synthetic message context builder |
 | `src/mcp-server/tools/order-clawdbot.ts` | The `order_clawdbot` tool implementation |
+| `src/mcp-server/media/` | Media processing (inbound/outbound, validation, constants) |
 | `src/cli/program/register.mcp.ts` | CLI command registration |
 
 ### Tests
@@ -292,6 +451,9 @@ The MCP server design is documented in `docs/design/mcp-server-design.md`.
 |------|----------|
 | `src/mcp-server/context.test.ts` | Context builder tests |
 | `src/mcp-server/tools/order-clawdbot.test.ts` | Tool handler and deduplication tests |
+| `src/mcp-server/media/helpers.test.ts` | Media validation and utility tests |
+| `src/mcp-server/media/inbound.test.ts` | Inbound media processing tests |
+| `src/mcp-server/media/outbound.test.ts` | Outbound media processing tests |
 
 ## Troubleshooting
 
@@ -367,10 +529,9 @@ The stdio transport ensures:
 
 ### Current Limitations
 
-1. **Text-only responses**: Media (images, audio) URLs are not included in MCP responses
-2. **Synchronous only**: The tool waits for Clawdbot to complete before returning
-3. **No streaming**: Responses are aggregated and returned as a single block
-4. **Single tool**: Only `order_clawdbot` is exposed (individual Clawdbot tools are not exposed)
+1. **Synchronous only**: The tool waits for Clawdbot to complete before returning
+2. **No streaming**: Responses are aggregated and returned as a single block
+3. **Single tool**: Only `order_clawdbot` is exposed (individual Clawdbot tools are not exposed)
 
 ### Not Supported (By Design)
 

@@ -108,4 +108,134 @@ describe("buildSyntheticContext", () => {
 
     expect(ctx.From).toBe("custom-sender-id-456");
   });
+
+  describe("media support", () => {
+    it("should populate MediaPaths from mediaPaths parameter", () => {
+      const ctx = buildSyntheticContext({
+        body: "Check this image",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPaths: ["/tmp/image.png", "/tmp/doc.pdf"],
+        mediaMimeTypes: ["image/png", "application/pdf"],
+        mediaPlaceholders: ["<media:image>", "<media:document>"],
+      });
+
+      expect(ctx.MediaPaths).toEqual(["/tmp/image.png", "/tmp/doc.pdf"]);
+      expect(ctx.MediaPath).toBe("/tmp/image.png");
+    });
+
+    it("should populate MediaUrls as file:// URLs from mediaPaths", () => {
+      const ctx = buildSyntheticContext({
+        body: "Check this",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPaths: ["/tmp/image.png"],
+        mediaMimeTypes: ["image/png"],
+      });
+
+      expect(ctx.MediaUrls).toEqual(["file:///tmp/image.png"]);
+      expect(ctx.MediaUrl).toBe("file:///tmp/image.png");
+    });
+
+    it("should populate MediaTypes from mediaMimeTypes parameter", () => {
+      const ctx = buildSyntheticContext({
+        body: "Check this",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPaths: ["/tmp/image.png", "/tmp/doc.pdf"],
+        mediaMimeTypes: ["image/png", "application/pdf"],
+      });
+
+      expect(ctx.MediaTypes).toEqual(["image/png", "application/pdf"]);
+      expect(ctx.MediaType).toBe("image/png");
+    });
+
+    it("should prepend media placeholders to Body", () => {
+      const ctx = buildSyntheticContext({
+        body: "What's in this image?",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPlaceholders: ["<media:image>"],
+      });
+
+      expect(ctx.Body).toBe("<media:image> What's in this image?");
+      expect(ctx.RawBody).toBe("<media:image> What's in this image?");
+    });
+
+    it("should preserve original text in CommandBody", () => {
+      const ctx = buildSyntheticContext({
+        body: "/help command",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPlaceholders: ["<media:image>"],
+      });
+
+      expect(ctx.CommandBody).toBe("/help command");
+      expect(ctx.BodyForCommands).toBe("/help command");
+    });
+
+    it("should append extracted content to BodyForAgent", () => {
+      const ctx = buildSyntheticContext({
+        body: "Summarize this",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPlaceholders: ["<media:document>"],
+        extractedContent: [
+          {
+            filename: "report.pdf",
+            text: "This is the extracted PDF content.",
+          },
+        ],
+      });
+
+      expect(ctx.BodyForAgent).toContain("--- Extracted content from report.pdf ---");
+      expect(ctx.BodyForAgent).toContain("This is the extracted PDF content.");
+      expect(ctx.BodyForAgent).toContain("--- End extracted content ---");
+    });
+
+    it("should handle multiple extracted contents", () => {
+      const ctx = buildSyntheticContext({
+        body: "Compare these",
+        sessionKey: "session-1",
+        senderId: "client",
+        extractedContent: [
+          { filename: "doc1.pdf", text: "Content from doc1" },
+          { filename: "doc2.pdf", text: "Content from doc2" },
+        ],
+      });
+
+      expect(ctx.BodyForAgent).toContain("--- Extracted content from doc1.pdf ---");
+      expect(ctx.BodyForAgent).toContain("--- Extracted content from doc2.pdf ---");
+    });
+
+    it("should skip extracted content with empty text", () => {
+      const ctx = buildSyntheticContext({
+        body: "Check this",
+        sessionKey: "session-1",
+        senderId: "client",
+        extractedContent: [
+          { filename: "empty.pdf", text: "" },
+          { filename: "whitespace.pdf", text: "   " },
+        ],
+      });
+
+      expect(ctx.BodyForAgent).not.toContain("--- Extracted content from empty.pdf ---");
+      expect(ctx.BodyForAgent).not.toContain("--- Extracted content from whitespace.pdf ---");
+    });
+
+    it("should handle empty media arrays", () => {
+      const ctx = buildSyntheticContext({
+        body: "No media",
+        sessionKey: "session-1",
+        senderId: "client",
+        mediaPaths: [],
+        mediaMimeTypes: [],
+        mediaPlaceholders: [],
+      });
+
+      expect(ctx.MediaPaths).toEqual([]);
+      expect(ctx.MediaUrls).toEqual([]);
+      expect(ctx.Body).toBe("No media");
+    });
+  });
 });

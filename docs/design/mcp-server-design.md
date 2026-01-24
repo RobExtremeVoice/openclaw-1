@@ -96,6 +96,11 @@ Add to `~/.config/claude-code/mcp.json`:
 }
 ```
 
+## Related Documentation
+
+- [MCP Server Media Support Design](/design/mcp-server-media-design) - Media handling (images, documents, audio, video)
+- [MCP Server User Documentation](/cli/mcp-server) - Usage guide with examples
+
 ## References
 
 - [MCP SDK Documentation](https://github.com/modelcontextprotocol/sdk)
