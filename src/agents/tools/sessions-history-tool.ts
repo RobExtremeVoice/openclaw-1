@@ -10,6 +10,7 @@ import {
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
+  isUuidLike,
   resolveDisplaySessionKey,
   resolveInternalSessionKey,
   resolveMainSessionAlias,
@@ -24,6 +25,30 @@ const SessionsHistoryToolSchema = Type.Object({
 
 function resolveSandboxSessionToolsVisibility(cfg: ReturnType<typeof loadConfig>) {
   return cfg.agents?.defaults?.sandbox?.sessionToolsVisibility ?? "spawned";
+}
+
+/**
+ * Look up a session's key by its sessionId (UUID).
+ * Returns the sessionKey if found, or null if not found.
+ */
+async function lookupSessionKeyById(sessionId: string): Promise<string | null> {
+  try {
+    const list = (await callGateway({
+      method: "sessions.list",
+      params: {
+        includeGlobal: true,
+        includeUnknown: true,
+        limit: 1000,
+      },
+    })) as { sessions?: Array<{ key?: string; sessionId?: string }> };
+    const sessions = Array.isArray(list?.sessions) ? list.sessions : [];
+    const match = sessions.find(
+      (entry) => entry?.sessionId === sessionId && typeof entry?.key === "string",
+    );
+    return match?.key ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function isSpawnedSessionAllowed(params: {
@@ -58,12 +83,26 @@ export function createSessionsHistoryTool(opts?: {
     parameters: SessionsHistoryToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
-      const sessionKey = readStringParam(params, "sessionKey", {
+      let sessionKey = readStringParam(params, "sessionKey", {
         required: true,
       });
       const cfg = loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
       const visibility = resolveSandboxSessionToolsVisibility(cfg);
+
+      // If the provided sessionKey looks like a UUID (sessionId), look up the actual sessionKey
+      if (isUuidLike(sessionKey)) {
+        const foundKey = await lookupSessionKeyById(sessionKey);
+        if (!foundKey) {
+          return jsonResult({
+            status: "error",
+            error: `Session not found for sessionId: ${sessionKey}`,
+            hint: "Use the full sessionKey (e.g., 'agent:main:telegram:dm:123') or verify the sessionId exists via sessions_list.",
+          });
+        }
+        sessionKey = foundKey;
+      }
+
       const requesterInternalKey =
         typeof opts?.agentSessionKey === "string" && opts.agentSessionKey.trim()
           ? resolveInternalSessionKey({

@@ -115,6 +115,14 @@ export function sanitizeTextContent(text: string): string {
   return stripThinkingTagsFromText(stripDowngradedToolCallText(stripMinimaxToolCallXml(text)));
 }
 
+/**
+ * Check if a string looks like a UUID (sessionId format).
+ * Pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ */
+export function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function extractAssistantText(message: unknown): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   if ((message as { role?: unknown }).role !== "assistant") return undefined;
