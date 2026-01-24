@@ -763,21 +763,29 @@ export async function recoverOrphanedBubbles(): Promise<void> {
 
   for (const entry of registry) {
     try {
-      // Check if session file exists
-      const sessionFile = path.join(
-        entry.workingDir,
-        ".claude",
-        "projects",
-        entry.workingDir.replace(/\//g, "-"),
-        `${entry.resumeToken}.jsonl`,
-      );
-
-      // Alternative: scan for session file by token
+      // Find session file by token
       const { findSessionFile } = await import("./project-resolver.js");
-      const actualSessionFile = findSessionFile(entry.resumeToken);
+      const sessionFile = findSessionFile(entry.resumeToken);
 
-      if (!actualSessionFile) {
-        log.warn(`[${entry.sessionId}] Session file not found, skipping recovery`);
+      if (!sessionFile) {
+        log.info(
+          `[${entry.sessionId}] Session file not found - session likely ended, updating bubble to final state`,
+        );
+        // Session file not found - assume completed
+        const runtimeSeconds = (Date.now() - entry.createdAt) / 1000;
+        const hours = Math.floor(runtimeSeconds / 3600);
+        const minutes = Math.floor((runtimeSeconds % 3600) / 60);
+        const runtime = `${hours}h ${minutes}m`;
+
+        const text = `✓ · ${entry.projectName} · ${runtime}\n\nSession ended\n\n\`claude --resume ${entry.resumeToken}\``;
+
+        await editMessageTelegram(entry.chatId, entry.messageId, text, {
+          accountId: entry.accountId,
+          buttons: [],
+          disableLinkPreview: true,
+        });
+
+        log.info(`[${entry.sessionId}] Bubble recovered (file not found, assumed completed)`);
         removeFromBubbleRegistry(entry.sessionId);
         continue;
       }
@@ -810,7 +818,7 @@ export async function recoverOrphanedBubbles(): Promise<void> {
       log.info(`[${entry.sessionId}] Session ended, updating bubble to final state`);
 
       // Parse session file to get final status
-      const sessionData = fs.readFileSync(actualSessionFile, "utf-8");
+      const sessionData = fs.readFileSync(sessionFile, "utf-8");
       const lines = sessionData.trim().split("\n");
       let finalStatus: "completed" | "cancelled" | "failed" = "completed";
       let totalEvents = lines.length;
