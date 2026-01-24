@@ -273,6 +273,27 @@ function buildChatCommands(): ChatCommandDefinition[] {
       argsMenu: "auto",
     }),
     defineChatCommand({
+      key: "tts",
+      nativeName: "tts",
+      description: "Control text-to-speech (TTS).",
+      textAlias: "/tts",
+      args: [
+        {
+          name: "action",
+          description: "on | off | status | provider | limit | summary | audio | help",
+          type: "string",
+          choices: ["on", "off", "status", "provider", "limit", "summary", "audio", "help"],
+        },
+        {
+          name: "value",
+          description: "Provider, limit, or text",
+          type: "string",
+          captureRemaining: true,
+        },
+      ],
+      argsMenu: "auto",
+    }),
+    defineChatCommand({
       key: "stop",
       nativeName: "stop",
       description: "Stop the current run.",
@@ -395,9 +416,9 @@ function buildChatCommands(): ChatCommandDefinition[] {
       args: [
         {
           name: "mode",
-          description: "on or off",
+          description: "on, off, ask, or full",
           type: "string",
-          choices: ["on", "off"],
+          choices: ["on", "off", "ask", "full"],
         },
       ],
       argsMenu: "auto",
@@ -428,6 +449,14 @@ function buildChatCommands(): ChatCommandDefinition[] {
           type: "string",
         },
       ],
+    }),
+    defineChatCommand({
+      key: "models",
+      nativeName: "models",
+      description: "List model providers or provider models.",
+      textAlias: "/models",
+      argsParsing: "none",
+      acceptsArgs: true,
     }),
     defineChatCommand({
       key: "queue",
@@ -485,7 +514,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
   registerAlias(commands, "verbose", "/v");
   registerAlias(commands, "reasoning", "/reason");
   registerAlias(commands, "elevated", "/elev");
-  registerAlias(commands, "model", "/models");
 
   assertCommandRegistry(commands);
   return commands;

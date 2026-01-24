@@ -136,6 +136,7 @@ export async function runReplyAgent(params: {
     followupRun.run.config,
     replyToChannel,
     sessionCtx.AccountId,
+    sessionCtx.ChatType,
   );
   const applyReplyToMode = createReplyToModeFilterForChannel(replyToMode, replyToChannel);
   const cfg = followupRun.run.config;
@@ -195,6 +196,8 @@ export async function runReplyAgent(params: {
     typing.cleanup();
     return undefined;
   }
+
+  await typingSignals.signalRunStart();
 
   activeSessionEntry = await runMemoryFlushIfNeeded({
     cfg,
@@ -377,7 +380,7 @@ export async function runReplyAgent(params: {
       directlySentBlockKeys,
       replyToMode,
       replyToChannel,
-      currentMessageId: sessionCtx.MessageSid,
+      currentMessageId: sessionCtx.MessageSidFull ?? sessionCtx.MessageSid,
       messageProvider: followupRun.run.messageProvider,
       messagingToolSentTexts: runResult.messagingToolSentTexts,
       messagingToolSentTargets: runResult.messagingToolSentTargets,

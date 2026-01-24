@@ -12,13 +12,16 @@ import {
 import { formatCliCommand } from "../cli/command-format.js";
 import type { ClawdbotConfig } from "../config/config.js";
 import { CONFIG_PATH_CLAWDBOT, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
+import { logConfigUpdated } from "../config/logging.js";
 import { resolveGatewayService } from "../daemon/service.js";
+import { resolveGatewayAuth } from "../gateway/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { resolveClawdbotPackageRoot } from "../infra/clawdbot-root.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { note } from "../terminal/note.js";
 import { stylePromptTitle } from "../terminal/prompt-style.js";
+import { shortenHomePath } from "../utils.js";
 import { maybeRepairAnthropicOAuthProfileId, noteAuthProfileHealth } from "./doctor-auth.js";
 import { loadAndMaybeMigrateDoctorConfig } from "./doctor-config-flow.js";
 import { maybeRepairGatewayDaemon } from "./doctor-gateway-daemon-flow.js";
@@ -87,6 +90,19 @@ export async function doctorCommand(
   });
   let cfg: ClawdbotConfig = configResult.cfg;
 
+  const configPath = configResult.path ?? CONFIG_PATH_CLAWDBOT;
+  if (!cfg.gateway?.mode) {
+    const lines = [
+      "gateway.mode is unset; gateway start will be blocked.",
+      `Fix: run ${formatCliCommand("clawdbot configure")} and set Gateway mode (local/remote).`,
+      `Or set directly: ${formatCliCommand("clawdbot config set gateway.mode local")}`,
+    ];
+    if (!fs.existsSync(configPath)) {
+      lines.push(`Missing config: run ${formatCliCommand("clawdbot setup")} first.`);
+    }
+    note(lines.join("\n"), "Gateway");
+  }
+
   cfg = await maybeRepairAnthropicOAuthProfileId(cfg, prompter);
   await noteAuthProfileHealth({
     cfg,
@@ -98,10 +114,11 @@ export async function doctorCommand(
     note(gatewayDetails.remoteFallbackNote, "Gateway");
   }
   if (resolveMode(cfg) === "local") {
-    const authMode = cfg.gateway?.auth?.mode;
-    const token =
-      typeof cfg.gateway?.auth?.token === "string" ? cfg.gateway?.auth?.token.trim() : "";
-    const needsToken = authMode !== "password" && (authMode !== "token" || !token);
+    const auth = resolveGatewayAuth({
+      authConfig: cfg.gateway?.auth,
+      tailscaleMode: cfg.gateway?.tailscale?.mode ?? "off",
+    });
+    const needsToken = auth.mode !== "password" && (auth.mode !== "token" || !auth.token);
     if (needsToken) {
       note(
         "Gateway auth is off or missing a token. Token auth is now the recommended default (including loopback).",
@@ -254,10 +271,10 @@ export async function doctorCommand(
   if (shouldWriteConfig) {
     cfg = applyWizardMetadata(cfg, { command: "doctor", mode: resolveMode(cfg) });
     await writeConfigFile(cfg);
-    runtime.log(`Updated ${CONFIG_PATH_CLAWDBOT}`);
+    logConfigUpdated(runtime);
     const backupPath = `${CONFIG_PATH_CLAWDBOT}.bak`;
     if (fs.existsSync(backupPath)) {
-      runtime.log(`Backup: ${backupPath}`);
+      runtime.log(`Backup: ${shortenHomePath(backupPath)}`);
     }
   } else {
     runtime.log(`Run "${formatCliCommand("clawdbot doctor --fix")}" to apply changes.`);

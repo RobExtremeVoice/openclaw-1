@@ -110,6 +110,14 @@
       "destination": "/providers/opencode"
     },
     {
+      "source": "/mattermost",
+      "destination": "/channels/mattermost"
+    },
+    {
+      "source": "/mattermost/",
+      "destination": "/channels/mattermost"
+    },
+    {
       "source": "/glm",
       "destination": "/providers/glm"
     },
@@ -164,6 +172,14 @@
     {
       "source": "/providers/location/",
       "destination": "/channels/location"
+    },
+    {
+      "source": "/providers/mattermost",
+      "destination": "/channels/mattermost"
+    },
+    {
+      "source": "/providers/mattermost/",
+      "destination": "/channels/mattermost"
     },
     {
       "source": "/providers/msteams",
@@ -334,6 +350,14 @@
       "destination": "/automation/cron-jobs"
     },
     {
+      "source": "/cron-vs-heartbeat",
+      "destination": "/automation/cron-vs-heartbeat"
+    },
+    {
+      "source": "/cron-vs-heartbeat/",
+      "destination": "/automation/cron-vs-heartbeat"
+    },
+    {
       "source": "/dashboard",
       "destination": "/web/dashboard"
     },
@@ -363,7 +387,7 @@
     },
     {
       "source": "/faq",
-      "destination": "/start/faq"
+      "destination": "/help/faq"
     },
     {
       "source": "/gateway-lock",
@@ -747,11 +771,11 @@
     },
     {
       "source": "/start/faq",
-      "destination": "/help"
+      "destination": "/help/faq"
     },
     {
       "source": "/start/faq/",
-      "destination": "/help"
+      "destination": "/help/faq"
     },
     {
       "source": "/oauth",
@@ -826,14 +850,12 @@
           "cli/memory",
           "cli/models",
           "cli/logs",
+          "cli/system",
           "cli/nodes",
           "cli/approvals",
           "cli/gateway",
-          "cli/daemon",
-          "cli/service",
           "cli/tui",
           "cli/voicecall",
-          "cli/wake",
           "cli/cron",
           "cli/dns",
           "cli/docs",
@@ -894,6 +916,7 @@
           "gateway/configuration-examples",
           "gateway/authentication",
           "gateway/openai-http-api",
+          "gateway/tools-invoke-http-api",
           "gateway/cli-backends",
           "gateway/local-models",
           "gateway/background-process",
@@ -932,6 +955,7 @@
           "channels/grammy",
           "channels/discord",
           "channels/slack",
+          "channels/mattermost",
           "channels/signal",
           "channels/imessage",
           "channels/msteams",
@@ -969,6 +993,7 @@
           "automation/webhook",
           "automation/gmail-pubsub",
           "automation/cron-jobs",
+          "automation/cron-vs-heartbeat",
           "automation/poll"
         ]
       },
@@ -976,6 +1001,8 @@
         "group": "Tools & Skills",
         "pages": [
           "tools",
+          "tools/lobster",
+          "tools/llm-task",
           "plugin",
           "plugins/voice-call",
           "plugins/zalouser",
@@ -1019,6 +1046,7 @@
           "platforms/android",
           "platforms/windows",
           "platforms/linux",
+          "platforms/fly",
           "platforms/hetzner",
           "platforms/exe-dev"
         ]

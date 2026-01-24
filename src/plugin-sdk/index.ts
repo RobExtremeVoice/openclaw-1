@@ -73,6 +73,9 @@ export type {
   DmPolicy,
   DmConfig,
   GroupPolicy,
+  GroupToolPolicyConfig,
+  MarkdownConfig,
+  MarkdownTableMode,
   MSTeamsChannelConfig,
   MSTeamsConfig,
   MSTeamsReplyStyle,
@@ -92,9 +95,12 @@ export {
   DmConfigSchema,
   DmPolicySchema,
   GroupPolicySchema,
+  MarkdownConfigSchema,
+  MarkdownTableModeSchema,
   normalizeAllowFrom,
   requireOpenAllowFrom,
 } from "../config/zod-schema.core.js";
+export { ToolPolicySchema } from "../config/zod-schema.agent-runtime.js";
 export type { RuntimeEnv } from "../runtime.js";
 export type { WizardPrompter } from "../wizard/prompts.js";
 export { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
@@ -104,8 +110,10 @@ export { SILENT_REPLY_TOKEN, isSilentReplyText } from "../auto-reply/tokens.js";
 export {
   buildPendingHistoryContextFromMap,
   clearHistoryEntries,
+  clearHistoryEntriesIfEnabled,
   DEFAULT_GROUP_HISTORY_LIMIT,
   recordPendingHistoryEntry,
+  recordPendingHistoryEntryIfEnabled,
 } from "../auto-reply/reply/history.js";
 export type { HistoryEntry } from "../auto-reply/reply/history.js";
 export { mergeAllowlist, summarizeMapping } from "../channels/allowlists/resolve-utils.js";
@@ -113,9 +121,23 @@ export {
   resolveMentionGating,
   resolveMentionGatingWithBypass,
 } from "../channels/mention-gating.js";
+export type {
+  AckReactionGateParams,
+  AckReactionScope,
+  WhatsAppAckReactionMode,
+} from "../channels/ack-reactions.js";
+export {
+  removeAckReactionAfterReply,
+  shouldAckReaction,
+  shouldAckReactionForWhatsApp,
+} from "../channels/ack-reactions.js";
+export { createTypingCallbacks } from "../channels/typing.js";
+export { createReplyPrefixContext } from "../channels/reply-prefix.js";
+export { logAckFailure, logInboundDrop, logTypingFailure } from "../channels/logging.js";
 export { resolveChannelMediaMaxBytes } from "../channels/plugins/media-limits.js";
 export type { NormalizedLocation } from "../channels/location.js";
 export { formatLocationText, toLocationContext } from "../channels/location.js";
+export { resolveControlCommandGate } from "../channels/command-gating.js";
 export {
   resolveBlueBubblesGroupRequireMention,
   resolveDiscordGroupRequireMention,
@@ -123,7 +145,14 @@ export {
   resolveSlackGroupRequireMention,
   resolveTelegramGroupRequireMention,
   resolveWhatsAppGroupRequireMention,
+  resolveBlueBubblesGroupToolPolicy,
+  resolveDiscordGroupToolPolicy,
+  resolveIMessageGroupToolPolicy,
+  resolveSlackGroupToolPolicy,
+  resolveTelegramGroupToolPolicy,
+  resolveWhatsAppGroupToolPolicy,
 } from "../channels/plugins/group-mentions.js";
+export { recordInboundSession } from "../channels/session.js";
 export {
   buildChannelKeyCandidates,
   normalizeChannelSlug,
@@ -206,6 +235,8 @@ export type {
   DiagnosticWebhookProcessedEvent,
   DiagnosticWebhookReceivedEvent,
 } from "../infra/diagnostic-events.js";
+export { detectMime, extensionForMime, getFileExtension } from "../media/mime.js";
+export { extractOriginalFilename } from "../media/store.js";
 
 // Channel: Discord
 export {
@@ -228,6 +259,7 @@ export {
   listSlackAccountIds,
   resolveDefaultSlackAccountId,
   resolveSlackAccount,
+  resolveSlackReplyToMode,
   type ResolvedSlackAccount,
 } from "../slack/accounts.js";
 export { slackOnboardingAdapter } from "../channels/plugins/onboarding/slack.js";
@@ -235,6 +267,7 @@ export {
   looksLikeSlackTargetId,
   normalizeSlackMessagingTarget,
 } from "../channels/plugins/normalize/slack.js";
+export { buildSlackThreadingToolContext } from "../slack/threading-tool-context.js";
 
 // Channel: Telegram
 export {
@@ -281,3 +314,6 @@ export { collectWhatsAppStatusIssues } from "../channels/plugins/status-issues/w
 
 // Channel: BlueBubbles
 export { collectBlueBubblesStatusIssues } from "../channels/plugins/status-issues/bluebubbles.js";
+
+// Media utilities
+export { loadWebMedia, type WebMediaResult } from "../web/media.js";

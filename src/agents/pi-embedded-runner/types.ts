@@ -59,6 +59,7 @@ export type EmbeddedPiCompactResult = {
     summary: string;
     firstKeptEntryId: string;
     tokensBefore: number;
+    tokensAfter?: number;
     details?: unknown;
   };
 };
@@ -76,6 +77,6 @@ export type EmbeddedSandboxInfo = {
   allowedControlPorts?: number[];
   elevated?: {
     allowed: boolean;
-    defaultLevel: "on" | "off";
+    defaultLevel: "on" | "off" | "ask" | "full";
   };
 };

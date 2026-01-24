@@ -18,6 +18,7 @@ public struct ConnectParams: Codable, Sendable {
     public let caps: [String]?
     public let commands: [String]?
     public let permissions: [String: AnyCodable]?
+    public let pathenv: String?
     public let role: String?
     public let scopes: [String]?
     public let device: [String: AnyCodable]?
@@ -32,6 +33,7 @@ public struct ConnectParams: Codable, Sendable {
         caps: [String]?,
         commands: [String]?,
         permissions: [String: AnyCodable]?,
+        pathenv: String?,
         role: String?,
         scopes: [String]?,
         device: [String: AnyCodable]?,
@@ -45,6 +47,7 @@ public struct ConnectParams: Codable, Sendable {
         self.caps = caps
         self.commands = commands
         self.permissions = permissions
+        self.pathenv = pathenv
         self.role = role
         self.scopes = scopes
         self.device = device
@@ -59,6 +62,7 @@ public struct ConnectParams: Codable, Sendable {
         case caps
         case commands
         case permissions
+        case pathenv = "pathEnv"
         case role
         case scopes
         case device
@@ -381,6 +385,7 @@ public struct SendParams: Codable, Sendable {
     public let to: String
     public let message: String
     public let mediaurl: String?
+    public let mediaurls: [String]?
     public let gifplayback: Bool?
     public let channel: String?
     public let accountid: String?
@@ -391,6 +396,7 @@ public struct SendParams: Codable, Sendable {
         to: String,
         message: String,
         mediaurl: String?,
+        mediaurls: [String]?,
         gifplayback: Bool?,
         channel: String?,
         accountid: String?,
@@ -400,6 +406,7 @@ public struct SendParams: Codable, Sendable {
         self.to = to
         self.message = message
         self.mediaurl = mediaurl
+        self.mediaurls = mediaurls
         self.gifplayback = gifplayback
         self.channel = channel
         self.accountid = accountid
@@ -410,6 +417,7 @@ public struct SendParams: Codable, Sendable {
         case to
         case message
         case mediaurl = "mediaUrl"
+        case mediaurls = "mediaUrls"
         case gifplayback = "gifPlayback"
         case channel
         case accountid = "accountId"
@@ -474,6 +482,9 @@ public struct AgentParams: Codable, Sendable {
     public let accountid: String?
     public let replyaccountid: String?
     public let threadid: String?
+    public let groupid: String?
+    public let groupchannel: String?
+    public let groupspace: String?
     public let timeout: Int?
     public let lane: String?
     public let extrasystemprompt: String?
@@ -496,6 +507,9 @@ public struct AgentParams: Codable, Sendable {
         accountid: String?,
         replyaccountid: String?,
         threadid: String?,
+        groupid: String?,
+        groupchannel: String?,
+        groupspace: String?,
         timeout: Int?,
         lane: String?,
         extrasystemprompt: String?,
@@ -517,6 +531,9 @@ public struct AgentParams: Codable, Sendable {
         self.accountid = accountid
         self.replyaccountid = replyaccountid
         self.threadid = threadid
+        self.groupid = groupid
+        self.groupchannel = groupchannel
+        self.groupspace = groupspace
         self.timeout = timeout
         self.lane = lane
         self.extrasystemprompt = extrasystemprompt
@@ -539,12 +556,53 @@ public struct AgentParams: Codable, Sendable {
         case accountid = "accountId"
         case replyaccountid = "replyAccountId"
         case threadid = "threadId"
+        case groupid = "groupId"
+        case groupchannel = "groupChannel"
+        case groupspace = "groupSpace"
         case timeout
         case lane
         case extrasystemprompt = "extraSystemPrompt"
         case idempotencykey = "idempotencyKey"
         case label
         case spawnedby = "spawnedBy"
+    }
+}
+
+public struct AgentIdentityParams: Codable, Sendable {
+    public let agentid: String?
+    public let sessionkey: String?
+
+    public init(
+        agentid: String?,
+        sessionkey: String?
+    ) {
+        self.agentid = agentid
+        self.sessionkey = sessionkey
+    }
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+        case sessionkey = "sessionKey"
+    }
+}
+
+public struct AgentIdentityResult: Codable, Sendable {
+    public let agentid: String
+    public let name: String?
+    public let avatar: String?
+
+    public init(
+        agentid: String,
+        name: String?,
+        avatar: String?
+    ) {
+        self.agentid = agentid
+        self.name = name
+        self.avatar = avatar
+    }
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+        case name
+        case avatar
     }
 }
 
@@ -880,6 +938,27 @@ public struct SessionsListParams: Codable, Sendable {
         case spawnedby = "spawnedBy"
         case agentid = "agentId"
         case search
+    }
+}
+
+public struct SessionsPreviewParams: Codable, Sendable {
+    public let keys: [String]
+    public let limit: Int?
+    public let maxchars: Int?
+
+    public init(
+        keys: [String],
+        limit: Int?,
+        maxchars: Int?
+    ) {
+        self.keys = keys
+        self.limit = limit
+        self.maxchars = maxchars
+    }
+    private enum CodingKeys: String, CodingKey {
+        case keys
+        case limit
+        case maxchars = "maxChars"
     }
 }
 
@@ -1443,17 +1522,21 @@ public struct WebLoginWaitParams: Codable, Sendable {
 public struct AgentSummary: Codable, Sendable {
     public let id: String
     public let name: String?
+    public let identity: [String: AnyCodable]?
 
     public init(
         id: String,
-        name: String?
+        name: String?,
+        identity: [String: AnyCodable]?
     ) {
         self.id = id
         self.name = name
+        self.identity = identity
     }
     private enum CodingKeys: String, CodingKey {
         case id
         case name
+        case identity
     }
 }
 
@@ -1904,27 +1987,30 @@ public struct ExecApprovalsSnapshot: Codable, Sendable {
 }
 
 public struct ExecApprovalRequestParams: Codable, Sendable {
+    public let id: String?
     public let command: String
-    public let cwd: String?
-    public let host: String?
-    public let security: String?
-    public let ask: String?
-    public let agentid: String?
-    public let resolvedpath: String?
-    public let sessionkey: String?
+    public let cwd: AnyCodable?
+    public let host: AnyCodable?
+    public let security: AnyCodable?
+    public let ask: AnyCodable?
+    public let agentid: AnyCodable?
+    public let resolvedpath: AnyCodable?
+    public let sessionkey: AnyCodable?
     public let timeoutms: Int?
 
     public init(
+        id: String?,
         command: String,
-        cwd: String?,
-        host: String?,
-        security: String?,
-        ask: String?,
-        agentid: String?,
-        resolvedpath: String?,
-        sessionkey: String?,
+        cwd: AnyCodable?,
+        host: AnyCodable?,
+        security: AnyCodable?,
+        ask: AnyCodable?,
+        agentid: AnyCodable?,
+        resolvedpath: AnyCodable?,
+        sessionkey: AnyCodable?,
         timeoutms: Int?
     ) {
+        self.id = id
         self.command = command
         self.cwd = cwd
         self.host = host
@@ -1936,6 +2022,7 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
         self.timeoutms = timeoutms
     }
     private enum CodingKeys: String, CodingKey {
+        case id
         case command
         case cwd
         case host

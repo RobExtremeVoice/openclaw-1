@@ -13,7 +13,7 @@ COPY scripts ./scripts
 COPY docs ./docs
 COPY skills ./skills
 COPY patches ./patches
-COPY extensions ./extensions
+COPY extensions/memory-core ./extensions/memory-core
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build

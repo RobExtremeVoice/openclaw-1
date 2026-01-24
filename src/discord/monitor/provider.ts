@@ -15,6 +15,7 @@ import type { ClawdbotConfig, ReplyToMode } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import { danger, logVerbose, shouldLogVerbose, warn } from "../../globals.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { createDiscordRetryRunner } from "../../infra/retry-policy.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { resolveDiscordAccount } from "../accounts.js";
@@ -60,6 +61,22 @@ function summarizeGuilds(entries?: Record<string, unknown>) {
   const sample = keys.slice(0, 4);
   const suffix = keys.length > sample.length ? ` (+${keys.length - sample.length})` : "";
   return `${sample.join(", ")}${suffix}`;
+}
+
+async function deployDiscordCommands(params: {
+  client: Client;
+  runtime: RuntimeEnv;
+  enabled: boolean;
+}) {
+  if (!params.enabled) return;
+  const runWithRetry = createDiscordRetryRunner({ verbose: shouldLogVerbose() });
+  try {
+    await runWithRetry(() => params.client.handleDeployRequest(), "command deploy");
+  } catch (err) {
+    params.runtime.error?.(
+      danger(`discord: failed to deploy native commands: ${formatErrorMessage(err)}`),
+    );
+  }
 }
 
 export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
@@ -329,11 +346,13 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
   const maxDiscordCommands = 100;
   let skillCommands =
     nativeEnabled && nativeSkillsEnabled ? listSkillCommandsForAgents({ cfg }) : [];
-  let commandSpecs = nativeEnabled ? listNativeCommandSpecsForConfig(cfg, { skillCommands }) : [];
+  let commandSpecs = nativeEnabled
+    ? listNativeCommandSpecsForConfig(cfg, { skillCommands, provider: "discord" })
+    : [];
   const initialCommandCount = commandSpecs.length;
   if (nativeEnabled && nativeSkillsEnabled && commandSpecs.length > maxDiscordCommands) {
     skillCommands = [];
-    commandSpecs = listNativeCommandSpecsForConfig(cfg, { skillCommands: [] });
+    commandSpecs = listNativeCommandSpecsForConfig(cfg, { skillCommands: [], provider: "discord" });
     runtime.log?.(
       warn(
         `discord: ${initialCommandCount} commands exceeds limit; removing per-skill commands and keeping /skill.`,
@@ -365,7 +384,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       clientId: applicationId,
       publicKey: "a",
       token,
-      autoDeploy: nativeEnabled,
+      autoDeploy: false,
     },
     {
       commands,
@@ -395,6 +414,8 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       }),
     ],
   );
+
+  await deployDiscordCommands({ client, runtime, enabled: nativeEnabled });
 
   const logger = createSubsystemLogger("discord/monitor");
   const guildHistories = new Map<string, HistoryEntry[]>();

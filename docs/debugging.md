@@ -70,7 +70,7 @@ What this does:
    - `CLAWDBOT_PROFILE=dev`
    - `CLAWDBOT_STATE_DIR=~/.clawdbot-dev`
    - `CLAWDBOT_CONFIG_PATH=~/.clawdbot-dev/clawdbot.json`
-   - `CLAWDBOT_GATEWAY_PORT=19001` (bridge/canvas/browser shift accordingly)
+   - `CLAWDBOT_GATEWAY_PORT=19001` (browser/canvas shift accordingly)
 
 2) **Dev bootstrap** (`gateway --dev`)
    - Writes a minimal config if missing (`gateway.mode=local`, bind loopback).
@@ -100,7 +100,7 @@ CLAWDBOT_PROFILE=dev clawdbot gateway --dev --reset
 Tip: if a non‑dev gateway is already running (launchd/systemd), stop it first:
 
 ```bash
-clawdbot daemon stop
+clawdbot gateway stop
 ```
 
 ## Raw stream logging (Clawdbot)

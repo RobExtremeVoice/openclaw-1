@@ -410,6 +410,21 @@ function parseButtonsParam(params: Record<string, unknown>): void {
   }
 }
 
+function parseCardParam(params: Record<string, unknown>): void {
+  const raw = params.card;
+  if (typeof raw !== "string") return;
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    delete params.card;
+    return;
+  }
+  try {
+    params.card = JSON.parse(trimmed) as unknown;
+  } catch {
+    throw new Error("--card must be valid JSON");
+  }
+}
+
 async function resolveChannel(cfg: ClawdbotConfig, params: Record<string, unknown>) {
   const channelHint = readStringParam(params, "channel");
   const selection = await resolveMessageChannelSelection({
@@ -558,19 +573,37 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
   const { cfg, params, channel, accountId, dryRun, gateway, input } = ctx;
   const action: ChannelMessageActionName = "send";
   const to = readStringParam(params, "to", { required: true });
-  const mediaHint = readStringParam(params, "media", { trim: false });
+  // Support media, path, and filePath parameters for attachments
+  const mediaHint =
+    readStringParam(params, "media", { trim: false }) ??
+    readStringParam(params, "path", { trim: false }) ??
+    readStringParam(params, "filePath", { trim: false });
+  const hasCard = params.card != null && typeof params.card === "object";
   let message =
     readStringParam(params, "message", {
-      required: !mediaHint,
+      required: !mediaHint && !hasCard,
       allowEmpty: true,
     }) ?? "";
 
   const parsed = parseReplyDirectives(message);
+  const mergedMediaUrls: string[] = [];
+  const seenMedia = new Set<string>();
+  const pushMedia = (value?: string | null) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return;
+    if (seenMedia.has(trimmed)) return;
+    seenMedia.add(trimmed);
+    mergedMediaUrls.push(trimmed);
+  };
+  pushMedia(mediaHint);
+  for (const url of parsed.mediaUrls ?? []) pushMedia(url);
+  pushMedia(parsed.mediaUrl);
   message = parsed.text;
   params.message = message;
   if (!params.replyTo && parsed.replyToId) params.replyTo = parsed.replyToId;
   if (!params.media) {
-    params.media = parsed.mediaUrls?.[0] || parsed.mediaUrl || undefined;
+    // Use path/filePath if media not set, then fall back to parsed directives
+    params.media = mergedMediaUrls[0] || undefined;
   }
 
   message = await maybeApplyCrossContextMarker({
@@ -609,6 +642,7 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     to,
     message,
     mediaUrl: mediaUrl || undefined,
+    mediaUrls: mergedMediaUrls.length ? mergedMediaUrls : undefined,
     gifPlayback,
     bestEffort: bestEffort ?? undefined,
   });
@@ -729,6 +763,7 @@ export async function runMessageAction(
   const cfg = input.cfg;
   const params = { ...input.params };
   parseButtonsParam(params);
+  parseCardParam(params);
 
   const action = input.action;
   if (action === "broadcast") {
@@ -781,6 +816,9 @@ export async function runMessageAction(
 
   const channel = await resolveChannel(cfg, params);
   const accountId = readStringParam(params, "accountId") ?? input.defaultAccountId;
+  if (accountId) {
+    params.accountId = accountId;
+  }
   const dryRun = Boolean(input.dryRun ?? readBooleanParam(params, "dryRun"));
 
   await hydrateSendAttachmentParams({

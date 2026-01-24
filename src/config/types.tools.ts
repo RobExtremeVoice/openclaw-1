@@ -120,6 +120,11 @@ export type ToolPolicyConfig = {
   profile?: ToolProfileId;
 };
 
+export type GroupToolPolicyConfig = {
+  allow?: string[];
+  deny?: string[];
+};
+
 export type ExecToolConfig = {
   /** Exec host routing (default: sandbox). */
   host?: "sandbox" | "gateway" | "node";
@@ -131,10 +136,14 @@ export type ExecToolConfig = {
   node?: string;
   /** Directories to prepend to PATH when running exec (gateway/sandbox). */
   pathPrepend?: string[];
+  /** Safe stdin-only binaries that can run without allowlist entries. */
+  safeBins?: string[];
   /** Default time (ms) before an exec command auto-backgrounds. */
   backgroundMs?: number;
   /** Default timeout (seconds) before auto-killing exec commands. */
   timeoutSec?: number;
+  /** Emit a running notice (ms) when approval-backed exec runs long (default: 10000, 0 = off). */
+  approvalRunningNoticeMs?: number;
   /** How long to keep finished sessions in memory (ms). */
   cleanupMs?: number;
   /** Emit a system event and heartbeat when a backgrounded exec exits. */

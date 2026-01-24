@@ -3,8 +3,21 @@ import { loadAndMaybeMigrateDoctorConfig } from "../../commands/doctor-config-fl
 import { colorize, isRich, theme } from "../../terminal/theme.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { formatCliCommand } from "../command-format.js";
+import { shortenHomePath } from "../../utils.js";
 
-const ALLOWED_INVALID_COMMANDS = new Set(["doctor", "logs", "health", "help", "status", "service"]);
+const ALLOWED_INVALID_COMMANDS = new Set(["doctor", "logs", "health", "help", "status"]);
+const ALLOWED_INVALID_GATEWAY_SUBCOMMANDS = new Set([
+  "status",
+  "probe",
+  "health",
+  "discover",
+  "call",
+  "install",
+  "uninstall",
+  "start",
+  "stop",
+  "restart",
+]);
 let didRunDoctorConfigFlow = false;
 
 function formatConfigIssues(issues: Array<{ path: string; message: string }>): string[] {
@@ -25,7 +38,13 @@ export async function ensureConfigReady(params: {
 
   const snapshot = await readConfigFileSnapshot();
   const commandName = params.commandPath?.[0];
-  const allowInvalid = commandName ? ALLOWED_INVALID_COMMANDS.has(commandName) : false;
+  const subcommandName = params.commandPath?.[1];
+  const allowInvalid = commandName
+    ? ALLOWED_INVALID_COMMANDS.has(commandName) ||
+      (commandName === "gateway" &&
+        subcommandName &&
+        ALLOWED_INVALID_GATEWAY_SUBCOMMANDS.has(subcommandName))
+    : false;
   const issues = snapshot.exists && !snapshot.valid ? formatConfigIssues(snapshot.issues) : [];
   const legacyIssues =
     snapshot.legacyIssues.length > 0
@@ -42,7 +61,7 @@ export async function ensureConfigReady(params: {
   const commandText = (value: string) => colorize(rich, theme.command, value);
 
   params.runtime.error(heading("Config invalid"));
-  params.runtime.error(`${muted("File:")} ${muted(snapshot.path)}`);
+  params.runtime.error(`${muted("File:")} ${muted(shortenHomePath(snapshot.path))}`);
   if (issues.length > 0) {
     params.runtime.error(muted("Problem:"));
     params.runtime.error(issues.map((issue) => `  ${error(issue)}`).join("\n"));

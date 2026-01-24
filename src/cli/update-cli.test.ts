@@ -5,6 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UpdateRunResult } from "../infra/update-runner.js";
 
+const confirm = vi.fn();
+const select = vi.fn();
+const spinner = vi.fn(() => ({ start: vi.fn(), stop: vi.fn() }));
+const isCancel = (value: unknown) => value === "cancel";
+
+vi.mock("@clack/prompts", () => ({
+  confirm,
+  select,
+  isCancel,
+  spinner,
+}));
+
 // Mock the update-runner module
 vi.mock("../infra/update-runner.js", () => ({
   runGatewayUpdate: vi.fn(),
@@ -128,9 +140,11 @@ describe("update-cli", () => {
   });
 
   it("exports updateCommand and registerUpdateCli", async () => {
-    const { updateCommand, registerUpdateCli } = await import("./update-cli.js");
+    const { updateCommand, registerUpdateCli, updateWizardCommand } =
+      await import("./update-cli.js");
     expect(typeof updateCommand).toBe("function");
     expect(typeof registerUpdateCli).toBe("function");
+    expect(typeof updateWizardCommand).toBe("function");
   }, 20_000);
 
   it("updateCommand runs update and outputs result", async () => {
@@ -236,7 +250,7 @@ describe("update-cli", () => {
         durationMs: 100,
       });
 
-      await updateCommand({});
+      await updateCommand({ yes: true });
 
       const call = vi.mocked(runGatewayUpdate).mock.calls[0]?.[0];
       expect(call?.channel).toBe("stable");
@@ -273,7 +287,7 @@ describe("update-cli", () => {
     try {
       await fs.writeFile(
         path.join(tempDir, "package.json"),
-        JSON.stringify({ name: "clawdbot", version: "2026.1.18-1" }),
+        JSON.stringify({ name: "clawdbot", version: "1.0.0" }),
         "utf-8",
       );
 
@@ -302,7 +316,7 @@ describe("update-cli", () => {
       });
       vi.mocked(resolveNpmChannelTag).mockResolvedValue({
         tag: "latest",
-        version: "2026.1.20-1",
+        version: "1.2.3-1",
       });
       vi.mocked(runGatewayUpdate).mockResolvedValue({
         status: "ok",
@@ -401,7 +415,7 @@ describe("update-cli", () => {
     expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
   });
 
-  it("updateCommand restarts daemon when --restart is set", async () => {
+  it("updateCommand restarts daemon by default", async () => {
     const { runGatewayUpdate } = await import("../infra/update-runner.js");
     const { runDaemonRestart } = await import("./daemon-cli.js");
     const { updateCommand } = await import("./update-cli.js");
@@ -416,9 +430,28 @@ describe("update-cli", () => {
     vi.mocked(runGatewayUpdate).mockResolvedValue(mockResult);
     vi.mocked(runDaemonRestart).mockResolvedValue(true);
 
-    await updateCommand({ restart: true });
+    await updateCommand({});
 
     expect(runDaemonRestart).toHaveBeenCalled();
+  });
+
+  it("updateCommand skips restart when --no-restart is set", async () => {
+    const { runGatewayUpdate } = await import("../infra/update-runner.js");
+    const { runDaemonRestart } = await import("./daemon-cli.js");
+    const { updateCommand } = await import("./update-cli.js");
+
+    const mockResult: UpdateRunResult = {
+      status: "ok",
+      mode: "git",
+      steps: [],
+      durationMs: 100,
+    };
+
+    vi.mocked(runGatewayUpdate).mockResolvedValue(mockResult);
+
+    await updateCommand({ restart: false });
+
+    expect(runDaemonRestart).not.toHaveBeenCalled();
   });
 
   it("updateCommand skips success message when restart does not run", async () => {
@@ -582,6 +615,63 @@ describe("update-cli", () => {
       );
       expect(runGatewayUpdate).toHaveBeenCalled();
     } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("updateWizardCommand requires a TTY", async () => {
+    const { defaultRuntime } = await import("../runtime.js");
+    const { updateWizardCommand } = await import("./update-cli.js");
+
+    setTty(false);
+    vi.mocked(defaultRuntime.error).mockClear();
+    vi.mocked(defaultRuntime.exit).mockClear();
+
+    await updateWizardCommand({});
+
+    expect(defaultRuntime.error).toHaveBeenCalledWith(
+      expect.stringContaining("Update wizard requires a TTY"),
+    );
+    expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("updateWizardCommand offers dev checkout and forwards selections", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-update-wizard-"));
+    const previousGitDir = process.env.CLAWDBOT_GIT_DIR;
+    try {
+      setTty(true);
+      process.env.CLAWDBOT_GIT_DIR = tempDir;
+
+      const { checkUpdateStatus } = await import("../infra/update-check.js");
+      const { runGatewayUpdate } = await import("../infra/update-runner.js");
+      const { updateWizardCommand } = await import("./update-cli.js");
+
+      vi.mocked(checkUpdateStatus).mockResolvedValue({
+        root: "/test/path",
+        installKind: "package",
+        packageManager: "npm",
+        deps: {
+          manager: "npm",
+          status: "ok",
+          lockfilePath: null,
+          markerPath: null,
+        },
+      });
+      select.mockResolvedValue("dev");
+      confirm.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      vi.mocked(runGatewayUpdate).mockResolvedValue({
+        status: "ok",
+        mode: "git",
+        steps: [],
+        durationMs: 100,
+      });
+
+      await updateWizardCommand({});
+
+      const call = vi.mocked(runGatewayUpdate).mock.calls[0]?.[0];
+      expect(call?.channel).toBe("dev");
+    } finally {
+      process.env.CLAWDBOT_GIT_DIR = previousGitDir;
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });

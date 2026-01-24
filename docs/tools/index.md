@@ -22,6 +22,11 @@ You can globally allow/deny tools via `tools.allow` / `tools.deny` in `clawdbot.
 }
 ```
 
+Notes:
+- Matching is case-insensitive.
+- `*` wildcards are supported (`"*"` means all tools).
+- If `tools.allow` only references unknown or unloaded plugin tool names, Clawdbot logs a warning and ignores the allowlist so core tools stay available.
+
 ## Tool profiles (base allowlist)
 
 `tools.profile` sets a **base tool allowlist** before `tools.allow`/`tools.deny`.
@@ -154,6 +159,10 @@ See [Plugins](/plugin) for install + config, and [Skills](/tools/skills) for how
 tool usage guidance is injected into prompts. Some plugins ship their own skills
 alongside tools (for example, the voice-call plugin).
 
+Optional plugin tools:
+- [Lobster](/tools/lobster): typed workflow runtime with resumable approvals (requires the Lobster CLI on the gateway host).
+- [LLM Task](/tools/llm-task): JSON-only LLM step for structured workflow output (optional schema validation).
+
 ## Tool inventory
 
 ### `apply_patch`
@@ -181,7 +190,7 @@ Notes:
 - If `process` is disallowed, `exec` runs synchronously and ignores `yieldMs`/`background`.
 - `elevated` is gated by `tools.elevated` plus any `agents.list[].tools.elevated` override (both must allow) and is an alias for `host=gateway` + `security=full`.
 - `elevated` only changes behavior when the agent is sandboxed (otherwise it’s a no-op).
-- `host=node` can target a macOS companion app or a headless node host (`clawdbot node start`).
+- `host=node` can target a macOS companion app or a headless node host (`clawdbot node run`).
 - gateway/node approvals and allowlists: [Exec approvals](/tools/exec-approvals).
 
 ### `process`
@@ -319,7 +328,7 @@ Notes:
 Send messages and channel actions across Discord/Slack/Telegram/WhatsApp/Signal/iMessage/MS Teams.
 
 Core actions:
-- `send` (text + optional media)
+- `send` (text + optional media; MS Teams also supports `card` for Adaptive Cards)
 - `poll` (WhatsApp/Discord/MS Teams polls)
 - `react` / `reactions` / `read` / `edit` / `delete`
 - `pin` / `unpin` / `list-pins`

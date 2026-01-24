@@ -81,6 +81,10 @@ async function resolveContextReport(
         workspaceDir,
         sessionKey: params.sessionKey,
         messageProvider: params.command.channel,
+        groupId: params.sessionEntry?.groupId ?? undefined,
+        groupChannel: params.sessionEntry?.groupChannel ?? undefined,
+        groupSpace: params.sessionEntry?.space ?? undefined,
+        spawnedBy: params.sessionEntry?.spawnedBy ?? undefined,
         modelProvider: params.provider,
         modelId: params.model,
       });
@@ -102,6 +106,8 @@ async function resolveContextReport(
   const { runtimeInfo, userTimezone, userTime, userTimeFormat } = buildSystemPromptParams({
     config: params.cfg,
     agentId: sessionAgentId,
+    workspaceDir,
+    cwd: process.cwd(),
     runtime: {
       host: "unknown",
       os: "unknown",
@@ -118,7 +124,7 @@ async function resolveContextReport(
         workspaceAccess: "rw" as const,
         elevated: {
           allowed: params.elevated.allowed,
-          defaultLevel: params.resolvedElevatedLevel === "off" ? ("off" as const) : ("on" as const),
+          defaultLevel: (params.resolvedElevatedLevel ?? "off") as "on" | "off" | "ask" | "full",
         },
       }
     : { enabled: false };

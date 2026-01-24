@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import { resolveChannelMediaMaxBytes, type ClawdbotConfig } from "clawdbot/plugin-sdk";
 
 import { sendBlueBubblesAttachment } from "./attachments.js";
-import { sendMessageBlueBubbles } from "./send.js";
+import { resolveBlueBubblesMessageId } from "./monitor.js";
 import { getBlueBubblesRuntime } from "./runtime.js";
+import { sendMessageBlueBubbles } from "./send.js";
 
 const HTTP_URL_RE = /^https?:\/\//i;
 const MB = 1024 * 1024;
@@ -58,6 +59,7 @@ export async function sendBlueBubblesMedia(params: {
   caption?: string;
   replyToId?: string | null;
   accountId?: string;
+  asVoice?: boolean;
 }) {
   const {
     cfg,
@@ -70,6 +72,7 @@ export async function sendBlueBubblesMedia(params: {
     caption,
     replyToId,
     accountId,
+    asVoice,
   } = params;
   const core = getBlueBubblesRuntime();
   const maxBytes = resolveChannelMediaMaxBytes({
@@ -134,12 +137,18 @@ export async function sendBlueBubblesMedia(params: {
     }
   }
 
+  // Resolve short ID (e.g., "5") to full UUID
+  const replyToMessageGuid = replyToId?.trim()
+    ? resolveBlueBubblesMessageId(replyToId.trim(), { requireKnownShortId: true })
+    : undefined;
+
   const attachmentResult = await sendBlueBubblesAttachment({
     to,
     buffer,
     filename: resolvedFilename ?? "attachment",
     contentType: resolvedContentType ?? undefined,
-    replyToMessageGuid: replyToId?.trim() || undefined,
+    replyToMessageGuid,
+    asVoice,
     opts: {
       cfg,
       accountId,
@@ -151,7 +160,7 @@ export async function sendBlueBubblesMedia(params: {
     await sendMessageBlueBubbles(to, trimmedCaption, {
       cfg,
       accountId,
-      replyToMessageGuid: replyToId?.trim() || undefined,
+      replyToMessageGuid,
     });
   }
 

@@ -2,7 +2,10 @@ import { ChannelType, MessageType, type User } from "@buape/carbon";
 
 import { hasControlCommand } from "../../auto-reply/command-detection.js";
 import { shouldHandleTextCommands } from "../../auto-reply/commands-registry.js";
-import { recordPendingHistoryEntry, type HistoryEntry } from "../../auto-reply/reply/history.js";
+import {
+  recordPendingHistoryEntryIfEnabled,
+  type HistoryEntry,
+} from "../../auto-reply/reply/history.js";
 import { buildMentionRegexes, matchesMentionPatterns } from "../../auto-reply/reply/mentions.js";
 import { logVerbose, shouldLogVerbose } from "../../globals.js";
 import { recordChannelActivity } from "../../infra/channel-activity.js";
@@ -15,8 +18,10 @@ import {
 } from "../../pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
 import { resolveMentionGatingWithBypass } from "../../channels/mention-gating.js";
+import { formatAllowlistMatchMeta } from "../../channels/allowlist-match.js";
 import { sendMessageDiscord } from "../send.js";
 import { resolveControlCommandGate } from "../../channels/command-gating.js";
+import { logInboundDrop } from "../../channels/logging.js";
 import {
   allowListMatches,
   isDiscordGroupAllowedByPolicy,
@@ -100,9 +105,7 @@ export async function preflightDiscordMessage(
             },
           })
         : { allowed: false };
-      const allowMatchMeta = `matchKey=${allowMatch.matchKey ?? "none"} matchSource=${
-        allowMatch.matchSource ?? "none"
-      }`;
+      const allowMatchMeta = formatAllowlistMatchMeta(allowMatch);
       const permitted = allowMatch.allowed;
       if (!permitted) {
         commandAuthorized = false;
@@ -262,9 +265,7 @@ export async function preflightDiscordMessage(
         scope: threadChannel ? "thread" : "channel",
       })
     : null;
-  const channelMatchMeta = `matchKey=${channelConfig?.matchKey ?? "none"} matchSource=${
-    channelConfig?.matchSource ?? "none"
-  }`;
+  const channelMatchMeta = formatAllowlistMatchMeta(channelConfig);
   if (isGuildMessage && channelConfig?.enabled === false) {
     logVerbose(
       `Blocked discord channel ${message.channelId} (channel disabled, ${channelMatchMeta})`,
@@ -331,9 +332,12 @@ export async function preflightDiscordMessage(
         } satisfies HistoryEntry)
       : undefined;
 
+  const threadOwnerId = threadChannel ? (threadChannel.ownerId ?? channelInfo?.ownerId) : undefined;
   const shouldRequireMention = resolveDiscordShouldRequireMention({
     isGuildMessage,
     isThread: Boolean(threadChannel),
+    botId,
+    threadOwnerId,
     channelConfig,
     guildInfo,
   });
@@ -382,7 +386,12 @@ export async function preflightDiscordMessage(
     commandAuthorized = commandGate.commandAuthorized;
 
     if (commandGate.shouldBlock) {
-      logVerbose(`Blocked discord control command from unauthorized sender ${author.id}`);
+      logInboundDrop({
+        log: logVerbose,
+        channel: "discord",
+        reason: "control command (unauthorized)",
+        target: author.id,
+      });
       return null;
     }
   }
@@ -410,14 +419,12 @@ export async function preflightDiscordMessage(
         },
         "discord: skipping guild message",
       );
-      if (historyEntry && params.historyLimit > 0) {
-        recordPendingHistoryEntry({
-          historyMap: params.guildHistories,
-          historyKey: message.channelId,
-          limit: params.historyLimit,
-          entry: historyEntry,
-        });
-      }
+      recordPendingHistoryEntryIfEnabled({
+        historyMap: params.guildHistories,
+        historyKey: message.channelId,
+        limit: params.historyLimit,
+        entry: historyEntry ?? null,
+      });
       return null;
     }
   }

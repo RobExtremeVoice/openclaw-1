@@ -24,7 +24,7 @@ capabilities to the agent as a node.
 ## Local vs remote mode
 
 - **Local** (default): the app attaches to a running local Gateway if present;
-  otherwise it enables the launchd service via `clawdbot daemon`.
+  otherwise it enables the launchd service via `clawdbot gateway install`.
 - **Remote**: the app connects to a Gateway over SSH/Tailscale and never starts
   a local process.
   The app starts the local **node host service** so the remote Gateway can reach this Mac.
@@ -43,7 +43,7 @@ launchctl bootout gui/$UID/com.clawdbot.gateway
 Replace the label with `com.clawdbot.<profile>` when running a named profile.
 
 If the LaunchAgent isn’t installed, enable it from the app or run
-`clawdbot daemon install`.
+`clawdbot gateway install`.
 
 ## Node capabilities (mac)
 
@@ -57,12 +57,12 @@ The macOS app presents itself as a node. Common commands:
 The node reports a `permissions` map so agents can decide what’s allowed.
 
 Node service + app IPC:
-- When the headless node service is running (remote mode), it connects to the Gateway WS as a node.
+- When the headless node host service is running (remote mode), it connects to the Gateway WS as a node.
 - `system.run` executes in the macOS app (UI/TCC context) over a local Unix socket; prompts + output stay in-app.
 
 Diagram (SCI):
 ```
-Gateway -> Bridge -> Node Service (TS)
+Gateway -> Node Service (WS)
                  |  IPC (UDS + token + HMAC + TTL)
                  v
              Mac App (UI + TCC + system.run)
@@ -99,7 +99,7 @@ Example:
 ```
 
 Notes:
-- `allowlist` entries are JSON-encoded argv arrays.
+- `allowlist` entries are glob patterns for resolved binary paths.
 - Choosing “Always Allow” in the prompt adds that command to the allowlist.
 - `system.run` environment overrides are filtered (drops `PATH`, `DYLD_*`, `LD_*`, `NODE_OPTIONS`, `PYTHON*`, `PERL*`, `RUBYOPT`) and then merged with the app’s environment.
 

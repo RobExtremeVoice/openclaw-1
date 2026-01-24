@@ -2,10 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { EventEmitter } from "node:events";
 
+import { removeAckReactionAfterReply, shouldAckReaction } from "clawdbot/plugin-sdk";
 import type { ClawdbotConfig, PluginRuntime } from "clawdbot/plugin-sdk";
 import {
   handleBlueBubblesWebhookRequest,
   registerBlueBubblesWebhookTarget,
+  resolveBlueBubblesMessageId,
+  _resetBlueBubblesShortIdState,
 } from "./monitor.js";
 import { setBlueBubblesRuntime } from "./runtime.js";
 import type { ResolvedBlueBubblesAccount } from "./accounts.js";
@@ -97,6 +100,8 @@ function createMockRuntime(): PluginRuntime {
         chunkText: vi.fn() as unknown as PluginRuntime["channel"]["text"]["chunkText"],
         resolveTextChunkLimit: vi.fn(() => 4000) as unknown as PluginRuntime["channel"]["text"]["resolveTextChunkLimit"],
         hasControlCommand: mockHasControlCommand as unknown as PluginRuntime["channel"]["text"]["hasControlCommand"],
+        resolveMarkdownTableMode: vi.fn(() => "code") as unknown as PluginRuntime["channel"]["text"]["resolveMarkdownTableMode"],
+        convertMarkdownTables: vi.fn((text: string) => text) as unknown as PluginRuntime["channel"]["text"]["convertMarkdownTables"],
       },
       reply: {
         dispatchReplyWithBufferedBlockDispatcher: mockDispatchReplyWithBufferedBlockDispatcher as unknown as PluginRuntime["channel"]["reply"]["dispatchReplyWithBufferedBlockDispatcher"],
@@ -124,12 +129,17 @@ function createMockRuntime(): PluginRuntime {
       session: {
         resolveStorePath: mockResolveStorePath as unknown as PluginRuntime["channel"]["session"]["resolveStorePath"],
         readSessionUpdatedAt: mockReadSessionUpdatedAt as unknown as PluginRuntime["channel"]["session"]["readSessionUpdatedAt"],
+        recordInboundSession: vi.fn() as unknown as PluginRuntime["channel"]["session"]["recordInboundSession"],
         recordSessionMetaFromInbound: vi.fn() as unknown as PluginRuntime["channel"]["session"]["recordSessionMetaFromInbound"],
         updateLastRoute: vi.fn() as unknown as PluginRuntime["channel"]["session"]["updateLastRoute"],
       },
       mentions: {
         buildMentionRegexes: mockBuildMentionRegexes as unknown as PluginRuntime["channel"]["mentions"]["buildMentionRegexes"],
         matchesMentionPatterns: mockMatchesMentionPatterns as unknown as PluginRuntime["channel"]["mentions"]["matchesMentionPatterns"],
+      },
+      reactions: {
+        shouldAckReaction,
+        removeAckReactionAfterReply,
       },
       groups: {
         resolveGroupPolicy: mockResolveGroupPolicy as unknown as PluginRuntime["channel"]["groups"]["resolveGroupPolicy"],
@@ -218,11 +228,19 @@ function createMockResponse(): ServerResponse & { body: string; statusCode: numb
   return res;
 }
 
+const flushAsync = async () => {
+  for (let i = 0; i < 2; i += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+};
+
 describe("BlueBubbles webhook monitor", () => {
   let unregister: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset short ID state between tests for predictable behavior
+    _resetBlueBubblesShortIdState();
     mockReadAllowFromStore.mockResolvedValue([]);
     mockUpsertPairingRequest.mockResolvedValue({ code: "TESTCODE", created: true });
     mockResolveRequireMention.mockReturnValue(false);
@@ -467,6 +485,98 @@ describe("BlueBubbles webhook monitor", () => {
 
       expect(handled).toBe(false);
     });
+
+    it("parses chatId when provided as a string (webhook variant)", async () => {
+      const { resolveChatGuidForTarget } = await import("./send.js");
+      vi.mocked(resolveChatGuidForTarget).mockClear();
+
+      const account = createMockAccount({ groupPolicy: "open" });
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello from group",
+          handle: { address: "+15551234567" },
+          isGroup: true,
+          isFromMe: false,
+          guid: "msg-1",
+          chatId: "123",
+          date: Date.now(),
+        },
+      };
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      expect(resolveChatGuidForTarget).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { kind: "chat_id", chatId: 123 },
+        }),
+      );
+    });
+
+    it("extracts chatGuid from nested chat object fields (webhook variant)", async () => {
+      const { sendMessageBlueBubbles, resolveChatGuidForTarget } = await import("./send.js");
+      vi.mocked(sendMessageBlueBubbles).mockClear();
+      vi.mocked(resolveChatGuidForTarget).mockClear();
+
+      mockDispatchReplyWithBufferedBlockDispatcher.mockImplementationOnce(async (params) => {
+        await params.dispatcherOptions.deliver({ text: "replying now" }, { kind: "final" });
+      });
+
+      const account = createMockAccount({ groupPolicy: "open" });
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello from group",
+          handle: { address: "+15551234567" },
+          isGroup: true,
+          isFromMe: false,
+          guid: "msg-1",
+          chat: { chatGuid: "iMessage;+;chat123456" },
+          date: Date.now(),
+        },
+      };
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      expect(resolveChatGuidForTarget).not.toHaveBeenCalled();
+      expect(sendMessageBlueBubbles).toHaveBeenCalledWith(
+        "chat_guid:iMessage;+;chat123456",
+        expect.any(String),
+        expect.any(Object),
+      );
+    });
   });
 
   describe("DM pairing behavior vs allowFrom", () => {
@@ -505,7 +615,7 @@ describe("BlueBubbles webhook monitor", () => {
       await handleBlueBubblesWebhookRequest(req, res);
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(res.statusCode).toBe(200);
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
@@ -544,7 +654,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(res.statusCode).toBe(200);
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
@@ -585,7 +695,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockUpsertPairingRequest).toHaveBeenCalled();
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
@@ -628,7 +738,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockUpsertPairingRequest).toHaveBeenCalled();
       // Should not send pairing reply since created=false
@@ -669,7 +779,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
     });
@@ -706,7 +816,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });
@@ -746,7 +856,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
     });
@@ -784,7 +894,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });
@@ -823,7 +933,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });
@@ -862,7 +972,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
     });
@@ -903,7 +1013,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
       const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
@@ -944,7 +1054,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });
@@ -982,7 +1092,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
     });
@@ -1025,7 +1135,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
       const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
@@ -1071,15 +1181,88 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
       const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
+      // ReplyToId is the full UUID since it wasn't previously cached
       expect(callArgs.ctx.ReplyToId).toBe("msg-0");
       expect(callArgs.ctx.ReplyToBody).toBe("original message");
       expect(callArgs.ctx.ReplyToSender).toBe("+15550000000");
-      expect(callArgs.ctx.Body).toContain("[Replying to +15550000000 id:msg-0]");
+      // Body uses just the ID (no sender) for token savings
+      expect(callArgs.ctx.Body).toContain("[Replying to id:msg-0]");
       expect(callArgs.ctx.Body).toContain("original message");
+    });
+
+    it("hydrates missing reply sender/body from the recent-message cache", async () => {
+      const account = createMockAccount({ dmPolicy: "open", groupPolicy: "open" });
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const chatGuid = "iMessage;+;chat-reply-cache";
+
+      const originalPayload = {
+        type: "new-message",
+        data: {
+          text: "original message (cached)",
+          handle: { address: "+15550000000" },
+          isGroup: true,
+          isFromMe: false,
+          guid: "cache-msg-0",
+          chatGuid,
+          date: Date.now(),
+        },
+      };
+
+      const originalReq = createMockRequest("POST", "/bluebubbles-webhook", originalPayload);
+      const originalRes = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(originalReq, originalRes);
+      await flushAsync();
+
+      // Only assert the reply message behavior below.
+      mockDispatchReplyWithBufferedBlockDispatcher.mockClear();
+
+      const replyPayload = {
+        type: "new-message",
+        data: {
+          text: "replying now",
+          handle: { address: "+15551234567" },
+          isGroup: true,
+          isFromMe: false,
+          guid: "cache-msg-1",
+          chatGuid,
+          // Only the GUID is provided; sender/body must be hydrated.
+          replyToMessageGuid: "cache-msg-0",
+          date: Date.now(),
+        },
+      };
+
+      const replyReq = createMockRequest("POST", "/bluebubbles-webhook", replyPayload);
+      const replyRes = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(replyReq, replyRes);
+      await flushAsync();
+
+      expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
+      const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
+      // ReplyToId uses short ID "1" (first cached message) for token savings
+      expect(callArgs.ctx.ReplyToId).toBe("1");
+      expect(callArgs.ctx.ReplyToIdFull).toBe("cache-msg-0");
+      expect(callArgs.ctx.ReplyToBody).toBe("original message (cached)");
+      expect(callArgs.ctx.ReplyToSender).toBe("+15550000000");
+      // Body uses just the short ID (no sender) for token savings
+      expect(callArgs.ctx.Body).toContain("[Replying to id:1]");
+      expect(callArgs.ctx.Body).toContain("original message (cached)");
     });
 
     it("falls back to threadOriginatorGuid when reply metadata is absent", async () => {
@@ -1114,7 +1297,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
       const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
@@ -1162,7 +1345,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(sendBlueBubblesReaction).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1215,7 +1398,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       // Should process even without mention because it's an authorized control command
       expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
@@ -1258,7 +1441,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });
@@ -1301,7 +1484,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(markBlueBubblesChatRead).toHaveBeenCalled();
     });
@@ -1342,7 +1525,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(markBlueBubblesChatRead).not.toHaveBeenCalled();
     });
@@ -1385,12 +1568,106 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       // Should call typing start when reply flow triggers it.
       expect(sendBlueBubblesTyping).toHaveBeenCalledWith(
         expect.any(String),
         true,
+        expect.any(Object),
+      );
+    });
+
+    it("stops typing on idle", async () => {
+      const { sendBlueBubblesTyping } = await import("./chat.js");
+      vi.mocked(sendBlueBubblesTyping).mockClear();
+
+      const account = createMockAccount();
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello",
+          handle: { address: "+15551234567" },
+          isGroup: false,
+          isFromMe: false,
+          guid: "msg-1",
+          chatGuid: "iMessage;-;+15551234567",
+          date: Date.now(),
+        },
+      };
+
+      mockDispatchReplyWithBufferedBlockDispatcher.mockImplementationOnce(async (params) => {
+        await params.dispatcherOptions.onReplyStart?.();
+        await params.dispatcherOptions.deliver({ text: "replying now" }, { kind: "final" });
+        await params.dispatcherOptions.onIdle?.();
+      });
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      expect(sendBlueBubblesTyping).toHaveBeenCalledWith(
+        expect.any(String),
+        false,
+        expect.any(Object),
+      );
+    });
+
+    it("stops typing when no reply is sent", async () => {
+      const { sendBlueBubblesTyping } = await import("./chat.js");
+      vi.mocked(sendBlueBubblesTyping).mockClear();
+
+      const account = createMockAccount();
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello",
+          handle: { address: "+15551234567" },
+          isGroup: false,
+          isFromMe: false,
+          guid: "msg-1",
+          chatGuid: "iMessage;-;+15551234567",
+          date: Date.now(),
+        },
+      };
+
+      mockDispatchReplyWithBufferedBlockDispatcher.mockImplementationOnce(async () => undefined);
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      expect(sendBlueBubblesTyping).toHaveBeenCalledWith(
+        expect.any(String),
+        false,
         expect.any(Object),
       );
     });
@@ -1434,10 +1711,11 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
+      // Outbound message ID uses short ID "2" (inbound msg-1 is "1", outbound msg-123 is "2")
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
-        "BlueBubbles sent message id: msg-123",
+        'Assistant sent "replying now" [message_id:2]',
         expect.objectContaining({
           sessionKey: "agent:main:bluebubbles:dm:+15551234567",
         }),
@@ -1478,7 +1756,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
         expect.stringContaining("reaction added"),
@@ -1518,7 +1796,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
         expect.stringContaining("reaction removed"),
@@ -1558,7 +1836,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockEnqueueSystemEvent).not.toHaveBeenCalled();
     });
@@ -1596,12 +1874,105 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockEnqueueSystemEvent).toHaveBeenCalledWith(
         expect.stringContaining("👍"),
         expect.any(Object),
       );
+    });
+  });
+
+  describe("short message ID mapping", () => {
+    it("assigns sequential short IDs to messages", async () => {
+      const account = createMockAccount({ dmPolicy: "open" });
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello",
+          handle: { address: "+15551234567" },
+          isGroup: false,
+          isFromMe: false,
+          guid: "msg-uuid-12345",
+          chatGuid: "iMessage;-;+15551234567",
+          date: Date.now(),
+        },
+      };
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      expect(mockDispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalled();
+      const callArgs = mockDispatchReplyWithBufferedBlockDispatcher.mock.calls[0][0];
+      // MessageSid should be short ID "1" instead of full UUID
+      expect(callArgs.ctx.MessageSid).toBe("1");
+      expect(callArgs.ctx.MessageSidFull).toBe("msg-uuid-12345");
+    });
+
+    it("resolves short ID back to UUID", async () => {
+      const account = createMockAccount({ dmPolicy: "open" });
+      const config: ClawdbotConfig = {};
+      const core = createMockRuntime();
+      setBlueBubblesRuntime(core);
+
+      unregister = registerBlueBubblesWebhookTarget({
+        account,
+        config,
+        runtime: { log: vi.fn(), error: vi.fn() },
+        core,
+        path: "/bluebubbles-webhook",
+      });
+
+      const payload = {
+        type: "new-message",
+        data: {
+          text: "hello",
+          handle: { address: "+15551234567" },
+          isGroup: false,
+          isFromMe: false,
+          guid: "msg-uuid-12345",
+          chatGuid: "iMessage;-;+15551234567",
+          date: Date.now(),
+        },
+      };
+
+      const req = createMockRequest("POST", "/bluebubbles-webhook", payload);
+      const res = createMockResponse();
+
+      await handleBlueBubblesWebhookRequest(req, res);
+      await flushAsync();
+
+      // The short ID "1" should resolve back to the full UUID
+      expect(resolveBlueBubblesMessageId("1")).toBe("msg-uuid-12345");
+    });
+
+    it("returns UUID unchanged when not in cache", () => {
+      expect(resolveBlueBubblesMessageId("msg-not-cached")).toBe("msg-not-cached");
+    });
+
+    it("returns short ID unchanged when numeric but not in cache", () => {
+      expect(resolveBlueBubblesMessageId("999")).toBe("999");
+    });
+
+    it("throws when numeric short ID is missing and requireKnownShortId is set", () => {
+      expect(() =>
+        resolveBlueBubblesMessageId("999", { requireKnownShortId: true }),
+      ).toThrow(/short message id/i);
     });
   });
 
@@ -1636,7 +2007,7 @@ describe("BlueBubbles webhook monitor", () => {
       const res = createMockResponse();
 
       await handleBlueBubblesWebhookRequest(req, res);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushAsync();
 
       expect(mockDispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     });

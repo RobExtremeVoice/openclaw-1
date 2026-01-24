@@ -12,6 +12,7 @@ import { listSkillCommandsForAgents } from "../../auto-reply/skill-commands.js";
 import { dispatchReplyWithDispatcher } from "../../auto-reply/reply/provider-dispatcher.js";
 import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
 import { resolveNativeCommandsEnabled, resolveNativeSkillsEnabled } from "../../config/commands.js";
+import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { danger, logVerbose } from "../../globals.js";
 import { buildPairingReply } from "../../pairing/pairing-messages.js";
 import {
@@ -21,6 +22,7 @@ import {
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
 import { resolveConversationLabel } from "../../channels/conversation-label.js";
 import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
+import { formatAllowlistMatchMeta } from "../../channels/allowlist-match.js";
 
 import type { ResolvedSlackAccount } from "../accounts.js";
 
@@ -206,9 +208,7 @@ export function registerSlackMonitorSlashCommands(params: {
             id: command.user_id,
             name: senderName,
           });
-          const allowMatchMeta = `matchKey=${allowMatch.matchKey ?? "none"} matchSource=${
-            allowMatch.matchSource ?? "none"
-          }`;
+          const allowMatchMeta = formatAllowlistMatchMeta(allowMatch);
           if (!allowMatch.allowed) {
             if (ctx.dmPolicy === "pairing") {
               const { code, created } = await upsertChannelPairingRequest({
@@ -262,8 +262,7 @@ export function registerSlackMonitorSlashCommands(params: {
               groupPolicy: ctx.groupPolicy,
               channelAllowlistConfigured,
               channelAllowed,
-            }) ||
-            !channelAllowed
+            })
           ) {
             await respond({
               text: "This channel is not allowed.",
@@ -271,13 +270,17 @@ export function registerSlackMonitorSlashCommands(params: {
             });
             return;
           }
-        }
-        if (ctx.useAccessGroups && channelConfig?.allowed === false) {
-          await respond({
-            text: "This channel is not allowed.",
-            response_type: "ephemeral",
-          });
-          return;
+          // When groupPolicy is "open", only block channels that are EXPLICITLY denied
+          // (i.e., have a matching config entry with allow:false). Channels not in the
+          // config (matchSource undefined) should be allowed under open policy.
+          const hasExplicitConfig = Boolean(channelConfig?.matchSource);
+          if (!channelAllowed && (ctx.groupPolicy !== "open" || hasExplicitConfig)) {
+            await respond({
+              text: "This channel is not allowed.",
+              response_type: "ephemeral",
+            });
+            return;
+          }
         }
       }
 
@@ -425,6 +428,11 @@ export function registerSlackMonitorSlashCommands(params: {
               respond,
               ephemeral: slashCommand.ephemeral,
               textLimit: ctx.textLimit,
+              tableMode: resolveMarkdownTableMode({
+                cfg,
+                channel: "slack",
+                accountId: route.accountId,
+              }),
             });
           },
           onError: (err, info) => {
@@ -439,6 +447,11 @@ export function registerSlackMonitorSlashCommands(params: {
           respond,
           ephemeral: slashCommand.ephemeral,
           textLimit: ctx.textLimit,
+          tableMode: resolveMarkdownTableMode({
+            cfg,
+            channel: "slack",
+            accountId: route.accountId,
+          }),
         });
       }
     } catch (err) {
@@ -463,14 +476,14 @@ export function registerSlackMonitorSlashCommands(params: {
   const skillCommands =
     nativeEnabled && nativeSkillsEnabled ? listSkillCommandsForAgents({ cfg }) : [];
   const nativeCommands = nativeEnabled
-    ? listNativeCommandSpecsForConfig(cfg, { skillCommands })
+    ? listNativeCommandSpecsForConfig(cfg, { skillCommands, provider: "slack" })
     : [];
   if (nativeCommands.length > 0) {
     for (const command of nativeCommands) {
       ctx.app.command(
         `/${command.name}`,
         async ({ command: cmd, ack, respond }: SlackCommandMiddlewareArgs) => {
-          const commandDefinition = findCommandByNativeName(command.name);
+          const commandDefinition = findCommandByNativeName(command.name, "slack");
           const rawText = cmd.text?.trim() ?? "";
           const commandArgs = commandDefinition
             ? parseCommandArgs(commandDefinition, rawText)
@@ -544,7 +557,7 @@ export function registerSlackMonitorSlashCommands(params: {
       });
       return;
     }
-    const commandDefinition = findCommandByNativeName(parsed.command);
+    const commandDefinition = findCommandByNativeName(parsed.command, "slack");
     const commandArgs: CommandArgs = {
       values: { [parsed.arg]: parsed.value },
     };

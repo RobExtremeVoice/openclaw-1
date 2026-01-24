@@ -31,6 +31,13 @@ export type BlockStreamingChunkConfig = {
   breakPreference?: "paragraph" | "newline" | "sentence";
 };
 
+export type MarkdownTableMode = "off" | "bullets" | "code";
+
+export type MarkdownConfig = {
+  /** Table rendering mode (off|bullets|code). */
+  tables?: MarkdownTableMode;
+};
+
 export type HumanDelayConfig = {
   /** Delay style for block replies (off|natural|custom). */
   mode?: "off" | "natural" | "custom";
@@ -77,9 +84,10 @@ export type SessionConfig = {
   identityLinks?: Record<string, string[]>;
   resetTriggers?: string[];
   idleMinutes?: number;
-  heartbeatIdleMinutes?: number;
   reset?: SessionResetConfig;
   resetByType?: SessionResetByTypeConfig;
+  /** Channel-specific reset overrides (e.g. { discord: { mode: "idle", idleMinutes: 10080 } }). */
+  resetByChannel?: Record<string, SessionResetConfig>;
   store?: string;
   typingIntervalSeconds?: number;
   typingMode?: TypingMode;
@@ -153,4 +161,6 @@ export type IdentityConfig = {
   name?: string;
   theme?: string;
   emoji?: string;
+  /** Avatar image: workspace-relative path, http(s) URL, or data URI. */
+  avatar?: string;
 };

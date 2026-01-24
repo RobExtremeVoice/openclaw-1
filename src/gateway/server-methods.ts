@@ -17,6 +17,7 @@ import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
+import { ttsHandlers } from "./server-methods/tts.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 import { updateHandlers } from "./server-methods/update.js";
 import { usageHandlers } from "./server-methods/usage.js";
@@ -53,11 +54,15 @@ const READ_METHODS = new Set([
   "status",
   "usage.status",
   "usage.cost",
+  "tts.status",
+  "tts.providers",
   "models.list",
   "agents.list",
+  "agent.identity.get",
   "skills.status",
   "voicewake.get",
   "sessions.list",
+  "sessions.preview",
   "cron.list",
   "cron.status",
   "cron.runs",
@@ -73,6 +78,10 @@ const WRITE_METHODS = new Set([
   "agent.wait",
   "wake",
   "talk.mode",
+  "tts.enable",
+  "tts.disable",
+  "tts.convert",
+  "tts.setProvider",
   "voicewake.set",
   "node.invoke",
   "chat.send",
@@ -149,6 +158,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...configHandlers,
   ...wizardHandlers,
   ...talkHandlers,
+  ...ttsHandlers,
   ...skillsHandlers,
   ...sessionsHandlers,
   ...systemHandlers,

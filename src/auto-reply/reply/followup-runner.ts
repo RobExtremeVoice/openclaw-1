@@ -147,6 +147,9 @@ export function createFollowupRunner(params: {
               agentAccountId: queued.run.agentAccountId,
               messageTo: queued.originatingTo,
               messageThreadId: queued.originatingThreadId,
+              groupId: queued.run.groupId,
+              groupChannel: queued.run.groupChannel,
+              groupSpace: queued.run.groupSpace,
               sessionFile: queued.run.sessionFile,
               workspaceDir: queued.run.workspaceDir,
               config: queued.run.config,
@@ -204,6 +207,7 @@ export function createFollowupRunner(params: {
         queued.run.config,
         replyToChannel,
         queued.originatingAccountId,
+        queued.originatingChatType,
       );
 
       const replyTaggedPayloads: ReplyPayload[] = applyReplyThreading({
