@@ -11,6 +11,8 @@ import {
   normalizeSessionDeliveryFields,
   type DeliveryContext,
 } from "../../utils/delivery-context.js";
+import type { MsgContext } from "../../auto-reply/templating.js";
+import { deriveSessionMetaPatch } from "./metadata.js";
 import { mergeSessionEntry, type SessionEntry } from "./types.js";
 
 // ============================================================================
@@ -26,6 +28,10 @@ type SessionStoreCacheEntry = {
 
 const SESSION_STORE_CACHE = new Map<string, SessionStoreCacheEntry>();
 const DEFAULT_SESSION_STORE_TTL_MS = 45_000; // 45 seconds (between 30-60s)
+
+function isSessionStoreRecord(value: unknown): value is Record<string, SessionEntry> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
 function getSessionStoreTtl(): number {
   return resolveCacheTtlMs({
@@ -54,11 +60,13 @@ function normalizeSessionEntryDelivery(entry: SessionEntry): SessionEntry {
   const sameDelivery =
     (entry.deliveryContext?.channel ?? undefined) === nextDelivery?.channel &&
     (entry.deliveryContext?.to ?? undefined) === nextDelivery?.to &&
-    (entry.deliveryContext?.accountId ?? undefined) === nextDelivery?.accountId;
+    (entry.deliveryContext?.accountId ?? undefined) === nextDelivery?.accountId &&
+    (entry.deliveryContext?.threadId ?? undefined) === nextDelivery?.threadId;
   const sameLast =
     entry.lastChannel === normalized.lastChannel &&
     entry.lastTo === normalized.lastTo &&
-    entry.lastAccountId === normalized.lastAccountId;
+    entry.lastAccountId === normalized.lastAccountId &&
+    entry.lastThreadId === normalized.lastThreadId;
   if (sameDelivery && sameLast) return entry;
   return {
     ...entry,
@@ -66,6 +74,7 @@ function normalizeSessionEntryDelivery(entry: SessionEntry): SessionEntry {
     lastChannel: normalized.lastChannel,
     lastTo: normalized.lastTo,
     lastAccountId: normalized.lastAccountId,
+    lastThreadId: normalized.lastThreadId,
   };
 }
 
@@ -110,7 +119,7 @@ export function loadSessionStore(
   try {
     const raw = fs.readFileSync(storePath, "utf-8");
     const parsed = JSON5.parse(raw);
-    if (parsed && typeof parsed === "object") {
+    if (isSessionStoreRecord(parsed)) {
       store = parsed as Record<string, SessionEntry>;
     }
     mtimeMs = getFileMtimeMs(storePath) ?? mtimeMs;
@@ -151,6 +160,18 @@ export function loadSessionStore(
   }
 
   return structuredClone(store);
+}
+
+export function readSessionUpdatedAt(params: {
+  storePath: string;
+  sessionKey: string;
+}): number | undefined {
+  try {
+    const store = loadSessionStore(params.storePath);
+    return store[params.sessionKey]?.updatedAt;
+  } catch {
+    return undefined;
+  }
 }
 
 async function saveSessionStoreUnlocked(
@@ -334,15 +355,43 @@ export async function updateSessionStoreEntry(params: {
   });
 }
 
+export async function recordSessionMetaFromInbound(params: {
+  storePath: string;
+  sessionKey: string;
+  ctx: MsgContext;
+  groupResolution?: import("./types.js").GroupKeyResolution | null;
+  createIfMissing?: boolean;
+}): Promise<SessionEntry | null> {
+  const { storePath, sessionKey, ctx } = params;
+  const createIfMissing = params.createIfMissing ?? true;
+  return await updateSessionStore(storePath, (store) => {
+    const existing = store[sessionKey];
+    const patch = deriveSessionMetaPatch({
+      ctx,
+      sessionKey,
+      existing,
+      groupResolution: params.groupResolution,
+    });
+    if (!patch) return existing ?? null;
+    if (!existing && !createIfMissing) return null;
+    const next = mergeSessionEntry(existing, patch);
+    store[sessionKey] = next;
+    return next;
+  });
+}
+
 export async function updateLastRoute(params: {
   storePath: string;
   sessionKey: string;
   channel?: SessionEntry["lastChannel"];
   to?: string;
   accountId?: string;
+  threadId?: string | number;
   deliveryContext?: DeliveryContext;
+  ctx?: MsgContext;
+  groupResolution?: import("./types.js").GroupKeyResolution | null;
 }) {
-  const { storePath, sessionKey, channel, to, accountId } = params;
+  const { storePath, sessionKey, channel, to, accountId, threadId, ctx } = params;
   return await withSessionStoreLock(storePath, async () => {
     const store = loadSessionStore(storePath);
     const existing = store[sessionKey];
@@ -352,6 +401,7 @@ export async function updateLastRoute(params: {
       channel,
       to,
       accountId,
+      threadId,
     });
     const mergedInput = mergeDeliveryContext(explicitContext, inlineContext);
     const merged = mergeDeliveryContext(mergedInput, deliveryContextFromSession(existing));
@@ -360,15 +410,29 @@ export async function updateLastRoute(params: {
         channel: merged?.channel,
         to: merged?.to,
         accountId: merged?.accountId,
+        threadId: merged?.threadId,
       },
     });
-    const next = mergeSessionEntry(existing, {
+    const metaPatch = ctx
+      ? deriveSessionMetaPatch({
+          ctx,
+          sessionKey,
+          existing,
+          groupResolution: params.groupResolution,
+        })
+      : null;
+    const basePatch: Partial<SessionEntry> = {
       updatedAt: Math.max(existing?.updatedAt ?? 0, now),
       deliveryContext: normalized.deliveryContext,
       lastChannel: normalized.lastChannel,
       lastTo: normalized.lastTo,
       lastAccountId: normalized.lastAccountId,
-    });
+      lastThreadId: normalized.lastThreadId,
+    };
+    const next = mergeSessionEntry(
+      existing,
+      metaPatch ? { ...basePatch, ...metaPatch } : basePatch,
+    );
     store[sessionKey] = next;
     await saveSessionStoreUnlocked(storePath, store);
     return next;

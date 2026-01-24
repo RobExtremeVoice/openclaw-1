@@ -4,6 +4,7 @@ import type {
   ChannelCommandAdapter,
   ChannelConfigAdapter,
   ChannelDirectoryAdapter,
+  ChannelResolverAdapter,
   ChannelElevatedAdapter,
   ChannelGatewayAdapter,
   ChannelGroupAdapter,
@@ -19,6 +20,7 @@ import type {
   ChannelAgentToolFactory,
   ChannelCapabilities,
   ChannelId,
+  ChannelAgentPromptAdapter,
   ChannelMentionAdapter,
   ChannelMessageActionAdapter,
   ChannelMessagingAdapter,
@@ -47,6 +49,11 @@ export type ChannelPlugin<ResolvedAccount = any> = {
   id: ChannelId;
   meta: ChannelMeta;
   capabilities: ChannelCapabilities;
+  defaults?: {
+    queue?: {
+      debounceMs?: number;
+    };
+  };
   reload?: { configPrefixes: string[]; noopPrefixes?: string[] };
   // CLI onboarding wizard hooks for this channel.
   onboarding?: ChannelOnboardingAdapter;
@@ -67,7 +74,9 @@ export type ChannelPlugin<ResolvedAccount = any> = {
   streaming?: ChannelStreamingAdapter;
   threading?: ChannelThreadingAdapter;
   messaging?: ChannelMessagingAdapter;
+  agentPrompt?: ChannelAgentPromptAdapter;
   directory?: ChannelDirectoryAdapter;
+  resolver?: ChannelResolverAdapter;
   actions?: ChannelMessageActionAdapter;
   heartbeat?: ChannelHeartbeatAdapter;
   // Channel-owned agent tools (login flows, etc.).

@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { resolveGatewayLaunchAgentLabel } from "../daemon/constants.js";
 import { resolveGatewayProgramArguments } from "../daemon/program-args.js";
 import {
@@ -8,6 +6,7 @@ import {
   resolveSystemNodeInfo,
 } from "../daemon/runtime-paths.js";
 import { buildServiceEnvironment } from "../daemon/service-env.js";
+import { formatCliCommand } from "../cli/command-format.js";
 import type { GatewayDaemonRuntime } from "./daemon-runtime.js";
 
 type WarnFn = (message: string, title?: string) => void;
@@ -20,7 +19,8 @@ export type GatewayInstallPlan = {
 
 export function resolveGatewayDevMode(argv: string[] = process.argv): boolean {
   const entry = argv[1];
-  return Boolean(entry?.includes(`${path.sep}src${path.sep}`) && entry.endsWith(".ts"));
+  const normalizedEntry = entry?.replaceAll("\\", "/");
+  return Boolean(normalizedEntry?.includes("/src/") && normalizedEntry.endsWith(".ts"));
 }
 
 export async function buildGatewayInstallPlan(params: {
@@ -65,6 +65,6 @@ export async function buildGatewayInstallPlan(params: {
 
 export function gatewayInstallErrorHint(platform = process.platform): string {
   return platform === "win32"
-    ? "Tip: rerun from an elevated PowerShell (Start → type PowerShell → right-click → Run as administrator) or skip daemon install."
-    : "Tip: rerun `clawdbot daemon install` after fixing the error.";
+    ? "Tip: rerun from an elevated PowerShell (Start → type PowerShell → right-click → Run as administrator) or skip service install."
+    : `Tip: rerun \`${formatCliCommand("clawdbot gateway install")}\` after fixing the error.`;
 }

@@ -10,7 +10,7 @@ import { danger, logVerbose, warn } from "../globals.js";
 import { resolveMedia } from "./bot/delivery.js";
 import { resolveTelegramForumThreadId } from "./bot/helpers.js";
 import type { TelegramMessage } from "./bot/types.js";
-import { firstDefined, isSenderAllowed, normalizeAllowFrom } from "./bot-access.js";
+import { firstDefined, isSenderAllowed, normalizeAllowFromWithStore } from "./bot-access.js";
 import { MEDIA_GROUP_TIMEOUT_MS, type MediaGroupEntry } from "./bot-updates.js";
 import { migrateTelegramGroupConfig } from "./group-migration.js";
 import { resolveTelegramInlineButtonsScope } from "./inline-buttons.js";
@@ -179,6 +179,8 @@ export const registerTelegramHandlers = ({
     const callback = ctx.callbackQuery;
     if (!callback) return;
     if (shouldSkipUpdate(ctx)) return;
+    // Answer immediately to prevent Telegram from retrying while we process
+    await bot.api.answerCallbackQuery(callback.id).catch(() => {});
     try {
       const data = (callback.data ?? "").trim();
       const callbackMessage = callback.message;
@@ -205,14 +207,14 @@ export const registerTelegramHandlers = ({
       const { groupConfig, topicConfig } = resolveTelegramGroupConfig(chatId, resolvedThreadId);
       const storeAllowFrom = await readTelegramAllowFromStore().catch(() => []);
       const groupAllowOverride = firstDefined(topicConfig?.allowFrom, groupConfig?.allowFrom);
-      const effectiveGroupAllow = normalizeAllowFrom([
-        ...(groupAllowOverride ?? groupAllowFrom ?? []),
-        ...storeAllowFrom,
-      ]);
-      const effectiveDmAllow = normalizeAllowFrom([
-        ...(telegramCfg.allowFrom ?? []),
-        ...storeAllowFrom,
-      ]);
+      const effectiveGroupAllow = normalizeAllowFromWithStore({
+        allowFrom: groupAllowOverride ?? groupAllowFrom,
+        storeAllowFrom,
+      });
+      const effectiveDmAllow = normalizeAllowFromWithStore({
+        allowFrom: telegramCfg.allowFrom,
+        storeAllowFrom,
+      });
       const dmPolicy = telegramCfg.dmPolicy ?? "pairing";
       const senderId = callback.from?.id ? String(callback.from.id) : "";
       const senderUsername = callback.from?.username ?? "";
@@ -243,7 +245,8 @@ export const registerTelegramHandlers = ({
             return;
           }
         }
-        const groupPolicy = telegramCfg.groupPolicy ?? "open";
+        const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+        const groupPolicy = telegramCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
         if (groupPolicy === "disabled") {
           logVerbose(`Blocked telegram group message (groupPolicy: disabled)`);
           return;
@@ -322,8 +325,6 @@ export const registerTelegramHandlers = ({
       });
     } catch (err) {
       runtime.error?.(danger(`callback handler failed: ${String(err)}`));
-    } finally {
-      await bot.api.answerCallbackQuery(callback.id).catch(() => {});
     }
   });
 
@@ -392,10 +393,10 @@ export const registerTelegramHandlers = ({
       const storeAllowFrom = await readTelegramAllowFromStore().catch(() => []);
       const { groupConfig, topicConfig } = resolveTelegramGroupConfig(chatId, resolvedThreadId);
       const groupAllowOverride = firstDefined(topicConfig?.allowFrom, groupConfig?.allowFrom);
-      const effectiveGroupAllow = normalizeAllowFrom([
-        ...(groupAllowOverride ?? groupAllowFrom ?? []),
-        ...storeAllowFrom,
-      ]);
+      const effectiveGroupAllow = normalizeAllowFromWithStore({
+        allowFrom: groupAllowOverride ?? groupAllowFrom,
+        storeAllowFrom,
+      });
       const hasGroupAllowOverride = typeof groupAllowOverride !== "undefined";
 
       if (isGroup) {
@@ -430,7 +431,8 @@ export const registerTelegramHandlers = ({
         // - "open": groups bypass allowFrom, only mention-gating applies
         // - "disabled": block all group messages entirely
         // - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
-        const groupPolicy = telegramCfg.groupPolicy ?? "open";
+        const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+        const groupPolicy = telegramCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
         if (groupPolicy === "disabled") {
           logVerbose(`Blocked telegram group message (groupPolicy: disabled)`);
           return;

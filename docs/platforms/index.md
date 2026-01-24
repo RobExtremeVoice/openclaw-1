@@ -23,6 +23,7 @@ Native companion apps for Windows are also planned; the Gateway is recommended v
 
 ## VPS & hosting
 
+- Fly.io: [Fly.io](/platforms/fly)
 - Hetzner (Docker): [Hetzner](/platforms/hetzner)
 - exe.dev (VM + HTTPS proxy): [exe.dev](/platforms/exe-dev)
 
@@ -31,15 +32,15 @@ Native companion apps for Windows are also planned; the Gateway is recommended v
 - Install guide: [Getting Started](/start/getting-started)
 - Gateway runbook: [Gateway](/gateway)
 - Gateway configuration: [Configuration](/gateway/configuration)
-- Service status: `clawdbot daemon status`
+- Service status: `clawdbot gateway status`
 
 ## Gateway service install (CLI)
 
 Use one of these (all supported):
 
 - Wizard (recommended): `clawdbot onboard --install-daemon`
-- Direct: `clawdbot daemon install`
-- Configure flow: `clawdbot configure` → select **Gateway daemon**
+- Direct: `clawdbot gateway install`
+- Configure flow: `clawdbot configure` → select **Gateway service**
 - Repair/migrate: `clawdbot doctor` (offers to install or fix the service)
 
 The service target depends on OS:

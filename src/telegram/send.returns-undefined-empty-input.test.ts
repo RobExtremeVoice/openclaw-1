@@ -164,12 +164,10 @@ describe("sendMessageTelegram", () => {
     });
     try {
       await sendMessageTelegram("123", "hi", { token: "tok" });
-      expect(botCtorSpy).toHaveBeenCalledWith(
-        "tok",
-        expect.objectContaining({
-          client: expect.objectContaining({ fetch: fetchSpy }),
-        }),
-      );
+      const clientFetch = (botCtorSpy.mock.calls[0]?.[1] as { client?: { fetch?: unknown } })
+        ?.client?.fetch;
+      expect(clientFetch).toBeTypeOf("function");
+      expect(clientFetch).not.toBe(fetchSpy);
     } finally {
       globalThis.fetch = originalFetch;
       if (originalBun === undefined) {
@@ -287,6 +285,7 @@ describe("sendMessageTelegram", () => {
     expect(sendAnimation).toHaveBeenCalledTimes(1);
     expect(sendAnimation).toHaveBeenCalledWith(chatId, expect.anything(), {
       caption: "caption",
+      parse_mode: "HTML",
     });
     expect(res.messageId).toBe("9");
   });
@@ -320,6 +319,7 @@ describe("sendMessageTelegram", () => {
 
     expect(sendAudio).toHaveBeenCalledWith(chatId, expect.anything(), {
       caption: "caption",
+      parse_mode: "HTML",
     });
     expect(sendVoice).not.toHaveBeenCalled();
   });
@@ -356,6 +356,7 @@ describe("sendMessageTelegram", () => {
 
     expect(sendVoice).toHaveBeenCalledWith(chatId, expect.anything(), {
       caption: "voice note",
+      parse_mode: "HTML",
       message_thread_id: 271,
       reply_to_message_id: 500,
     });
@@ -392,6 +393,7 @@ describe("sendMessageTelegram", () => {
 
     expect(sendAudio).toHaveBeenCalledWith(chatId, expect.anything(), {
       caption: "caption",
+      parse_mode: "HTML",
     });
     expect(sendVoice).not.toHaveBeenCalled();
   });

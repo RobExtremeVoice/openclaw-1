@@ -129,7 +129,7 @@ Save to `~/.clawdbot/clawdbot.json` and you can DM the bot from that number.
         enabled: true,
         maxBytes: 20971520,
         models: [
-          { provider: "openai", model: "whisper-1" },
+          { provider: "openai", model: "gpt-4o-mini-transcribe" },
           // Optional CLI fallback (Whisper binary):
           // { type: "cli", command: "whisper", args: ["--model", "base", "{{MediaPath}}"] }
         ],
@@ -146,8 +146,14 @@ Save to `~/.clawdbot/clawdbot.json` and you can DM the bot from that number.
   // Session behavior
   session: {
     scope: "per-sender",
-    idleMinutes: 60,
-    heartbeatIdleMinutes: 120,
+    reset: {
+      mode: "daily",
+      atHour: 4,
+      idleMinutes: 60
+    },
+    resetByChannel: {
+      discord: { mode: "idle", idleMinutes: 10080 }
+    },
     resetTriggers: ["/new", "/reset"],
     store: "~/.clawdbot/agents/default/sessions/sessions.json",
     typingIntervalSeconds: 5,
@@ -257,10 +263,9 @@ Save to `~/.clawdbot/clawdbot.json` and you can DM the bot from that number.
         ackMaxChars: 300
       },
       memorySearch: {
-        provider: "openai",
-        model: "text-embedding-004",
+        provider: "gemini",
+        model: "gemini-embedding-001",
         remote: {
-          baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
           apiKey: "${GEMINI_API_KEY}"
         }
       },
@@ -563,5 +568,5 @@ Save to `~/.clawdbot/clawdbot.json` and you can DM the bot from that number.
 
 - If you set `dmPolicy: "open"`, the matching `allowFrom` list must include `"*"`.
 - Provider IDs differ (phone numbers, user IDs, channel IDs). Use the provider docs to confirm the format.
-- Optional sections to add later: `web`, `browser`, `ui`, `bridge`, `discovery`, `canvasHost`, `talk`, `signal`, `imessage`.
+- Optional sections to add later: `web`, `browser`, `ui`, `discovery`, `canvasHost`, `talk`, `signal`, `imessage`.
 - See [Providers](/channels/whatsapp) and [Troubleshooting](/gateway/troubleshooting) for deeper setup notes.

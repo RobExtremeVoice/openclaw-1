@@ -1,2 +1,10 @@
-export type { ChannelEntryMatch } from "../channel-config.js";
-export { buildChannelKeyCandidates, resolveChannelEntryMatch } from "../channel-config.js";
+export type { ChannelEntryMatch, ChannelMatchSource } from "../channel-config.js";
+export {
+  applyChannelMatchMeta,
+  buildChannelKeyCandidates,
+  normalizeChannelSlug,
+  resolveChannelEntryMatch,
+  resolveChannelEntryMatchWithFallback,
+  resolveChannelMatchConfig,
+  resolveNestedAllowlistDecision,
+} from "../channel-config.js";

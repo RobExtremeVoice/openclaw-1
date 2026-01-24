@@ -12,7 +12,8 @@ read_when:
 
 ## Where it shows up
 - `/status` in chats: emoji‑rich status card with session tokens + estimated cost (API key only). Provider usage shows for the **current model provider** when available.
-- `/cost on|off` in chats: toggles per‑response usage lines (OAuth shows tokens only).
+- `/usage off|tokens|full` in chats: per-response usage footer (OAuth shows tokens only).
+- `/usage cost` in chats: local cost summary aggregated from Clawdbot session logs.
 - CLI: `clawdbot status --usage` prints a full per-provider breakdown.
 - CLI: `clawdbot channels list` prints the same usage snapshot alongside provider config (use `--no-usage` to skip).
 - macOS menu bar: “Usage” section under Context (only if available).

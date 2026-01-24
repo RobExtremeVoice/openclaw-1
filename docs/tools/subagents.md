@@ -9,6 +9,17 @@ read_when:
 
 Sub-agents are background agent runs spawned from an existing agent run. They run in their own session (`agent:<agentId>:subagent:<uuid>`) and, when finished, **announce** their result back to the requester chat channel.
 
+## Slash command
+
+Use `/subagents` to inspect or control sub-agent runs for the **current session**:
+- `/subagents list`
+- `/subagents stop <id|#|all>`
+- `/subagents log <id|#> [limit] [tools]`
+- `/subagents info <id|#>`
+- `/subagents send <id|#> <message>`
+
+`/subagents info` shows run metadata (status, timestamps, session id, transcript path, cleanup).
+
 Primary goals:
 - Parallelize “research / long task / slow tool” work without blocking the main run.
 - Keep sub-agents isolated by default (session separation + optional sandboxing).
@@ -58,7 +69,8 @@ Note: the merge is additive, so main profiles are always available as fallbacks.
 Sub-agents report back via an announce step:
 - The announce step runs inside the sub-agent session (not the requester session).
 - If the sub-agent replies exactly `ANNOUNCE_SKIP`, nothing is posted.
-- Otherwise the announce reply is posted to the requester chat channel via the gateway `send` method.
+- Otherwise the announce reply is posted to the requester chat channel via a follow-up `agent` call (`deliver=true`).
+- Announce replies preserve thread/topic routing when available (Slack threads, Telegram topics, Matrix threads).
 - Announce messages are normalized to a stable template:
   - `Status:` derived from the run outcome (`success`, `error`, `timeout`, or `unknown`).
   - `Result:` the summary content from the announce step (or `(not available)` if missing).
@@ -107,7 +119,7 @@ Override via config:
 
 Sub-agents use a dedicated in-process queue lane:
 - Lane name: `subagent`
-- Concurrency: `agents.defaults.subagents.maxConcurrent` (default `1`)
+- Concurrency: `agents.defaults.subagents.maxConcurrent` (default `8`)
 
 ## Stopping
 

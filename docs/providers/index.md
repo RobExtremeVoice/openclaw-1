@@ -9,7 +9,7 @@ read_when:
 Clawdbot can use many LLM providers. Pick a provider, authenticate, then set the
 default model as `provider/model`.
 
-Looking for chat channel docs (WhatsApp/Telegram/Discord/Slack/etc.)? See [Channels](/channels).
+Looking for chat channel docs (WhatsApp/Telegram/Discord/Slack/Mattermost (plugin)/etc.)? See [Channels](/channels).
 
 ## Quick start
 
@@ -26,11 +26,12 @@ Looking for chat channel docs (WhatsApp/Telegram/Discord/Slack/etc.)? See [Chann
 
 - [OpenAI (API + Codex)](/providers/openai)
 - [Anthropic (API + Claude Code CLI)](/providers/anthropic)
-- [Github Copilot](/providers/github-copilot)
+- [Qwen (OAuth)](/providers/qwen)
 - [OpenRouter](/providers/openrouter)
 - [Vercel AI Gateway](/providers/vercel-ai-gateway)
 - [Moonshot AI (Kimi + Kimi Code)](/providers/moonshot)
 - [OpenCode Zen](/providers/opencode)
+- [Amazon Bedrock](/bedrock)
 - [Z.AI](/providers/zai)
 - [GLM models](/providers/glm)
 - [MiniMax](/providers/minimax)

@@ -71,10 +71,37 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock("../memory/manager.js", () => ({
+  MemoryIndexManager: {
+    get: vi.fn(async ({ agentId }: { agentId: string }) => ({
+      probeVectorAvailability: vi.fn(async () => true),
+      status: () => ({
+        files: 2,
+        chunks: 3,
+        dirty: false,
+        workspaceDir: "/tmp/clawd",
+        dbPath: "/tmp/memory.sqlite",
+        provider: "openai",
+        model: "text-embedding-3-small",
+        requestedProvider: "openai",
+        sources: ["memory"],
+        sourceCounts: [{ source: "memory", files: 2, chunks: 3 }],
+        cache: { enabled: true, entries: 10, maxEntries: 500 },
+        fts: { enabled: true, available: true },
+        vector: { enabled: true, available: true, extensionPath: "/opt/vec0.dylib", dims: 1024 },
+      }),
+      close: vi.fn(async () => {}),
+      __agentId: agentId,
+    })),
+  },
+}));
+
 vi.mock("../config/sessions.js", () => ({
   loadSessionStore: mocks.loadSessionStore,
   resolveMainSessionKey: mocks.resolveMainSessionKey,
   resolveStorePath: mocks.resolveStorePath,
+  readSessionUpdatedAt: vi.fn(() => undefined),
+  recordSessionMetaFromInbound: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../channels/plugins/index.js", () => ({
   listChannelPlugins: () =>
@@ -217,6 +244,19 @@ vi.mock("../daemon/service.js", () => ({
     }),
   }),
 }));
+vi.mock("../daemon/node-service.js", () => ({
+  resolveNodeService: () => ({
+    label: "LaunchAgent",
+    loadedText: "loaded",
+    notLoadedText: "not loaded",
+    isLoaded: async () => true,
+    readRuntime: async () => ({ status: "running", pid: 4321 }),
+    readCommand: async () => ({
+      programArguments: ["node", "dist/entry.js", "node-host"],
+      sourcePath: "/tmp/Library/LaunchAgents/com.clawdbot.node.plist",
+    }),
+  }),
+}));
 vi.mock("../security/audit.js", () => ({
   runSecurityAudit: mocks.runSecurityAudit,
 }));
@@ -234,6 +274,10 @@ describe("statusCommand", () => {
     await statusCommand({ json: true }, runtime as never);
     const payload = JSON.parse((runtime.log as vi.Mock).mock.calls[0][0]);
     expect(payload.linkChannel.linked).toBe(true);
+    expect(payload.memory.agentId).toBe("main");
+    expect(payload.memoryPlugin.enabled).toBe(true);
+    expect(payload.memoryPlugin.slot).toBe("memory-core");
+    expect(payload.memory.vector.available).toBe(true);
     expect(payload.sessions.count).toBe(1);
     expect(payload.sessions.paths).toContain("/tmp/sessions.json");
     expect(payload.sessions.defaults.model).toBeTruthy();
@@ -243,6 +287,8 @@ describe("statusCommand", () => {
     expect(payload.sessions.recent[0].flags).toContain("verbose:on");
     expect(payload.securityAudit.summary.critical).toBe(1);
     expect(payload.securityAudit.summary.warn).toBe(1);
+    expect(payload.gatewayService.label).toBe("LaunchAgent");
+    expect(payload.nodeService.label).toBe("LaunchAgent");
   });
 
   it("prints formatted lines otherwise", async () => {
@@ -256,6 +302,7 @@ describe("statusCommand", () => {
     expect(logs.some((l) => l.includes("CRITICAL"))).toBe(true);
     expect(logs.some((l) => l.includes("Dashboard"))).toBe(true);
     expect(logs.some((l) => l.includes("macos 14.0 (arm64)"))).toBe(true);
+    expect(logs.some((l) => l.includes("Memory"))).toBe(true);
     expect(logs.some((l) => l.includes("Channels"))).toBe(true);
     expect(logs.some((l) => l.includes("WhatsApp"))).toBe(true);
     expect(logs.some((l) => l.includes("Sessions"))).toBe(true);

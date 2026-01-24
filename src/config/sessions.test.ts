@@ -176,6 +176,67 @@ describe("sessions", () => {
     });
   });
 
+  it("updateLastRoute records origin + group metadata when ctx is provided", async () => {
+    const sessionKey = "agent:main:whatsapp:group:123@g.us";
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(storePath, "{}", "utf-8");
+
+    await updateLastRoute({
+      storePath,
+      sessionKey,
+      deliveryContext: {
+        channel: "whatsapp",
+        to: "123@g.us",
+      },
+      ctx: {
+        Provider: "whatsapp",
+        ChatType: "group",
+        GroupSubject: "Family",
+        From: "123@g.us",
+      },
+    });
+
+    const store = loadSessionStore(storePath);
+    expect(store[sessionKey]?.subject).toBe("Family");
+    expect(store[sessionKey]?.channel).toBe("whatsapp");
+    expect(store[sessionKey]?.groupId).toBe("123@g.us");
+    expect(store[sessionKey]?.origin?.label).toBe("Family id:123@g.us");
+    expect(store[sessionKey]?.origin?.provider).toBe("whatsapp");
+    expect(store[sessionKey]?.origin?.chatType).toBe("group");
+  });
+
+  it("updateSessionStoreEntry preserves existing fields when patching", async () => {
+    const sessionKey = "agent:main:main";
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(
+      storePath,
+      JSON.stringify(
+        {
+          [sessionKey]: {
+            sessionId: "sess-1",
+            updatedAt: 100,
+            reasoningLevel: "on",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    await updateSessionStoreEntry({
+      storePath,
+      sessionKey,
+      update: async () => ({ updatedAt: 200 }),
+    });
+
+    const store = loadSessionStore(storePath);
+    expect(store[sessionKey]?.updatedAt).toBeGreaterThanOrEqual(200);
+    expect(store[sessionKey]?.reasoningLevel).toBe("on");
+  });
+
   it("updateSessionStore preserves concurrent additions", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
     const storePath = path.join(dir, "sessions.json");
@@ -193,6 +254,22 @@ describe("sessions", () => {
     const store = loadSessionStore(storePath);
     expect(store["agent:main:one"]?.sessionId).toBe("sess-1");
     expect(store["agent:main:two"]?.sessionId).toBe("sess-2");
+  });
+
+  it("recovers from array-backed session stores", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-sessions-"));
+    const storePath = path.join(dir, "sessions.json");
+    await fs.writeFile(storePath, "[]", "utf-8");
+
+    await updateSessionStore(storePath, (store) => {
+      store["agent:main:main"] = { sessionId: "sess-1", updatedAt: 1 };
+    });
+
+    const store = loadSessionStore(storePath);
+    expect(store["agent:main:main"]?.sessionId).toBe("sess-1");
+
+    const raw = await fs.readFile(storePath, "utf-8");
+    expect(raw.trim().startsWith("{")).toBe(true);
   });
 
   it("normalizes last route fields on write", async () => {

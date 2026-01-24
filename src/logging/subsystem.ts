@@ -4,9 +4,11 @@ import type { Logger as TsLogger } from "tslog";
 import { CHAT_CHANNEL_ORDER } from "../channels/registry.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { getConsoleSettings, shouldLogSubsystemToConsole } from "./console.js";
+import { isVerbose } from "../globals.js";
 import { type LogLevel, levelToMinLevel } from "./levels.js";
 import { getChildLogger } from "./logger.js";
 import { loggingState } from "./state.js";
+import { clearActiveProgressLine } from "../terminal/progress-line.js";
 
 type LogObj = { date?: Date } & Record<string, unknown>;
 
@@ -163,6 +165,7 @@ function formatConsoleLine(opts: {
 }
 
 function writeConsoleLine(level: LogLevel, line: string) {
+  clearActiveProgressLine();
   const sanitized =
     process.platform === "win32" && process.env.GITHUB_ACTIONS === "true"
       ? line.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "?").replace(/[\uD800-\uDFFF]/g, "?")
@@ -218,10 +221,18 @@ export function createSubsystemLogger(subsystem: string): SubsystemLogger {
     logToFile(getFileLogger(), level, message, fileMeta);
     if (!shouldLogToConsole(level, { level: consoleSettings.level })) return;
     if (!shouldLogSubsystemToConsole(subsystem)) return;
+    const consoleMessage = consoleMessageOverride ?? message;
+    if (
+      !isVerbose() &&
+      subsystem === "agent/embedded" &&
+      /(sessionId|runId)=probe-/.test(consoleMessage)
+    ) {
+      return;
+    }
     const line = formatConsoleLine({
       level,
       subsystem,
-      message: consoleSettings.style === "json" ? message : (consoleMessageOverride ?? message),
+      message: consoleSettings.style === "json" ? message : consoleMessage,
       style: consoleSettings.style,
       meta: fileMeta,
     });
@@ -239,6 +250,13 @@ export function createSubsystemLogger(subsystem: string): SubsystemLogger {
     raw: (message) => {
       logToFile(getFileLogger(), "info", message, { raw: true });
       if (shouldLogSubsystemToConsole(subsystem)) {
+        if (
+          !isVerbose() &&
+          subsystem === "agent/embedded" &&
+          /(sessionId|runId)=probe-/.test(message)
+        ) {
+          return;
+        }
         writeConsoleLine("info", message);
       }
     },

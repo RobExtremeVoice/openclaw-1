@@ -1,17 +1,18 @@
-import type { ChannelPlugin } from "../../../src/channels/plugins/types.js";
 import {
+  applyAccountNameToChannelSection,
+  buildChannelConfigSchema,
+  DEFAULT_ACCOUNT_ID,
   deleteAccountFromConfigSection,
+  formatPairingApproveHint,
+  normalizeAccountId,
+  PAIRING_APPROVED_MESSAGE,
   setAccountEnabledInConfigSection,
-} from "../../../src/channels/plugins/config-helpers.js";
-import { buildChannelConfigSchema } from "../../../src/channels/plugins/config-schema.js";
-import { formatPairingApproveHint } from "../../../src/channels/plugins/helpers.js";
-import { PAIRING_APPROVED_MESSAGE } from "../../../src/channels/plugins/pairing-message.js";
-import { applyAccountNameToChannelSection } from "../../../src/channels/plugins/setup-helpers.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../../src/routing/session-key.js";
+  type ChannelPlugin,
+} from "clawdbot/plugin-sdk";
 
 import { matrixMessageActions } from "./actions.js";
 import { MatrixConfigSchema } from "./config-schema.js";
-import { resolveMatrixGroupRequireMention } from "./group-mentions.js";
+import { resolveMatrixGroupRequireMention, resolveMatrixGroupToolPolicy } from "./group-mentions.js";
 import type { CoreConfig } from "./types.js";
 import {
   listMatrixAccountIds,
@@ -25,6 +26,11 @@ import { probeMatrix } from "./matrix/probe.js";
 import { sendMessageMatrix } from "./matrix/send.js";
 import { matrixOnboardingAdapter } from "./onboarding.js";
 import { matrixOutbound } from "./outbound.js";
+import { resolveMatrixTargets } from "./resolve-targets.js";
+import {
+  listMatrixDirectoryGroupsLive,
+  listMatrixDirectoryPeersLive,
+} from "./directory-live.js";
 
 const meta = {
   id: "matrix",
@@ -40,10 +46,12 @@ const meta = {
 function normalizeMatrixMessagingTarget(raw: string): string | undefined {
   let normalized = raw.trim();
   if (!normalized) return undefined;
-  if (normalized.toLowerCase().startsWith("matrix:")) {
+  const lowered = normalized.toLowerCase();
+  if (lowered.startsWith("matrix:")) {
     normalized = normalized.slice("matrix:".length).trim();
   }
-  return normalized ? normalized.toLowerCase() : undefined;
+  const stripped = normalized.replace(/^(room|channel|user):/i, "").trim();
+  return stripped || undefined;
 }
 
 function buildMatrixConfigUpdate(
@@ -147,20 +155,34 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
       approveHint: formatPairingApproveHint("matrix"),
       normalizeEntry: (raw) => raw.replace(/^matrix:/i, "").trim().toLowerCase(),
     }),
-    collectWarnings: ({ account }) => {
-      const groupPolicy = account.config.groupPolicy ?? "allowlist";
+    collectWarnings: ({ account, cfg }) => {
+      const defaultGroupPolicy = (cfg as CoreConfig).channels?.defaults?.groupPolicy;
+      const groupPolicy =
+        account.config.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
       if (groupPolicy !== "open") return [];
       return [
-        "- Matrix rooms: groupPolicy=\"open\" allows any room to trigger (mention-gated). Set channels.matrix.groupPolicy=\"allowlist\" + channels.matrix.rooms to restrict rooms.",
+        "- Matrix rooms: groupPolicy=\"open\" allows any room to trigger (mention-gated). Set channels.matrix.groupPolicy=\"allowlist\" + channels.matrix.groups (and optionally channels.matrix.groupAllowFrom) to restrict rooms.",
       ];
     },
   },
   groups: {
     resolveRequireMention: resolveMatrixGroupRequireMention,
+    resolveToolPolicy: resolveMatrixGroupToolPolicy,
   },
   threading: {
     resolveReplyToMode: ({ cfg }) =>
       (cfg as CoreConfig).channels?.matrix?.replyToMode ?? "off",
+    buildToolContext: ({ context, hasRepliedRef }) => {
+      const currentTarget = context.To;
+      return {
+        currentChannelId: currentTarget?.trim() || undefined,
+        currentThreadTs:
+          context.MessageThreadId != null
+            ? String(context.MessageThreadId)
+            : context.ReplyToId,
+        hasRepliedRef,
+      };
+    },
   },
   messaging: {
     normalizeTarget: normalizeMatrixMessagingTarget,
@@ -187,7 +209,14 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
         ids.add(raw.replace(/^matrix:/i, ""));
       }
 
-      for (const room of Object.values(account.config.rooms ?? {})) {
+      for (const entry of account.config.groupAllowFrom ?? []) {
+        const raw = String(entry).trim();
+        if (!raw || raw === "*") continue;
+        ids.add(raw.replace(/^matrix:/i, ""));
+      }
+
+      const groups = account.config.groups ?? account.config.rooms ?? {};
+      for (const room of Object.values(groups)) {
         for (const entry of room.users ?? []) {
           const raw = String(entry).trim();
           if (!raw || raw === "*") continue;
@@ -219,7 +248,8 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
     listGroups: async ({ cfg, accountId, query, limit }) => {
       const account = resolveMatrixAccount({ cfg: cfg as CoreConfig, accountId });
       const q = query?.trim().toLowerCase() || "";
-      const ids = Object.keys(account.config.rooms ?? {})
+      const groups = account.config.groups ?? account.config.rooms ?? {};
+      const ids = Object.keys(groups)
         .map((raw) => raw.trim())
         .filter((raw) => Boolean(raw) && raw !== "*")
         .map((raw) => raw.replace(/^matrix:/i, ""))
@@ -234,6 +264,14 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
         .map((id) => ({ kind: "group", id }) as const);
       return ids;
     },
+    listPeersLive: async ({ cfg, query, limit }) =>
+      listMatrixDirectoryPeersLive({ cfg, query, limit }),
+    listGroupsLive: async ({ cfg, query, limit }) =>
+      listMatrixDirectoryGroupsLive({ cfg, query, limit }),
+  },
+  resolver: {
+    resolveTargets: async ({ cfg, inputs, kind, runtime }) =>
+      resolveMatrixTargets({ cfg, inputs, kind, runtime }),
   },
   actions: matrixMessageActions,
   setup: {
@@ -248,9 +286,15 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
     validateInput: ({ input }) => {
       if (input.useEnv) return null;
       if (!input.homeserver?.trim()) return "Matrix requires --homeserver";
-      if (!input.userId?.trim()) return "Matrix requires --user-id";
-      if (!input.accessToken?.trim() && !input.password?.trim()) {
+      const accessToken = input.accessToken?.trim();
+      const password = input.password?.trim();
+      const userId = input.userId?.trim();
+      if (!accessToken && !password) {
         return "Matrix requires --access-token or --password";
+      }
+      if (!accessToken) {
+        if (!userId) return "Matrix requires --user-id when using --password";
+        if (!password) return "Matrix requires --password when using --user-id";
       }
       return null;
     },
@@ -366,6 +410,7 @@ export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount> = {
         mediaMaxMb: account.config.mediaMaxMb,
         initialSyncLimit: account.config.initialSyncLimit,
         replyToMode: account.config.replyToMode,
+        accountId: account.accountId,
       });
     },
   },

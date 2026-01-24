@@ -79,6 +79,11 @@ function formatSupport(capabilities?: ChannelCapabilities) {
   }
   if (capabilities.polls) bits.push("polls");
   if (capabilities.reactions) bits.push("reactions");
+  if (capabilities.edit) bits.push("edit");
+  if (capabilities.unsend) bits.push("unsend");
+  if (capabilities.reply) bits.push("reply");
+  if (capabilities.effects) bits.push("effects");
+  if (capabilities.groupManagement) bits.push("groupManagement");
   if (capabilities.threads) bits.push("threads");
   if (capabilities.media) bits.push("media");
   if (capabilities.nativeCommands) bits.push("nativeCommands");
@@ -146,8 +151,10 @@ function formatProbeLines(channelId: string, probe: unknown): string[] {
     }
     const flags: string[] = [];
     const canJoinGroups = (bot as { canJoinGroups?: boolean | null })?.canJoinGroups;
-    const canReadAll = (bot as { canReadAllGroupMessages?: boolean | null })?.canReadAllGroupMessages;
-    const inlineQueries = (bot as { supportsInlineQueries?: boolean | null })?.supportsInlineQueries;
+    const canReadAll = (bot as { canReadAllGroupMessages?: boolean | null })
+      ?.canReadAllGroupMessages;
+    const inlineQueries = (bot as { supportsInlineQueries?: boolean | null })
+      ?.supportsInlineQueries;
     if (typeof canJoinGroups === "boolean") flags.push(`joinGroups=${canJoinGroups}`);
     if (typeof canReadAll === "boolean") flags.push(`readAllGroupMessages=${canReadAll}`);
     if (typeof inlineQueries === "boolean") flags.push(`inlineQueries=${inlineQueries}`);
@@ -187,14 +194,15 @@ function formatProbeLines(channelId: string, probe: unknown): string[] {
       const roles = Array.isArray(graph.roles)
         ? graph.roles.map((role) => String(role).trim()).filter(Boolean)
         : [];
-      const scopes = typeof graph.scopes === "string"
-        ? graph.scopes
-            .split(/\s+/)
-            .map((scope) => scope.trim())
-            .filter(Boolean)
-        : Array.isArray(graph.scopes)
-          ? graph.scopes.map((scope) => String(scope).trim()).filter(Boolean)
-          : [];
+      const scopes =
+        typeof graph.scopes === "string"
+          ? graph.scopes
+              .split(/\s+/)
+              .map((scope) => scope.trim())
+              .filter(Boolean)
+          : Array.isArray(graph.scopes)
+            ? graph.scopes.map((scope) => String(scope).trim()).filter(Boolean)
+            : [];
       if (graph.ok === false) {
         lines.push(`Graph: ${theme.error(graph.error ?? "failed")}`);
       } else if (roles.length > 0 || scopes.length > 0) {
@@ -219,7 +227,8 @@ function formatProbeLines(channelId: string, probe: unknown): string[] {
     lines.push("Probe: ok");
   }
   if (ok === false) {
-    const error = typeof probeObj.error === "string" && probeObj.error ? ` (${probeObj.error})` : "";
+    const error =
+      typeof probeObj.error === "string" && probeObj.error ? ` (${probeObj.error})` : "";
     lines.push(`Probe: ${theme.error(`failed${error}`)}`);
   }
   return lines;
@@ -388,8 +397,7 @@ export async function channelsCapabilitiesCommand(
   const cfg = await requireValidConfig(runtime);
   if (!cfg) return;
   const timeoutMs = normalizeTimeout(opts.timeout, 10_000);
-  const rawChannel =
-    typeof opts.channel === "string" ? opts.channel.trim().toLowerCase() : "";
+  const rawChannel = typeof opts.channel === "string" ? opts.channel.trim().toLowerCase() : "";
   const rawTarget = typeof opts.target === "string" ? opts.target.trim() : "";
 
   if (opts.account && (!rawChannel || rawChannel === "all")) {
@@ -483,9 +491,7 @@ export async function channelsCapabilitiesCommand(
         const label = perms.channelId ? ` (${perms.channelId})` : "";
         lines.push(`Permissions${label}: ${list}`);
         if (perms.missingRequired && perms.missingRequired.length > 0) {
-          lines.push(
-            `${theme.warn("Missing required:")} ${perms.missingRequired.join(", ")}`,
-          );
+          lines.push(`${theme.warn("Missing required:")} ${perms.missingRequired.join(", ")}`);
         } else {
           lines.push(theme.success("Missing required: none"));
         }

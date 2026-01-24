@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import process from "node:process";
+import type { GatewayLockHandle } from "../infra/gateway-lock.js";
 
 declare const __CLAWDBOT_VERSION__: string;
 
@@ -45,6 +46,8 @@ async function main() {
     { startGatewayServer },
     { setGatewayWsLogStyle },
     { setVerbose },
+    { acquireGatewayLock, GatewayLockError },
+    { consumeGatewaySigusr1RestartAuthorization, isGatewaySigusr1RestartExternallyAllowed },
     { defaultRuntime },
     { enableConsoleCapture, setConsoleTimestampPrefix },
   ] = await Promise.all([
@@ -52,9 +55,11 @@ async function main() {
     import("../gateway/server.js"),
     import("../gateway/ws-logging.js"),
     import("../globals.js"),
+    import("../infra/gateway-lock.js"),
+    import("../infra/restart.js"),
     import("../runtime.js"),
     import("../logging.js"),
-  ]);
+  ] as const);
 
   enableConsoleCapture();
   setConsoleTimestampPrefix(true);
@@ -85,11 +90,15 @@ async function main() {
     cfg.gateway?.bind ??
     "loopback";
   const bind =
-    bindRaw === "loopback" || bindRaw === "lan" || bindRaw === "auto" || bindRaw === "custom"
+    bindRaw === "loopback" ||
+    bindRaw === "lan" ||
+    bindRaw === "auto" ||
+    bindRaw === "custom" ||
+    bindRaw === "tailnet"
       ? bindRaw
       : null;
   if (!bind) {
-    defaultRuntime.error('Invalid --bind (use "loopback", "lan", "auto", or "custom")');
+    defaultRuntime.error('Invalid --bind (use "loopback", "lan", "tailnet", "auto", or "custom")');
     process.exit(1);
   }
 
@@ -97,6 +106,7 @@ async function main() {
   if (token) process.env.CLAWDBOT_GATEWAY_TOKEN = token;
 
   let server: Awaited<ReturnType<typeof startGatewayServer>> | null = null;
+  let lock: GatewayLockHandle | null = null;
   let shuttingDown = false;
   let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
   let restartResolver: (() => void) | null = null;
@@ -156,6 +166,13 @@ async function main() {
   };
   const onSigusr1 = () => {
     defaultRuntime.log("gateway: signal SIGUSR1 received");
+    const authorized = consumeGatewaySigusr1RestartAuthorization();
+    if (!authorized && !isGatewaySigusr1RestartExternallyAllowed()) {
+      defaultRuntime.log(
+        "gateway: SIGUSR1 restart ignored (not authorized; enable commands.restart or use gateway tool).",
+      );
+      return;
+    }
     request("restart", "SIGUSR1");
   };
 
@@ -164,6 +181,15 @@ async function main() {
   process.on("SIGUSR1", onSigusr1);
 
   try {
+    try {
+      lock = await acquireGatewayLock();
+    } catch (err) {
+      if (err instanceof GatewayLockError) {
+        defaultRuntime.error(`Gateway start blocked: ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
@@ -178,6 +204,7 @@ async function main() {
       });
     }
   } finally {
+    await (lock as GatewayLockHandle | null)?.release();
     cleanupSignals();
   }
 }

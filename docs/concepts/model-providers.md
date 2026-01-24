@@ -38,7 +38,7 @@ Clawdbot ships with the pi‑ai catalog. These providers require **no**
 - Provider: `anthropic`
 - Auth: `ANTHROPIC_API_KEY` or `claude setup-token`
 - Example model: `anthropic/claude-opus-4-5`
-- CLI: `clawdbot onboard --auth-choice setup-token`
+- CLI: `clawdbot onboard --auth-choice token` (paste setup-token) or `clawdbot models auth paste-token --provider anthropic`
 
 ```json5
 {
@@ -182,6 +182,22 @@ Kimi Code uses a dedicated endpoint and key (separate from Moonshot):
   }
 }
 ```
+
+### Qwen OAuth (free tier)
+
+Qwen provides OAuth access to Qwen Coder + Vision via a device-code flow.
+Enable the bundled plugin, then log in:
+
+```bash
+clawdbot plugins enable qwen-portal-auth
+clawdbot models auth login --provider qwen-portal --set-default
+```
+
+Model refs:
+- `qwen-portal/coder-model`
+- `qwen-portal/vision-model`
+
+See [/providers/qwen](/providers/qwen) for setup details and notes.
 
 ### Synthetic
 

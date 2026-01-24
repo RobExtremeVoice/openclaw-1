@@ -6,6 +6,7 @@ import { formatToolAggregate } from "../../../auto-reply/tool-meta.js";
 import type { ClawdbotConfig } from "../../../config/config.js";
 import {
   formatAssistantErrorText,
+  formatRawAssistantErrorForUi,
   getApiErrorPayloadFingerprint,
   isRawApiErrorPayload,
   normalizeTextForComparison,
@@ -23,6 +24,7 @@ export function buildEmbeddedRunPayloads(params: {
   assistantTexts: string[];
   toolMetas: ToolMetaEntry[];
   lastAssistant: AssistantMessage | undefined;
+  lastToolError?: { toolName: string; meta?: string; error?: string };
   config?: ClawdbotConfig;
   sessionKey: string;
   verboseLevel?: VerboseLevel;
@@ -62,6 +64,12 @@ export function buildEmbeddedRunPayloads(params: {
     : undefined;
   const rawErrorFingerprint = rawErrorMessage
     ? getApiErrorPayloadFingerprint(rawErrorMessage)
+    : null;
+  const formattedRawErrorMessage = rawErrorMessage
+    ? formatRawAssistantErrorForUi(rawErrorMessage)
+    : null;
+  const normalizedFormattedRawErrorMessage = formattedRawErrorMessage
+    ? normalizeTextForComparison(formattedRawErrorMessage)
     : null;
   const normalizedRawErrorText = rawErrorMessage
     ? normalizeTextForComparison(rawErrorMessage)
@@ -115,9 +123,14 @@ export function buildEmbeddedRunPayloads(params: {
       if (trimmed === genericErrorText) return true;
     }
     if (rawErrorMessage && trimmed === rawErrorMessage) return true;
+    if (formattedRawErrorMessage && trimmed === formattedRawErrorMessage) return true;
     if (normalizedRawErrorText) {
       const normalized = normalizeTextForComparison(trimmed);
       if (normalized && normalized === normalizedRawErrorText) return true;
+    }
+    if (normalizedFormattedRawErrorMessage) {
+      const normalized = normalizeTextForComparison(trimmed);
+      if (normalized && normalized === normalizedFormattedRawErrorMessage) return true;
     }
     if (rawErrorFingerprint) {
       const fingerprint = getApiErrorPayloadFingerprint(trimmed);
@@ -153,6 +166,47 @@ export function buildEmbeddedRunPayloads(params: {
       replyToTag,
       replyToCurrent,
     });
+  }
+
+  if (params.lastToolError) {
+    const lastAssistantHasToolCalls =
+      Array.isArray(params.lastAssistant?.content) &&
+      params.lastAssistant?.content.some((block) =>
+        block && typeof block === "object"
+          ? (block as { type?: unknown }).type === "toolCall"
+          : false,
+      );
+    const lastAssistantWasToolUse = params.lastAssistant?.stopReason === "toolUse";
+    const hasUserFacingReply =
+      replyItems.length > 0 && !lastAssistantHasToolCalls && !lastAssistantWasToolUse;
+    // Check if this is a recoverable/internal tool error that shouldn't be shown to users
+    // when there's already a user-facing reply (the model should have retried).
+    const errorLower = (params.lastToolError.error ?? "").toLowerCase();
+    const isRecoverableError =
+      errorLower.includes("required") ||
+      errorLower.includes("missing") ||
+      errorLower.includes("invalid") ||
+      errorLower.includes("must be") ||
+      errorLower.includes("must have") ||
+      errorLower.includes("needs") ||
+      errorLower.includes("requires");
+
+    // Show tool errors only when:
+    // 1. There's no user-facing reply AND the error is not recoverable
+    // Recoverable errors (validation, missing params) are already in the model's context
+    // and shouldn't be surfaced to users since the model should retry.
+    if (!hasUserFacingReply && !isRecoverableError) {
+      const toolSummary = formatToolAggregate(
+        params.lastToolError.toolName,
+        params.lastToolError.meta ? [params.lastToolError.meta] : undefined,
+        { markdown: useMarkdown },
+      );
+      const errorSuffix = params.lastToolError.error ? `: ${params.lastToolError.error}` : "";
+      replyItems.push({
+        text: `⚠️ ${toolSummary} failed${errorSuffix}`,
+        isError: true,
+      });
+    }
   }
 
   const hasAudioAsVoiceTag = replyItems.some((item) => item.audioAsVoice);

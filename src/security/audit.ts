@@ -5,6 +5,7 @@ import type { ClawdbotConfig } from "../config/config.js";
 import { resolveBrowserConfig } from "../browser/config.js";
 import { resolveConfigPath, resolveStateDir } from "../config/paths.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
+import { formatCliCommand } from "../cli/command-format.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { probeGateway } from "../gateway/probe.js";
 import {
@@ -13,6 +14,7 @@ import {
   collectHooksHardeningFindings,
   collectIncludeFilePermFindings,
   collectModelHygieneFindings,
+  collectSmallModelRiskFindings,
   collectPluginsTrustFindings,
   collectSecretsInConfigFindings,
   collectStateDeepFilesystemFindings,
@@ -233,6 +235,17 @@ function collectGatewayConfigFindings(cfg: ClawdbotConfig): SecurityAuditFinding
     });
   }
 
+  if (cfg.gateway?.controlUi?.allowInsecureAuth === true) {
+    findings.push({
+      checkId: "gateway.control_ui.insecure_auth",
+      severity: "warn",
+      title: "Control UI allows insecure HTTP auth",
+      detail:
+        "gateway.controlUi.allowInsecureAuth=true allows token-only auth over HTTP and skips device identity.",
+      remediation: "Disable it or switch to HTTPS (Tailscale Serve) or localhost.",
+    });
+  }
+
   const token =
     typeof auth.token === "string" && auth.token.trim().length > 0 ? auth.token.trim() : null;
   if (auth.mode === "token" && token && token.length < 24) {
@@ -264,7 +277,7 @@ function collectBrowserControlFindings(cfg: ClawdbotConfig): SecurityAuditFindin
       severity: "warn",
       title: "Browser control config looks invalid",
       detail: String(err),
-      remediation: `Fix browser.controlUrl/browser.cdpUrl in ${resolveConfigPath()} and re-run "clawdbot security audit --deep".`,
+      remediation: `Fix browser.controlUrl/browser.cdpUrl in ${resolveConfigPath()} and re-run "${formatCliCommand("clawdbot security audit --deep")}".`,
     });
     return findings;
   }
@@ -492,7 +505,9 @@ async function collectChannelSecurityFindings(params: {
       });
       const slashEnabled = nativeEnabled || nativeSkillsEnabled;
       if (slashEnabled) {
-        const groupPolicy = (discordCfg.groupPolicy as string | undefined) ?? "allowlist";
+        const defaultGroupPolicy = params.cfg.channels?.defaults?.groupPolicy;
+        const groupPolicy =
+          (discordCfg.groupPolicy as string | undefined) ?? defaultGroupPolicy ?? "allowlist";
         const guildEntries = (discordCfg.guilds as Record<string, unknown> | undefined) ?? {};
         const guildsConfigured = Object.keys(guildEntries).length > 0;
         const hasAnyUserAllowlist = Object.values(guildEntries).some((guild) => {
@@ -652,7 +667,9 @@ async function collectChannelSecurityFindings(params: {
       const telegramCfg =
         (account as { config?: Record<string, unknown> } | null)?.config ??
         ({} as Record<string, unknown>);
-      const groupPolicy = (telegramCfg.groupPolicy as string | undefined) ?? "allowlist";
+      const defaultGroupPolicy = params.cfg.channels?.defaults?.groupPolicy;
+      const groupPolicy =
+        (telegramCfg.groupPolicy as string | undefined) ?? defaultGroupPolicy ?? "allowlist";
       const groups = telegramCfg.groups as Record<string, unknown> | undefined;
       const groupsConfigured = Boolean(groups) && Object.keys(groups ?? {}).length > 0;
       const groupAccessPossible =
@@ -800,6 +817,7 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
   findings.push(...collectHooksHardeningFindings(cfg));
   findings.push(...collectSecretsInConfigFindings(cfg));
   findings.push(...collectModelHygieneFindings(cfg));
+  findings.push(...collectSmallModelRiskFindings({ cfg, env }));
   findings.push(...collectExposureMatrixFindings(cfg));
 
   const configSnapshot =
@@ -836,7 +854,7 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
       severity: "warn",
       title: "Gateway probe failed (deep)",
       detail: deep.gateway.error ?? "gateway unreachable",
-      remediation: `Run "clawdbot status --all" to debug connectivity/auth, then re-run "clawdbot security audit --deep".`,
+      remediation: `Run "${formatCliCommand("clawdbot status --all")}" to debug connectivity/auth, then re-run "${formatCliCommand("clawdbot security audit --deep")}".`,
     });
   }
 

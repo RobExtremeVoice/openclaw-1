@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { MSTeamsConfig } from "../../../src/config/types.js";
+import type { MSTeamsConfig } from "clawdbot/plugin-sdk";
 import {
   isMSTeamsGroupAllowed,
   resolveMSTeamsReplyPolicy,
@@ -29,6 +29,10 @@ describe("msteams policy", () => {
 
       expect(res.teamConfig?.requireMention).toBe(false);
       expect(res.channelConfig?.requireMention).toBe(true);
+      expect(res.allowlistConfigured).toBe(true);
+      expect(res.allowed).toBe(true);
+      expect(res.channelMatchKey).toBe("chan456");
+      expect(res.channelMatchSource).toBe("direct");
     });
 
     it("returns undefined configs when teamId is missing", () => {
@@ -43,6 +47,32 @@ describe("msteams policy", () => {
       });
       expect(res.teamConfig).toBeUndefined();
       expect(res.channelConfig).toBeUndefined();
+      expect(res.allowlistConfigured).toBe(true);
+      expect(res.allowed).toBe(false);
+    });
+
+    it("matches team and channel by name", () => {
+      const cfg: MSTeamsConfig = {
+        teams: {
+          "My Team": {
+            requireMention: true,
+            channels: {
+              "General Chat": { requireMention: false },
+            },
+          },
+        },
+      };
+
+      const res = resolveMSTeamsRouteConfig({
+        cfg,
+        teamName: "My Team",
+        channelName: "General Chat",
+        conversationId: "ignored",
+      });
+
+      expect(res.teamConfig?.requireMention).toBe(true);
+      expect(res.channelConfig?.requireMention).toBe(false);
+      expect(res.allowed).toBe(true);
     });
   });
 

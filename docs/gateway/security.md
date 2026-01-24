@@ -5,13 +5,6 @@ read_when:
 ---
 # Security 🔒
 
-Running an AI agent with shell access on your machine is... *spicy*. Here’s how to not get pwned.
-
-Clawdbot is both a product and an experiment: you’re wiring frontier-model behavior into real messaging surfaces and real tools. **There is no “perfectly secure” setup.** The goal is to be deliberate about:
-- who can talk to your bot
-- where the bot is allowed to act
-- what the bot can touch
-
 ## Quick check: `clawdbot security audit`
 
 Run this regularly (especially after changing config or exposing network surfaces):
@@ -28,6 +21,13 @@ It flags common footguns (Gateway auth exposure, browser control exposure, eleva
 - Tighten `groupPolicy="open"` to `groupPolicy="allowlist"` (and per-account variants) for common channels.
 - Turn `logging.redactSensitive="off"` back to `"tools"`.
 - Tighten local perms (`~/.clawdbot` → `700`, config file → `600`, plus common state files like `credentials/*.json`, `agents/*/agent/auth-profiles.json`, and `agents/*/sessions/sessions.json`).
+
+Running an AI agent with shell access on your machine is... *spicy*. Here’s how to not get pwned.
+
+Clawdbot is both a product and an experiment: you’re wiring frontier-model behavior into real messaging surfaces and real tools. **There is no “perfectly secure” setup.** The goal is to be deliberate about:
+- who can talk to your bot
+- where the bot is allowed to act
+- what the bot can touch
 
 ### What the audit checks (high level)
 
@@ -52,6 +52,15 @@ When the audit prints findings, treat this as a priority order:
 5. **Plugins/extensions**: only load what you explicitly trust.
 6. **Model choice**: prefer modern, instruction-hardened models for any bot with tools.
 
+## Control UI over HTTP
+
+The Control UI needs a **secure context** (HTTPS or localhost) to generate device
+identity. If you enable `gateway.controlUi.allowInsecureAuth`, the UI falls back
+to **token-only auth** on plain HTTP and skips device pairing. This is a security
+downgrade—prefer HTTPS (Tailscale Serve) or open the UI on `127.0.0.1`.
+
+`clawdbot security audit` warns when this setting is enabled.
+
 ## Local session logs live on disk
 
 Clawdbot stores session transcripts on disk under `~/.clawdbot/agents/<agentId>/sessions/*.jsonl`.
@@ -65,8 +74,8 @@ stronger isolation between agents, run them under separate OS users or separate 
 If a macOS node is paired, the Gateway can invoke `system.run` on that node. This is **remote code execution** on the Mac:
 
 - Requires node pairing (approval + token).
-- Controlled on the Mac via **Settings → "Node Run Commands"**: "Always Ask" (default), "Always Allow", or "Never".
-- If you don’t want remote execution, set the policy to "Never" and remove node pairing for that Mac.
+- Controlled on the Mac via **Settings → Exec approvals** (security + ask + allowlist).
+- If you don’t want remote execution, set security to **deny** and remove node pairing for that Mac.
 
 ## Dynamic skills (watcher / remote nodes)
 
@@ -169,6 +178,20 @@ Even with strong system prompts, **prompt injection is not solved**. What helps 
 - Run sensitive tool execution in a sandbox; keep secrets out of the agent’s reachable filesystem.
 - **Model choice matters:** older/legacy models can be less robust against prompt injection and tool misuse. Prefer modern, instruction-hardened models for any bot with tools. We recommend Anthropic Opus 4.5 because it’s quite good at recognizing prompt injections (see [“A step forward on safety”](https://www.anthropic.com/news/claude-opus-4-5)).
 
+### Prompt injection does not require public DMs
+
+Even if **only you** can message the bot, prompt injection can still happen via
+any **untrusted content** the bot reads (web search/fetch results, browser pages,
+emails, docs, attachments, pasted logs/code). In other words: the sender is not
+the only threat surface; the **content itself** can carry adversarial instructions.
+
+When tools are enabled, the typical risk is exfiltrating context or triggering
+tool calls. Reduce the blast radius by:
+- Using a read-only or tool-disabled **reader agent** to summarize untrusted content,
+  then pass the summary to your main agent.
+- Keeping `web_search` / `web_fetch` / `browser` off for tool-enabled agents unless needed.
+- Enabling sandboxing and strict tool allowlists for any agent that touches untrusted input.
+
 ### Model strength (security note)
 
 Prompt injection resistance is **not** uniform across model tiers. Smaller/cheaper models are generally more susceptible to tool misuse and instruction hijacking, especially under adversarial prompts.
@@ -177,6 +200,8 @@ Recommendations:
 - **Use the latest generation, best-tier model** for any bot that can run tools or touch files/networks.
 - **Avoid weaker tiers** (for example, Sonnet or Haiku) for tool-enabled agents or untrusted inboxes.
 - If you must use a smaller model, **reduce blast radius** (read-only tools, strong sandboxing, minimal filesystem access, strict allowlists).
+- When running small models, **enable sandboxing for all sessions** and **disable web_search/web_fetch/browser** unless inputs are tightly controlled.
+ - For chat-only personal assistants with trusted input and no tools, smaller models are usually fine.
 
 ## Reasoning & verbose output in groups
 
@@ -236,7 +261,7 @@ The Gateway multiplexes **WebSocket + HTTP** on a single port:
 
 Bind mode controls where the Gateway listens:
 - `gateway.bind: "loopback"` (default): only local clients can connect.
-- Non-loopback binds (`"lan"`, `"tailnet"`, `"auto"`) expand the attack surface. Only use them with `gateway.auth` enabled and a real firewall.
+- Non-loopback binds (`"lan"`, `"tailnet"`, `"custom"`) expand the attack surface. Only use them with `gateway.auth` enabled and a real firewall.
 
 Rules of thumb:
 - Prefer Tailscale Serve over LAN binds (Serve keeps the Gateway on loopback, and Tailscale handles access).
@@ -267,6 +292,13 @@ Doctor can generate one for you: `clawdbot doctor --generate-gateway-token`.
 
 Note: `gateway.remote.token` is **only** for remote CLI calls; it does not
 protect local WS access.
+Optional: pin remote TLS with `gateway.remote.tlsFingerprint` when using `wss://`.
+
+Local device pairing:
+- Device pairing is auto‑approved for **local** connects (loopback or the
+  gateway host’s own tailnet address) to keep same‑host clients smooth.
+- Other tailnet peers are **not** treated as local; they still need pairing
+  approval.
 
 Auth modes:
 - `gateway.auth.mode: "token"`: shared bearer token (recommended for most setups).

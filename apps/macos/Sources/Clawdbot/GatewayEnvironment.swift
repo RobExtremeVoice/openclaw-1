@@ -27,7 +27,11 @@ struct Semver: Comparable, CustomStringConvertible, Sendable {
         else { return nil }
         // Strip prerelease suffix (e.g., "11-4" → "11", "5-beta.1" → "5")
         let patchRaw = String(parts[2])
-        let patchNumeric = patchRaw.split { $0 == "-" || $0 == "+" }.first.flatMap { Int($0) } ?? 0
+        guard let patchToken = patchRaw.split(whereSeparator: { $0 == "-" || $0 == "+" }).first,
+              let patchNumeric = Int(patchToken)
+        else {
+            return nil
+        }
         return Semver(major: major, minor: minor, patch: patchNumeric)
     }
 
@@ -116,8 +120,8 @@ enum GatewayEnvironment {
                 kind: .missingNode,
                 nodeVersion: nil,
                 gatewayVersion: nil,
-                    requiredGateway: expectedString,
-                    message: RuntimeLocator.describeFailure(err))
+                requiredGateway: expectedString,
+                message: RuntimeLocator.describeFailure(err))
         case let .success(runtime):
             let gatewayBin = CommandResolver.clawdbotExecutable()
 
@@ -233,11 +237,10 @@ enum GatewayEnvironment {
     static func installGlobal(versionString: String?, statusHandler: @escaping @Sendable (String) -> Void) async {
         let preferred = CommandResolver.preferredPaths().joined(separator: ":")
         let trimmed = versionString?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let target: String
-        if let trimmed, !trimmed.isEmpty {
-            target = trimmed
+        let target: String = if let trimmed, !trimmed.isEmpty {
+            trimmed
         } else {
-            target = "latest"
+            "latest"
         }
         let npm = CommandResolver.findExecutable(named: "npm")
         let pnpm = CommandResolver.findExecutable(named: "pnpm")

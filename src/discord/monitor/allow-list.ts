@@ -1,6 +1,12 @@
 import type { Guild, User } from "@buape/carbon";
 
-import { buildChannelKeyCandidates, resolveChannelEntryMatch } from "../../channels/channel-config.js";
+import {
+  buildChannelKeyCandidates,
+  resolveChannelEntryMatchWithFallback,
+  resolveChannelMatchConfig,
+  type ChannelMatchSource,
+} from "../../channels/channel-config.js";
+import type { AllowlistMatch } from "../../channels/allowlist-match.js";
 import { formatDiscordUserTag } from "./format.js";
 
 export type DiscordAllowList = {
@@ -9,11 +15,7 @@ export type DiscordAllowList = {
   names: Set<string>;
 };
 
-export type DiscordAllowListMatch = {
-  allowed: boolean;
-  matchKey?: string;
-  matchSource?: "wildcard" | "id" | "name" | "tag";
-};
+export type DiscordAllowListMatch = AllowlistMatch<"wildcard" | "id" | "name" | "tag">;
 
 export type DiscordGuildEntryResolved = {
   id?: string;
@@ -44,7 +46,7 @@ export type DiscordChannelConfigResolved = {
   systemPrompt?: string;
   autoThread?: boolean;
   matchKey?: string;
-  matchSource?: "direct" | "parent";
+  matchSource?: ChannelMatchSource;
 };
 
 export function normalizeDiscordAllowList(
@@ -175,41 +177,45 @@ type DiscordChannelLookup = {
   slug?: string;
 };
 type DiscordChannelScope = "channel" | "thread";
-type DiscordChannelMatch = {
-  entry: DiscordChannelEntry;
-  key: string;
-};
 
-function resolveDiscordChannelEntry(
-  channels: NonNullable<DiscordGuildEntryResolved["channels"]>,
+function buildDiscordChannelKeys(
   params: DiscordChannelLookup & { allowNameMatch?: boolean },
-): DiscordChannelMatch | null {
+): string[] {
   const allowNameMatch = params.allowNameMatch !== false;
-  const keys = buildChannelKeyCandidates(
+  return buildChannelKeyCandidates(
     params.id,
     allowNameMatch ? params.slug : undefined,
     allowNameMatch ? params.name : undefined,
   );
-  const { entry, key } = resolveChannelEntryMatch({ entries: channels, keys });
-  if (!entry || !key) return null;
-  return { entry, key };
+}
+
+function resolveDiscordChannelEntryMatch(
+  channels: NonNullable<DiscordGuildEntryResolved["channels"]>,
+  params: DiscordChannelLookup & { allowNameMatch?: boolean },
+  parentParams?: DiscordChannelLookup,
+) {
+  const keys = buildDiscordChannelKeys(params);
+  const parentKeys = parentParams ? buildDiscordChannelKeys(parentParams) : undefined;
+  return resolveChannelEntryMatchWithFallback({
+    entries: channels,
+    keys,
+    parentKeys,
+    wildcardKey: "*",
+  });
 }
 
 function resolveDiscordChannelConfigEntry(
-  match: DiscordChannelMatch,
-  matchSource: "direct" | "parent",
+  entry: DiscordChannelEntry,
 ): DiscordChannelConfigResolved {
   const resolved: DiscordChannelConfigResolved = {
-    allowed: match.entry.allow !== false,
-    requireMention: match.entry.requireMention,
-    skills: match.entry.skills,
-    enabled: match.entry.enabled,
-    users: match.entry.users,
-    systemPrompt: match.entry.systemPrompt,
-    autoThread: match.entry.autoThread,
+    allowed: entry.allow !== false,
+    requireMention: entry.requireMention,
+    skills: entry.skills,
+    enabled: entry.enabled,
+    users: entry.users,
+    systemPrompt: entry.systemPrompt,
+    autoThread: entry.autoThread,
   };
-  if (match.key) resolved.matchKey = match.key;
-  resolved.matchSource = matchSource;
   return resolved;
 }
 
@@ -222,13 +228,13 @@ export function resolveDiscordChannelConfig(params: {
   const { guildInfo, channelId, channelName, channelSlug } = params;
   const channels = guildInfo?.channels;
   if (!channels) return null;
-  const entry = resolveDiscordChannelEntry(channels, {
+  const match = resolveDiscordChannelEntryMatch(channels, {
     id: channelId,
     name: channelName,
     slug: channelSlug,
   });
-  if (!entry) return { allowed: false };
-  return resolveDiscordChannelConfigEntry(entry, "direct");
+  const resolved = resolveChannelMatchConfig(match, resolveDiscordChannelConfigEntry);
+  return resolved ?? { allowed: false };
 }
 
 export function resolveDiscordChannelConfigWithFallback(params: {
@@ -253,34 +259,54 @@ export function resolveDiscordChannelConfigWithFallback(params: {
   } = params;
   const channels = guildInfo?.channels;
   if (!channels) return null;
-  const entry = resolveDiscordChannelEntry(channels, {
-    id: channelId,
-    name: channelName,
-    slug: channelSlug,
-    allowNameMatch: scope !== "thread",
-  });
-  if (entry) return resolveDiscordChannelConfigEntry(entry, "direct");
-  if (parentId || parentName || parentSlug) {
-    const resolvedParentSlug = parentSlug ?? (parentName ? normalizeDiscordSlug(parentName) : "");
-    const parentEntry = resolveDiscordChannelEntry(channels, {
-      id: parentId ?? "",
-      name: parentName,
-      slug: resolvedParentSlug,
-    });
-    if (parentEntry) return resolveDiscordChannelConfigEntry(parentEntry, "parent");
-  }
-  return { allowed: false };
+  const resolvedParentSlug = parentSlug ?? (parentName ? normalizeDiscordSlug(parentName) : "");
+  const match = resolveDiscordChannelEntryMatch(
+    channels,
+    {
+      id: channelId,
+      name: channelName,
+      slug: channelSlug,
+      allowNameMatch: scope !== "thread",
+    },
+    parentId || parentName || parentSlug
+      ? {
+          id: parentId ?? "",
+          name: parentName,
+          slug: resolvedParentSlug,
+        }
+      : undefined,
+  );
+  return resolveChannelMatchConfig(match, resolveDiscordChannelConfigEntry) ?? { allowed: false };
 }
 
 export function resolveDiscordShouldRequireMention(params: {
   isGuildMessage: boolean;
   isThread: boolean;
+  botId?: string | null;
+  threadOwnerId?: string | null;
   channelConfig?: DiscordChannelConfigResolved | null;
   guildInfo?: DiscordGuildEntryResolved | null;
+  /** Pass pre-computed value to avoid redundant checks. */
+  isAutoThreadOwnedByBot?: boolean;
 }): boolean {
   if (!params.isGuildMessage) return false;
-  if (params.isThread && params.channelConfig?.autoThread) return false;
+  // Only skip mention requirement in threads created by the bot (when autoThread is enabled).
+  const isBotThread = params.isAutoThreadOwnedByBot ?? isDiscordAutoThreadOwnedByBot(params);
+  if (isBotThread) return false;
   return params.channelConfig?.requireMention ?? params.guildInfo?.requireMention ?? true;
+}
+
+export function isDiscordAutoThreadOwnedByBot(params: {
+  isThread: boolean;
+  channelConfig?: DiscordChannelConfigResolved | null;
+  botId?: string | null;
+  threadOwnerId?: string | null;
+}): boolean {
+  if (!params.isThread) return false;
+  if (!params.channelConfig?.autoThread) return false;
+  const botId = params.botId?.trim();
+  const threadOwnerId = params.threadOwnerId?.trim();
+  return Boolean(botId && threadOwnerId && botId === threadOwnerId);
 }
 
 export function isDiscordGroupAllowedByPolicy(params: {

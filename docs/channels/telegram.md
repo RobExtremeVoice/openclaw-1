@@ -152,6 +152,7 @@ By default, the bot only responds to mentions in groups (`@botname` or patterns 
 ```
 
 **Important:** Setting `channels.telegram.groups` creates an **allowlist** - only listed groups (or `"*"`) will be accepted.
+Forum topics inherit their parent group config (allowFrom, requireMention, skills, prompts) unless you add per-topic overrides under `channels.telegram.groups.<groupId>.topics.<topicId>`.
 
 To allow all groups with always-respond:
 ```json5
@@ -304,7 +305,7 @@ Use the global setting when all Telegram bots/accounts should behave the same. U
   - `clawdbot pairing list telegram`
   - `clawdbot pairing approve telegram <CODE>`
 - Pairing is the default token exchange used for Telegram DMs. Details: [Pairing](/start/pairing)
-- `channels.telegram.allowFrom` accepts numeric user IDs (recommended) or `@username` entries. It is **not** the bot username; use the human sender’s ID.
+- `channels.telegram.allowFrom` accepts numeric user IDs (recommended) or `@username` entries. It is **not** the bot username; use the human sender’s ID. The wizard accepts `@username` and resolves it to the numeric ID when possible.
 
 #### Finding your Telegram user ID
 Safer (no third-party bot):
@@ -482,6 +483,10 @@ The agent sees reactions as **system notifications** in the conversation history
 **Commands like `/status` don't work:**
 - Make sure your Telegram user ID is authorized (via pairing or `channels.telegram.allowFrom`)
 - Commands require authorization even in groups with `groupPolicy: "open"`
+
+**Long-polling aborts immediately on Node 22+ (often with proxies/custom fetch):**
+- Node 22+ is stricter about `AbortSignal` instances; foreign signals can abort `fetch` calls right away.
+- Upgrade to a Clawdbot build that normalizes abort signals, or run the gateway on Node 20 until you can upgrade.
 
 **Bot starts, then silently stops responding (or logs `HttpError: Network request ... failed`):**
 - Some hosts resolve `api.telegram.org` to IPv6 first. If your server does not have working IPv6 egress, grammY can get stuck on IPv6-only requests.

@@ -15,6 +15,7 @@ import { resolveTelegramCustomCommands } from "../config/telegram-custom-command
 import { dispatchReplyWithBufferedBlockDispatcher } from "../auto-reply/reply/provider-dispatcher.js";
 import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
 import { danger, logVerbose } from "../globals.js";
+import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveCommandAuthorizedFromAuthorizers } from "../channels/command-gating.js";
 import type { ChannelGroupPolicy } from "../config/group-policy.js";
@@ -34,7 +35,7 @@ import {
   buildTelegramGroupPeerId,
   resolveTelegramForumThreadId,
 } from "./bot/helpers.js";
-import { firstDefined, isSenderAllowed, normalizeAllowFrom } from "./bot-access.js";
+import { firstDefined, isSenderAllowed, normalizeAllowFromWithStore } from "./bot-access.js";
 import { readTelegramAllowFromStore } from "./pairing-store.js";
 
 type TelegramNativeCommandContext = Context & { match?: string };
@@ -84,7 +85,7 @@ export const registerTelegramNativeCommands = ({
   const skillCommands =
     nativeEnabled && nativeSkillsEnabled ? listSkillCommandsForAgents({ cfg }) : [];
   const nativeCommands = nativeEnabled
-    ? listNativeCommandSpecsForConfig(cfg, { skillCommands })
+    ? listNativeCommandSpecsForConfig(cfg, { skillCommands, provider: "telegram" })
     : [];
   const reservedCommands = new Set(
     listNativeCommandSpecs().map((command) => command.name.toLowerCase()),
@@ -132,10 +133,10 @@ export const registerTelegramNativeCommands = ({
           const storeAllowFrom = await readTelegramAllowFromStore().catch(() => []);
           const { groupConfig, topicConfig } = resolveTelegramGroupConfig(chatId, resolvedThreadId);
           const groupAllowOverride = firstDefined(topicConfig?.allowFrom, groupConfig?.allowFrom);
-          const effectiveGroupAllow = normalizeAllowFrom([
-            ...(groupAllowOverride ?? groupAllowFrom ?? []),
-            ...storeAllowFrom,
-          ]);
+          const effectiveGroupAllow = normalizeAllowFromWithStore({
+            allowFrom: groupAllowOverride ?? groupAllowFrom,
+            storeAllowFrom,
+          });
           const hasGroupAllowOverride = typeof groupAllowOverride !== "undefined";
 
           if (isGroup && groupConfig?.enabled === false) {
@@ -163,7 +164,8 @@ export const registerTelegramNativeCommands = ({
           }
 
           if (isGroup && useAccessGroups) {
-            const groupPolicy = telegramCfg.groupPolicy ?? "open";
+            const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+            const groupPolicy = telegramCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
             if (groupPolicy === "disabled") {
               await bot.api.sendMessage(chatId, "Telegram group commands are disabled.");
               return;
@@ -193,12 +195,12 @@ export const registerTelegramNativeCommands = ({
             }
           }
 
-          const allowFromList = Array.isArray(allowFrom)
-            ? allowFrom.map((entry) => String(entry).trim()).filter(Boolean)
-            : [];
           const senderId = msg.from?.id ? String(msg.from.id) : "";
           const senderUsername = msg.from?.username ?? "";
-          const dmAllow = normalizeAllowFrom(allowFromList);
+          const dmAllow = normalizeAllowFromWithStore({
+            allowFrom: allowFrom,
+            storeAllowFrom,
+          });
           const senderAllowed = isSenderAllowed({
             allow: dmAllow,
             senderId,
@@ -214,7 +216,7 @@ export const registerTelegramNativeCommands = ({
             return;
           }
 
-          const commandDefinition = findCommandByNativeName(command.name);
+          const commandDefinition = findCommandByNativeName(command.name, "telegram");
           const rawText = ctx.match?.trim() ?? "";
           const commandArgs = commandDefinition
             ? parseCommandArgs(commandDefinition, rawText)
@@ -268,6 +270,11 @@ export const registerTelegramNativeCommands = ({
               id: isGroup ? buildTelegramGroupPeerId(chatId, resolvedThreadId) : String(chatId),
             },
           });
+          const tableMode = resolveMarkdownTableMode({
+            cfg,
+            channel: "telegram",
+            accountId: route.accountId,
+          });
           const skillFilter = firstDefined(topicConfig?.skills, groupConfig?.skills);
           const systemPromptParts = [
             groupConfig?.systemPrompt?.trim() || null,
@@ -304,6 +311,9 @@ export const registerTelegramNativeCommands = ({
             CommandTargetSessionKey: route.sessionKey,
             MessageThreadId: resolvedThreadId,
             IsForum: isForum,
+            // Originating context for sub-agent announce routing
+            OriginatingChannel: "telegram" as const,
+            OriginatingTo: `telegram:${chatId}`,
           });
 
           const disableBlockStreaming =
@@ -326,6 +336,7 @@ export const registerTelegramNativeCommands = ({
                   replyToMode,
                   textLimit,
                   messageThreadId: resolvedThreadId,
+                  tableMode,
                 });
               },
               onError: (err, info) => {

@@ -4,7 +4,7 @@ import {
   resolveGatewayPort,
   resolveStateDir,
 } from "../../config/config.js";
-import type { BridgeBindMode, GatewayControlUiConfig } from "../../config/types.js";
+import type { GatewayBindMode, GatewayControlUiConfig } from "../../config/types.js";
 import { readLastGatewayErrorLine } from "../../daemon/diagnostics.js";
 import type { FindExtraGatewayServicesOptions } from "../../daemon/inspect.js";
 import { findExtraGatewayServices } from "../../daemon/inspect.js";
@@ -33,7 +33,7 @@ type ConfigSummary = {
 };
 
 type GatewayStatusSummary = {
-  bindMode: BridgeBindMode;
+  bindMode: GatewayBindMode;
   bindHost: string;
   customBindHost?: string;
   port: number;
@@ -172,7 +172,8 @@ export async function gatherDaemonStatus(
     | "auto"
     | "lan"
     | "loopback"
-    | "custom";
+    | "custom"
+    | "tailnet";
   const customBindHost = daemonCfg.gateway?.customBindHost;
   const bindHost = await resolveGatewayBindHost(bindMode, customBindHost);
   const tailnetIPv4 = pickPrimaryTailnetIPv4();

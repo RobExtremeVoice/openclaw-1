@@ -11,6 +11,7 @@ import type {
 import { defaultRuntime } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
 import { theme } from "../../terminal/theme.js";
+import { runCommandWithRuntime } from "../cli-utils.js";
 
 function resolveInstallDaemonFlag(
   command: unknown,
@@ -47,7 +48,7 @@ export function registerOnboardCommand(program: Command) {
       "Acknowledge that agents are powerful and full system access is risky (required for --non-interactive)",
       false,
     )
-    .option("--flow <flow>", "Wizard flow: quickstart|advanced")
+    .option("--flow <flow>", "Wizard flow: quickstart|advanced|manual")
     .option("--mode <mode>", "Wizard mode: local|remote")
     .option(
       "--auth-choice <choice>",
@@ -75,7 +76,7 @@ export function registerOnboardCommand(program: Command) {
     .option("--synthetic-api-key <key>", "Synthetic API key")
     .option("--opencode-zen-api-key <key>", "OpenCode Zen API key")
     .option("--gateway-port <port>", "Gateway port")
-    .option("--gateway-bind <mode>", "Gateway bind: loopback|lan|auto|custom")
+    .option("--gateway-bind <mode>", "Gateway bind: loopback|tailnet|lan|auto|custom")
     .option("--gateway-auth <mode>", "Gateway auth: off|token|password")
     .option("--gateway-token <token>", "Gateway token (token auth)")
     .option("--gateway-password <password>", "Gateway password (password auth)")
@@ -83,9 +84,9 @@ export function registerOnboardCommand(program: Command) {
     .option("--remote-token <token>", "Remote Gateway token (optional)")
     .option("--tailscale <mode>", "Tailscale: off|serve|funnel")
     .option("--tailscale-reset-on-exit", "Reset tailscale serve/funnel on exit")
-    .option("--install-daemon", "Install gateway daemon")
-    .option("--no-install-daemon", "Skip gateway daemon install")
-    .option("--skip-daemon", "Skip gateway daemon install")
+    .option("--install-daemon", "Install gateway service")
+    .option("--no-install-daemon", "Skip gateway service install")
+    .option("--skip-daemon", "Skip gateway service install")
     .option("--daemon-runtime <runtime>", "Daemon runtime: node|bun")
     .option("--skip-channels", "Skip channel setup")
     .option("--skip-skills", "Skip skills setup")
@@ -94,7 +95,7 @@ export function registerOnboardCommand(program: Command) {
     .option("--node-manager <name>", "Node manager for skills: npm|pnpm|bun")
     .option("--json", "Output JSON summary", false)
     .action(async (opts, command) => {
-      try {
+      await runCommandWithRuntime(defaultRuntime, async () => {
         const installDaemon = resolveInstallDaemonFlag(command, {
           installDaemon: Boolean(opts.installDaemon),
         });
@@ -105,7 +106,7 @@ export function registerOnboardCommand(program: Command) {
             workspace: opts.workspace as string | undefined,
             nonInteractive: Boolean(opts.nonInteractive),
             acceptRisk: Boolean(opts.acceptRisk),
-            flow: opts.flow as "quickstart" | "advanced" | undefined,
+            flow: opts.flow as "quickstart" | "advanced" | "manual" | undefined,
             mode: opts.mode as "local" | "remote" | undefined,
             authChoice: opts.authChoice as AuthChoice | undefined,
             tokenProvider: opts.tokenProvider as string | undefined,
@@ -147,9 +148,6 @@ export function registerOnboardCommand(program: Command) {
           },
           defaultRuntime,
         );
-      } catch (err) {
-        defaultRuntime.error(String(err));
-        defaultRuntime.exit(1);
-      }
+      });
     });
 }

@@ -9,6 +9,9 @@ export type {
   ChannelCommandAdapter,
   ChannelConfigAdapter,
   ChannelDirectoryAdapter,
+  ChannelResolveKind,
+  ChannelResolveResult,
+  ChannelResolverAdapter,
   ChannelElevatedAdapter,
   ChannelGatewayAdapter,
   ChannelGatewayContext,
@@ -28,6 +31,7 @@ export type {
 export type {
   ChannelAccountSnapshot,
   ChannelAccountState,
+  ChannelAgentPromptAdapter,
   ChannelAgentTool,
   ChannelAgentToolFactory,
   ChannelCapabilities,

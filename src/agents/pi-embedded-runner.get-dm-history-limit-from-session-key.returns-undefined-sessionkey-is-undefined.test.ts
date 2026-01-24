@@ -128,7 +128,7 @@ describe("getDmHistoryLimitFromSessionKey", () => {
         slack: { dmHistoryLimit: 10 },
       },
     } as ClawdbotConfig;
-    expect(getDmHistoryLimitFromSessionKey("agent:beta:slack:channel:C1", config)).toBeUndefined();
+    expect(getDmHistoryLimitFromSessionKey("agent:beta:slack:channel:c1", config)).toBeUndefined();
     expect(getDmHistoryLimitFromSessionKey("telegram:slash:123", config)).toBeUndefined();
   });
   it("returns undefined for unknown provider", () => {
@@ -150,6 +150,7 @@ describe("getDmHistoryLimitFromSessionKey", () => {
       "signal",
       "imessage",
       "msteams",
+      "nextcloud-talk",
     ] as const;
 
     for (const provider of providers) {
@@ -168,6 +169,7 @@ describe("getDmHistoryLimitFromSessionKey", () => {
       "signal",
       "imessage",
       "msteams",
+      "nextcloud-talk",
     ] as const;
 
     for (const provider of providers) {

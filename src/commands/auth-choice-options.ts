@@ -13,13 +13,15 @@ export type AuthChoiceGroupId =
   | "openai"
   | "anthropic"
   | "google"
+  | "copilot"
   | "openrouter"
   | "ai-gateway"
   | "moonshot"
   | "zai"
   | "opencode-zen"
   | "minimax"
-  | "synthetic";
+  | "synthetic"
+  | "qwen";
 
 export type AuthChoiceGroup = {
   value: AuthChoiceGroupId;
@@ -44,13 +46,19 @@ const AUTH_CHOICE_GROUP_DEFS: {
     value: "anthropic",
     label: "Anthropic",
     hint: "Claude Code CLI + API key",
-    choices: ["claude-cli", "setup-token", "token", "apiKey"],
+    choices: ["token", "claude-cli", "apiKey"],
   },
   {
     value: "minimax",
     label: "MiniMax",
     hint: "M2.1 (recommended)",
     choices: ["minimax-api", "minimax-api-lightning"],
+  },
+  {
+    value: "qwen",
+    label: "Qwen",
+    hint: "OAuth",
+    choices: ["qwen-portal"],
   },
   {
     value: "synthetic",
@@ -61,8 +69,14 @@ const AUTH_CHOICE_GROUP_DEFS: {
   {
     value: "google",
     label: "Google",
-    hint: "Gemini API key",
-    choices: ["gemini-api-key"],
+    hint: "Gemini API key + OAuth",
+    choices: ["gemini-api-key", "google-antigravity", "google-gemini-cli"],
+  },
+  {
+    value: "copilot",
+    label: "Copilot",
+    hint: "GitHub + local proxy",
+    choices: ["github-copilot", "copilot-proxy"],
   },
   {
     value: "openrouter",
@@ -146,26 +160,20 @@ export function buildAuthChoiceOptions(params: {
     options.push({
       value: "claude-cli",
       label: "Anthropic token (Claude Code CLI)",
-      hint: formatOAuthHint(claudeCli.expires),
+      hint: `reuses existing Claude Code auth · ${formatOAuthHint(claudeCli.expires)}`,
     });
   } else if (params.includeClaudeCliIfMissing && platform === "darwin") {
     options.push({
       value: "claude-cli",
       label: "Anthropic token (Claude Code CLI)",
-      hint: "requires Keychain access",
+      hint: "reuses existing Claude Code auth · requires Keychain access",
     });
   }
 
   options.push({
-    value: "setup-token",
-    label: "Anthropic token (run setup-token)",
-    hint: "Runs `claude setup-token`",
-  });
-
-  options.push({
     value: "token",
     label: "Anthropic token (paste setup-token)",
-    hint: "Run `claude setup-token`, then paste the token",
+    hint: "run `claude setup-token` elsewhere, then paste the token here",
   });
 
   options.push({
@@ -188,7 +196,23 @@ export function buildAuthChoiceOptions(params: {
     hint: "Uses GitHub device flow",
   });
   options.push({ value: "gemini-api-key", label: "Google Gemini API key" });
+  options.push({
+    value: "google-antigravity",
+    label: "Google Antigravity OAuth",
+    hint: "Uses the bundled Antigravity auth plugin",
+  });
+  options.push({
+    value: "google-gemini-cli",
+    label: "Google Gemini CLI OAuth",
+    hint: "Uses the bundled Gemini CLI auth plugin",
+  });
   options.push({ value: "zai-api-key", label: "Z.AI (GLM 4.7) API key" });
+  options.push({ value: "qwen-portal", label: "Qwen OAuth" });
+  options.push({
+    value: "copilot-proxy",
+    label: "Copilot Proxy (local)",
+    hint: "Local proxy for VS Code Copilot models",
+  });
   options.push({ value: "apiKey", label: "Anthropic API key" });
   // Token flow is currently Anthropic-only; use CLI for advanced providers.
   options.push({

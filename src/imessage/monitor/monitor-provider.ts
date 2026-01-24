@@ -1,38 +1,37 @@
 import fs from "node:fs/promises";
 
-import {
-  resolveEffectiveMessagesConfig,
-  resolveHumanDelayConfig,
-  resolveIdentityName,
-} from "../../agents/identity.js";
-import {
-  extractShortModelName,
-  type ResponsePrefixContext,
-} from "../../auto-reply/reply/response-prefix-template.js";
+import { resolveHumanDelayConfig } from "../../agents/identity.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import { hasControlCommand } from "../../auto-reply/command-detection.js";
-import { formatInboundEnvelope, formatInboundFromLabel } from "../../auto-reply/envelope.js";
+import {
+  formatInboundEnvelope,
+  formatInboundFromLabel,
+  resolveEnvelopeFormatOptions,
+} from "../../auto-reply/envelope.js";
 import {
   createInboundDebouncer,
   resolveInboundDebounceMs,
 } from "../../auto-reply/inbound-debounce.js";
-import { dispatchReplyFromConfig } from "../../auto-reply/reply/dispatch-from-config.js";
+import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
 import {
   buildPendingHistoryContextFromMap,
-  clearHistoryEntries,
+  clearHistoryEntriesIfEnabled,
   DEFAULT_GROUP_HISTORY_LIMIT,
-  recordPendingHistoryEntry,
+  recordPendingHistoryEntryIfEnabled,
   type HistoryEntry,
 } from "../../auto-reply/reply/history.js";
 import { buildMentionRegexes, matchesMentionPatterns } from "../../auto-reply/reply/mentions.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
+import { logInboundDrop } from "../../channels/logging.js";
+import { createReplyPrefixContext } from "../../channels/reply-prefix.js";
+import { recordInboundSession } from "../../channels/session.js";
 import { loadConfig } from "../../config/config.js";
 import {
   resolveChannelGroupPolicy,
   resolveChannelGroupRequireMention,
 } from "../../config/group-policy.js";
-import { resolveStorePath, updateLastRoute } from "../../config/sessions.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
 import { danger, logVerbose, shouldLogVerbose } from "../../globals.js";
 import { waitForTransportReady } from "../../infra/transport-ready.js";
 import { mediaKindFromMime } from "../../media/constants.js";
@@ -43,7 +42,7 @@ import {
 } from "../../pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
 import { truncateUtf16Safe } from "../../utils.js";
-import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
+import { resolveControlCommandGate } from "../../channels/command-gating.js";
 import { resolveIMessageAccount } from "../accounts.js";
 import { createIMessageRpcClient } from "../client.js";
 import { probeIMessage } from "../probe.js";
@@ -83,6 +82,29 @@ async function detectRemoteHostFromCliPath(cliPath: string): Promise<string | un
   }
 }
 
+type IMessageReplyContext = {
+  id?: string;
+  body: string;
+  sender?: string;
+};
+
+function normalizeReplyField(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (typeof value === "number") return String(value);
+  return undefined;
+}
+
+function describeReplyContext(message: IMessagePayload): IMessageReplyContext | null {
+  const body = normalizeReplyField(message.reply_to_text);
+  if (!body) return null;
+  const id = normalizeReplyField(message.reply_to_id);
+  const sender = normalizeReplyField(message.reply_to_sender);
+  return { body, id, sender };
+}
+
 export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): Promise<void> {
   const runtime = resolveRuntime(opts);
   const cfg = opts.config ?? loadConfig();
@@ -105,7 +127,8 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       imessageCfg.groupAllowFrom ??
       (imessageCfg.allowFrom && imessageCfg.allowFrom.length > 0 ? imessageCfg.allowFrom : []),
   );
-  const groupPolicy = imessageCfg.groupPolicy ?? "open";
+  const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+  const groupPolicy = imessageCfg.groupPolicy ?? defaultGroupPolicy ?? "open";
   const dmPolicy = imessageCfg.dmPolicy ?? "pairing";
   const includeAttachments = opts.includeAttachments ?? imessageCfg.includeAttachments ?? false;
   const mediaMaxBytes = (opts.mediaMaxMb ?? imessageCfg.mediaMaxMb ?? 16) * 1024 * 1024;
@@ -302,13 +325,19 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     const mentionRegexes = buildMentionRegexes(cfg, route.agentId);
     const messageText = (message.text ?? "").trim();
     const attachments = includeAttachments ? (message.attachments ?? []) : [];
-    const firstAttachment = attachments?.find((entry) => entry?.original_path && !entry?.missing);
+    // Filter to valid attachments with paths
+    const validAttachments = attachments.filter((entry) => entry?.original_path && !entry?.missing);
+    const firstAttachment = validAttachments[0];
     const mediaPath = firstAttachment?.original_path ?? undefined;
     const mediaType = firstAttachment?.mime_type ?? undefined;
+    // Build arrays for all attachments (for multi-image support)
+    const mediaPaths = validAttachments.map((a) => a.original_path).filter(Boolean) as string[];
+    const mediaTypes = validAttachments.map((a) => a.mime_type ?? undefined);
     const kind = mediaKindFromMime(mediaType ?? undefined);
     const placeholder = kind ? `<media:${kind}>` : attachments?.length ? "<media:attachment>" : "";
     const bodyText = messageText || placeholder;
     if (!bodyText) return;
+    const replyContext = describeReplyContext(message);
     const createdAt = message.created_at ? Date.parse(message.created_at) : undefined;
     const historyKey = isGroup
       ? String(chatId ?? chatGuid ?? chatIdentifier ?? "unknown")
@@ -344,41 +373,44 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             chatIdentifier,
           })
         : false;
-    const commandAuthorized = isGroup
-      ? resolveCommandAuthorizedFromAuthorizers({
-          useAccessGroups,
-          authorizers: [
-            { configured: effectiveDmAllowFrom.length > 0, allowed: ownerAllowedForCommands },
-            { configured: effectiveGroupAllowFrom.length > 0, allowed: groupAllowedForCommands },
-          ],
-        })
-      : dmAuthorized;
-    if (isGroup && hasControlCommand(messageText, cfg) && !commandAuthorized) {
-      logVerbose(`imessage: drop control command from unauthorized sender ${sender}`);
+    const hasControlCommandInMessage = hasControlCommand(messageText, cfg);
+    const commandGate = resolveControlCommandGate({
+      useAccessGroups,
+      authorizers: [
+        { configured: effectiveDmAllowFrom.length > 0, allowed: ownerAllowedForCommands },
+        { configured: effectiveGroupAllowFrom.length > 0, allowed: groupAllowedForCommands },
+      ],
+      allowTextCommands: true,
+      hasControlCommand: hasControlCommandInMessage,
+    });
+    const commandAuthorized = isGroup ? commandGate.commandAuthorized : dmAuthorized;
+    if (isGroup && commandGate.shouldBlock) {
+      logInboundDrop({
+        log: logVerbose,
+        channel: "imessage",
+        reason: "control command (unauthorized)",
+        target: sender,
+      });
       return;
     }
     const shouldBypassMention =
-      isGroup &&
-      requireMention &&
-      !mentioned &&
-      commandAuthorized &&
-      hasControlCommand(messageText);
+      isGroup && requireMention && !mentioned && commandAuthorized && hasControlCommandInMessage;
     const effectiveWasMentioned = mentioned || shouldBypassMention;
     if (isGroup && requireMention && canDetectMention && !mentioned && !shouldBypassMention) {
       logVerbose(`imessage: skipping group message (no mention)`);
-      if (historyKey && historyLimit > 0) {
-        recordPendingHistoryEntry({
-          historyMap: groupHistories,
-          historyKey,
-          limit: historyLimit,
-          entry: {
-            sender: senderNormalized,
-            body: bodyText,
-            timestamp: createdAt,
-            messageId: message.id ? String(message.id) : undefined,
-          },
-        });
-      }
+      recordPendingHistoryEntryIfEnabled({
+        historyMap: groupHistories,
+        historyKey: historyKey ?? "",
+        limit: historyLimit,
+        entry: historyKey
+          ? {
+              sender: senderNormalized,
+              body: bodyText,
+              timestamp: createdAt,
+              messageId: message.id ? String(message.id) : undefined,
+            }
+          : null,
+      });
       return;
     }
 
@@ -391,16 +423,31 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       directLabel: senderNormalized,
       directId: sender,
     });
+    const storePath = resolveStorePath(cfg.session?.store, {
+      agentId: route.agentId,
+    });
+    const envelopeOptions = resolveEnvelopeFormatOptions(cfg);
+    const previousTimestamp = readSessionUpdatedAt({
+      storePath,
+      sessionKey: route.sessionKey,
+    });
+    const replySuffix = replyContext
+      ? `\n\n[Replying to ${replyContext.sender ?? "unknown sender"}${
+          replyContext.id ? ` id:${replyContext.id}` : ""
+        }]\n${replyContext.body}\n[/Replying]`
+      : "";
     const body = formatInboundEnvelope({
       channel: "iMessage",
       from: fromLabel,
       timestamp: createdAt,
-      body: bodyText,
+      body: `${bodyText}${replySuffix}`,
       chatType: isGroup ? "group" : "direct",
       sender: { name: senderNormalized, id: sender },
+      previousTimestamp,
+      envelope: envelopeOptions,
     });
     let combinedBody = body;
-    if (isGroup && historyKey && historyLimit > 0) {
+    if (isGroup && historyKey) {
       combinedBody = buildPendingHistoryContextFromMap({
         historyMap: groupHistories,
         historyKey,
@@ -414,6 +461,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
             body: `${entry.body}${entry.messageId ? ` [id:${entry.messageId}]` : ""}`,
             chatType: "group",
             senderLabel: entry.sender,
+            envelope: envelopeOptions,
           }),
       });
     }
@@ -436,10 +484,16 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       Provider: "imessage",
       Surface: "imessage",
       MessageSid: message.id ? String(message.id) : undefined,
+      ReplyToId: replyContext?.id,
+      ReplyToBody: replyContext?.body,
+      ReplyToSender: replyContext?.sender,
       Timestamp: createdAt,
       MediaPath: mediaPath,
       MediaType: mediaType,
       MediaUrl: mediaPath,
+      MediaPaths: mediaPaths.length > 0 ? mediaPaths : undefined,
+      MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
+      MediaUrls: mediaPaths.length > 0 ? mediaPaths : undefined,
       MediaRemoteHost: remoteHost,
       WasMentioned: effectiveWasMentioned,
       CommandAuthorized: commandAuthorized,
@@ -448,24 +502,24 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       OriginatingTo: imessageTo,
     });
 
-    if (!isGroup) {
-      const sessionCfg = cfg.session;
-      const storePath = resolveStorePath(sessionCfg?.store, {
-        agentId: route.agentId,
-      });
-      const to = (isGroup ? chatTarget : undefined) || sender;
-      if (to) {
-        await updateLastRoute({
-          storePath,
-          sessionKey: route.mainSessionKey,
-          deliveryContext: {
-            channel: "imessage",
-            to,
-            accountId: route.accountId,
-          },
-        });
-      }
-    }
+    const updateTarget = (isGroup ? chatTarget : undefined) || sender;
+    await recordInboundSession({
+      storePath,
+      sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+      ctx: ctxPayload,
+      updateLastRoute:
+        !isGroup && updateTarget
+          ? {
+              sessionKey: route.mainSessionKey,
+              channel: "imessage",
+              to: updateTarget,
+              accountId: route.accountId,
+            }
+          : undefined,
+      onRecordError: (err) => {
+        logVerbose(`imessage: failed updating session meta: ${String(err)}`);
+      },
+    });
 
     if (shouldLogVerbose()) {
       const preview = truncateUtf16Safe(body, 200).replace(/\n/g, "\\n");
@@ -474,14 +528,11 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       );
     }
 
-    // Create mutable context for response prefix template interpolation
-    let prefixContext: ResponsePrefixContext = {
-      identityName: resolveIdentityName(cfg, route.agentId),
-    };
+    const prefixContext = createReplyPrefixContext({ cfg, agentId: route.agentId });
 
     const dispatcher = createReplyDispatcher({
-      responsePrefix: resolveEffectiveMessagesConfig(cfg, route.agentId).responsePrefix,
-      responsePrefixContextProvider: () => prefixContext,
+      responsePrefix: prefixContext.responsePrefix,
+      responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
       humanDelay: resolveHumanDelayConfig(cfg, route.agentId),
       deliver: async (payload) => {
         await deliverReplies({
@@ -499,7 +550,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       },
     });
 
-    const { queuedFinal } = await dispatchReplyFromConfig({
+    const { queuedFinal } = await dispatchInboundMessage({
       ctx: ctxPayload,
       cfg,
       dispatcher,
@@ -508,23 +559,21 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
           typeof accountInfo.config.blockStreaming === "boolean"
             ? !accountInfo.config.blockStreaming
             : undefined,
-        onModelSelected: (ctx) => {
-          // Mutate the object directly instead of reassigning to ensure the closure sees updates
-          prefixContext.provider = ctx.provider;
-          prefixContext.model = extractShortModelName(ctx.model);
-          prefixContext.modelFull = `${ctx.provider}/${ctx.model}`;
-          prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
-        },
+        onModelSelected: prefixContext.onModelSelected,
       },
     });
     if (!queuedFinal) {
-      if (isGroup && historyKey && historyLimit > 0) {
-        clearHistoryEntries({ historyMap: groupHistories, historyKey });
+      if (isGroup && historyKey) {
+        clearHistoryEntriesIfEnabled({
+          historyMap: groupHistories,
+          historyKey,
+          limit: historyLimit,
+        });
       }
       return;
     }
-    if (isGroup && historyKey && historyLimit > 0) {
-      clearHistoryEntries({ historyMap: groupHistories, historyKey });
+    if (isGroup && historyKey) {
+      clearHistoryEntriesIfEnabled({ historyMap: groupHistories, historyKey, limit: historyLimit });
     }
   }
 

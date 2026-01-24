@@ -7,9 +7,16 @@ import type { RuntimeEnv } from "../runtime.js";
 import { runSecurityAudit } from "../security/audit.js";
 import { renderTable } from "../terminal/table.js";
 import { theme } from "../terminal/theme.js";
+import { formatCliCommand } from "../cli/command-format.js";
+import {
+  resolveMemoryCacheSummary,
+  resolveMemoryFtsState,
+  resolveMemoryVectorState,
+  type Tone,
+} from "../memory/status-format.js";
 import { formatHealthChannelLines, type HealthSummary } from "./health.js";
 import { resolveControlUiLinks } from "./onboard-helpers.js";
-import { getDaemonStatusSummary } from "./status.daemon.js";
+import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "./status.daemon.js";
 import {
   formatAge,
   formatDuration,
@@ -26,6 +33,11 @@ import {
 } from "./status.update.js";
 import { formatGatewayAuthUsed } from "./status-all/format.js";
 import { statusAllCommand } from "./status-all.js";
+import {
+  formatUpdateChannelLabel,
+  normalizeUpdateChannel,
+  resolveEffectiveUpdateChannel,
+} from "../infra/update-channels.js";
 
 export async function statusCommand(
   opts: {
@@ -64,6 +76,8 @@ export async function statusCommand(
     agentStatus,
     channels,
     summary,
+    memory,
+    memoryPlugin,
   } = scan;
 
   const securityAudit = await withProgress(
@@ -107,13 +121,28 @@ export async function statusCommand(
       )
     : undefined;
 
+  const configChannel = normalizeUpdateChannel(cfg.update?.channel);
+  const channelInfo = resolveEffectiveUpdateChannel({
+    configChannel,
+    installKind: update.installKind,
+    git: update.git ? { tag: update.git.tag, branch: update.git.branch } : undefined,
+  });
+
   if (opts.json) {
+    const [daemon, nodeDaemon] = await Promise.all([
+      getDaemonStatusSummary(),
+      getNodeDaemonStatusSummary(),
+    ]);
     runtime.log(
       JSON.stringify(
         {
           ...summary,
           os: osSummary,
           update,
+          updateChannel: channelInfo.channel,
+          updateChannelSource: channelInfo.source,
+          memory,
+          memoryPlugin,
           gateway: {
             mode: gatewayMode,
             url: gatewayConnection.url,
@@ -124,6 +153,8 @@ export async function statusCommand(
             self: gatewaySelf,
             error: gatewayProbe?.error ?? null,
           },
+          gatewayService: daemon,
+          nodeService: nodeDaemon,
           agents: agentStatus,
           securityAudit,
           ...(health || usage ? { health, usage } : {}),
@@ -200,11 +231,19 @@ export async function statusCommand(
     return `${agentStatus.agents.length} · ${pending} · sessions ${agentStatus.totalSessions}${defSuffix}`;
   })();
 
-  const daemon = await getDaemonStatusSummary();
+  const [daemon, nodeDaemon] = await Promise.all([
+    getDaemonStatusSummary(),
+    getNodeDaemonStatusSummary(),
+  ]);
   const daemonValue = (() => {
     if (daemon.installed === false) return `${daemon.label} not installed`;
     const installedPrefix = daemon.installed === true ? "installed · " : "";
     return `${daemon.label} ${installedPrefix}${daemon.loadedText}${daemon.runtimeShort ? ` · ${daemon.runtimeShort}` : ""}`;
+  })();
+  const nodeDaemonValue = (() => {
+    if (nodeDaemon.installed === false) return `${nodeDaemon.label} not installed`;
+    const installedPrefix = nodeDaemon.installed === true ? "installed · " : "";
+    return `${nodeDaemon.label} ${installedPrefix}${nodeDaemon.loadedText}${nodeDaemon.runtimeShort ? ` · ${nodeDaemon.runtimeShort}` : ""}`;
   })();
 
   const defaults = summary.sessions.defaults;
@@ -232,8 +271,65 @@ export async function statusCommand(
       ? `${summary.sessions.paths.length} stores`
       : (summary.sessions.paths[0] ?? "unknown");
 
+  const memoryValue = (() => {
+    if (!memoryPlugin.enabled) {
+      const suffix = memoryPlugin.reason ? ` (${memoryPlugin.reason})` : "";
+      return muted(`disabled${suffix}`);
+    }
+    if (!memory) {
+      const slot = memoryPlugin.slot ? `plugin ${memoryPlugin.slot}` : "plugin";
+      return muted(`enabled (${slot}) · unavailable`);
+    }
+    const parts: string[] = [];
+    const dirtySuffix = memory.dirty ? ` · ${warn("dirty")}` : "";
+    parts.push(`${memory.files} files · ${memory.chunks} chunks${dirtySuffix}`);
+    if (memory.sources?.length) parts.push(`sources ${memory.sources.join(", ")}`);
+    if (memoryPlugin.slot) parts.push(`plugin ${memoryPlugin.slot}`);
+    const colorByTone = (tone: Tone, text: string) =>
+      tone === "ok" ? ok(text) : tone === "warn" ? warn(text) : muted(text);
+    const vector = memory.vector;
+    if (vector) {
+      const state = resolveMemoryVectorState(vector);
+      const label = state.state === "disabled" ? "vector off" : `vector ${state.state}`;
+      parts.push(colorByTone(state.tone, label));
+    }
+    const fts = memory.fts;
+    if (fts) {
+      const state = resolveMemoryFtsState(fts);
+      const label = state.state === "disabled" ? "fts off" : `fts ${state.state}`;
+      parts.push(colorByTone(state.tone, label));
+    }
+    const cache = memory.cache;
+    if (cache) {
+      const summary = resolveMemoryCacheSummary(cache);
+      parts.push(colorByTone(summary.tone, summary.text));
+    }
+    return parts.join(" · ");
+  })();
+
   const updateAvailability = resolveUpdateAvailability(update);
   const updateLine = formatUpdateOneLiner(update).replace(/^Update:\s*/i, "");
+  const channelLabel = formatUpdateChannelLabel({
+    channel: channelInfo.channel,
+    source: channelInfo.source,
+    gitTag: update.git?.tag ?? null,
+    gitBranch: update.git?.branch ?? null,
+  });
+  const gitLabel =
+    update.installKind === "git"
+      ? (() => {
+          const shortSha = update.git?.sha ? update.git.sha.slice(0, 8) : null;
+          const branch =
+            update.git?.branch && update.git.branch !== "HEAD" ? update.git.branch : null;
+          const tag = update.git?.tag ?? null;
+          const parts = [
+            branch ?? (tag ? "detached" : "git"),
+            tag ? `tag ${tag}` : null,
+            shortSha ? `@ ${shortSha}` : null,
+          ].filter(Boolean);
+          return parts.join(" · ");
+        })()
+      : null;
 
   const overviewRows = [
     { Item: "Dashboard", Value: dashboard },
@@ -247,13 +343,17 @@ export async function statusCommand(
             ? `${tailscaleMode} · ${tailscaleDns} · ${tailscaleHttpsUrl}`
             : warn(`${tailscaleMode} · magicdns unknown`),
     },
+    { Item: "Channel", Value: channelLabel },
+    ...(gitLabel ? [{ Item: "Git", Value: gitLabel }] : []),
     {
       Item: "Update",
       Value: updateAvailability.available ? warn(`available · ${updateLine}`) : updateLine,
     },
     { Item: "Gateway", Value: gatewayValue },
-    { Item: "Daemon", Value: daemonValue },
+    { Item: "Gateway service", Value: daemonValue },
+    { Item: "Node service", Value: nodeDaemonValue },
     { Item: "Agents", Value: agentsValue },
+    { Item: "Memory", Value: memoryValue },
     { Item: "Probes", Value: probesValue },
     { Item: "Events", Value: eventsValue },
     { Item: "Heartbeat", Value: heartbeatValue },
@@ -312,8 +412,8 @@ export async function statusCommand(
       runtime.log(theme.muted(`… +${sorted.length - shown.length} more`));
     }
   }
-  runtime.log(theme.muted("Full report: clawdbot security audit"));
-  runtime.log(theme.muted("Deep probe: clawdbot security audit --deep"));
+  runtime.log(theme.muted(`Full report: ${formatCliCommand("clawdbot security audit")}`));
+  runtime.log(theme.muted(`Deep probe: ${formatCliCommand("clawdbot security audit --deep")}`));
 
   runtime.log("");
   runtime.log(theme.heading("Channels"));
@@ -469,11 +569,11 @@ export async function statusCommand(
     runtime.log("");
   }
   runtime.log("Next steps:");
-  runtime.log("  Need to share?      clawdbot status --all");
-  runtime.log("  Need to debug live? clawdbot logs --follow");
+  runtime.log(`  Need to share?      ${formatCliCommand("clawdbot status --all")}`);
+  runtime.log(`  Need to debug live? ${formatCliCommand("clawdbot logs --follow")}`);
   if (gatewayReachable) {
-    runtime.log("  Need to test channels? clawdbot status --deep");
+    runtime.log(`  Need to test channels? ${formatCliCommand("clawdbot status --deep")}`);
   } else {
-    runtime.log("  Fix reachability first: clawdbot gateway status");
+    runtime.log(`  Fix reachability first: ${formatCliCommand("clawdbot gateway probe")}`);
   }
 }
