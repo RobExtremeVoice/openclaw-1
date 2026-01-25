@@ -10,24 +10,11 @@ import {
   type WizardPrompter,
 } from "clawdbot/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, getAccountConfig } from "./config.js";
+import { isAccountConfigured } from "./utils/twitch.js";
 import type { TwitchAccountConfig, TwitchRole } from "./types.js";
 import type { ClawdbotConfig } from "clawdbot/plugin-sdk";
 
 const channel = "twitch" as const;
-
-/**
- * Get the current Twitch account config
- */
-function getTwitchAccount(cfg: ClawdbotConfig): TwitchAccountConfig | null {
-  return getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
-}
-
-/**
- * Check if Twitch is configured
- */
-function isTwitchConfigured(account: TwitchAccountConfig | null): boolean {
-  return Boolean(account?.token && account?.username && account?.clientId);
-}
 
 /**
  * Set Twitch account configuration
@@ -36,12 +23,12 @@ function setTwitchAccount(
   cfg: ClawdbotConfig,
   account: Partial<TwitchAccountConfig>,
 ): ClawdbotConfig {
-  const existing = getTwitchAccount(cfg);
+  const existing = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
   const merged: TwitchAccountConfig = {
     username: account.username ?? existing?.username ?? "",
     token: account.token ?? existing?.token ?? "",
     clientId: account.clientId ?? existing?.clientId ?? "",
-    channel: account.channel ?? existing?.channel,
+    channel: account.channel ?? existing?.channel ?? "",
     enabled: account.enabled ?? existing?.enabled ?? true,
     allowFrom: account.allowFrom ?? existing?.allowFrom,
     allowedRoles: account.allowedRoles ?? existing?.allowedRoles,
@@ -257,7 +244,7 @@ function setTwitchAccessControl(
   allowedRoles: TwitchRole[],
   requireMention: boolean,
 ): ClawdbotConfig {
-  const account = getTwitchAccount(cfg);
+  const account = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
   if (!account) {
     return cfg;
   }
@@ -275,7 +262,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
   policyKey: "channels.twitch.allowedRoles", // Twitch uses roles instead of DM policy
   allowFromKey: "channels.twitch.accounts.default.allowFrom",
   getCurrent: (cfg) => {
-    const account = getTwitchAccount(cfg);
+    const account = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
     // Map allowedRoles to policy equivalent
     if (account?.allowedRoles?.includes("all")) return "open";
     if (account?.allowFrom && account.allowFrom.length > 0) return "allowlist";
@@ -312,8 +299,8 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
 export const twitchOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
   getStatus: async ({ cfg }) => {
-    const account = getTwitchAccount(cfg);
-    const configured = isTwitchConfigured(account);
+    const account = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
+    const configured = account ? isAccountConfigured(account) : false;
 
     return {
       channel,
@@ -323,9 +310,9 @@ export const twitchOnboardingAdapter: ChannelOnboardingAdapter = {
     };
   },
   configure: async ({ cfg, prompter, forceAllowFrom }) => {
-    const account = getTwitchAccount(cfg);
+    const account = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
 
-    if (!isTwitchConfigured(account)) {
+    if (!account || !isAccountConfigured(account)) {
       await noteTwitchSetupHelp(prompter);
     }
 

@@ -17,6 +17,7 @@ import { resolveTwitchTargets } from "./resolver.js";
 import { collectTwitchStatusIssues } from "./status.js";
 import { removeClientManager } from "./client-manager-registry.js";
 import { resolveTwitchToken } from "./token.js";
+import { isAccountConfigured } from "./utils/twitch.js";
 import type {
   ChannelAccountSnapshot,
   ChannelCapabilities,
@@ -27,18 +28,6 @@ import type {
   ChannelResolveResult,
   TwitchAccountConfig,
 } from "./types.js";
-
-/**
- * Check if an account is properly configured.
- */
-function isConfigured(
-  account: TwitchAccountConfig | null | undefined,
-  cfg: ClawdbotConfig,
-  accountId: string,
-): boolean {
-  const tokenResolution = resolveTwitchToken(cfg, { accountId });
-  return Boolean(account?.username && account?.clientId && tokenResolution.token);
-}
 
 /**
  * Twitch channel plugin.
@@ -111,18 +100,21 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
     /** Check if an account is configured */
     isConfigured: (_account: unknown, cfg: ClawdbotConfig): boolean => {
       const account = getAccountConfig(cfg, DEFAULT_ACCOUNT_ID);
-      return isConfigured(account, cfg, DEFAULT_ACCOUNT_ID);
+      const tokenResolution = resolveTwitchToken(cfg, { accountId: DEFAULT_ACCOUNT_ID });
+      return account ? isAccountConfigured(account, tokenResolution.token) : false;
     },
 
     /** Check if an account is enabled */
     isEnabled: (account: TwitchAccountConfig | undefined): boolean => account?.enabled !== false,
 
     /** Describe account status */
-    describeAccount: (account: TwitchAccountConfig | undefined) => ({
-      accountId: DEFAULT_ACCOUNT_ID,
-      enabled: account?.enabled !== false,
-      configured: account ? isConfigured(account, cfg, DEFAULT_ACCOUNT_ID) : false,
-    }),
+    describeAccount: (account: TwitchAccountConfig | undefined) => {
+      return {
+        accountId: DEFAULT_ACCOUNT_ID,
+        enabled: account?.enabled !== false,
+        configured: account ? isAccountConfigured(account, account?.token) : false,
+      };
+    },
   },
 
   /** Outbound message adapter */
@@ -203,6 +195,7 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
     /** Build account snapshot with current status */
     buildAccountSnapshot: ({
       account,
+      cfg,
       runtime,
       probe,
     }: {
@@ -211,14 +204,19 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
       runtime?: ChannelAccountSnapshot;
       probe?: unknown;
     }): ChannelAccountSnapshot => {
-      const accountMap = cfg.channels?.twitch?.accounts ?? {};
+      const twitch = (cfg as Record<string, unknown>).channels as
+        | Record<string, unknown>
+        | undefined;
+      const twitchCfg = twitch?.twitch as Record<string, unknown> | undefined;
+      const accountMap = (twitchCfg?.accounts as Record<string, unknown> | undefined) ?? {};
       const resolvedAccountId =
         Object.entries(accountMap).find(([, value]) => value === account)?.[0] ??
         DEFAULT_ACCOUNT_ID;
+      const tokenResolution = resolveTwitchToken(cfg, { accountId: resolvedAccountId });
       return {
         accountId: DEFAULT_ACCOUNT_ID,
         enabled: account?.enabled !== false,
-        configured: isConfigured(account, cfg, resolvedAccountId),
+        configured: isAccountConfigured(account, tokenResolution.token),
         running: runtime?.running ?? false,
         lastStartAt: runtime?.lastStartAt ?? null,
         lastStopAt: runtime?.lastStopAt ?? null,
