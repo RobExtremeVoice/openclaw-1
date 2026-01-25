@@ -12,6 +12,7 @@ Exec approvals are the **companion app / node host guardrail** for letting a san
 commands on a real host (`gateway` or `node`). Think of it like a safety interlock:
 commands are allowed only when policy + allowlist + (optional) user approval all agree.
 Exec approvals are **in addition** to tool policy and elevated gating (unless elevated is set to `full`, which skips approvals).
+Effective policy is the **stricter** of `tools.exec.*` and approvals defaults; if an approvals field is omitted, the `tools.exec` value is used.
 
 If the companion app UI is **not available**, any request that requires a prompt is
 resolved by the **ask fallback** (default: deny).
@@ -54,6 +55,7 @@ Example schema:
       "autoAllowSkills": true,
       "allowlist": [
         {
+          "id": "B0C8C0B3-2C2D-4F8A-9A3C-5A4B3C2D1E0F",
           "pattern": "~/Projects/**/bin/rg",
           "lastUsedAt": 1737150000000,
           "lastUsedCommand": "rg -n TODO",
@@ -96,6 +98,7 @@ Examples:
 - `/opt/homebrew/bin/rg`
 
 Each allowlist entry tracks:
+- **id** stable UUID used for UI identity (optional)
 - **last used** timestamp
 - **last used command**
 - **last resolved path**
@@ -153,6 +156,36 @@ Actions:
 - **Allow once** → run now
 - **Always allow** → add to allowlist + run
 - **Deny** → block
+
+## Approval forwarding to chat channels
+
+You can forward exec approval prompts to any chat channel (including plugin channels) and approve
+them with `/approve`. This uses the normal outbound delivery pipeline.
+
+Config:
+```json5
+{
+  approvals: {
+    exec: {
+      enabled: true,
+      mode: "session", // "session" | "targets" | "both"
+      agentFilter: ["main"],
+      sessionFilter: ["discord"], // substring or regex
+      targets: [
+        { channel: "slack", to: "U12345678" },
+        { channel: "telegram", to: "123456789" }
+      ]
+    }
+  }
+}
+```
+
+Reply in chat:
+```
+/approve <id> allow-once
+/approve <id> allow-always
+/approve <id> deny
+```
 
 ### macOS IPC flow
 ```

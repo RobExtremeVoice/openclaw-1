@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
+import { ApprovalsSchema } from "./zod-schema.approvals.js";
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
 import { HexColorSchema, ModelsConfigSchema } from "./zod-schema.core.js";
 import { HookMappingSchema, HooksGmailSchema, InternalHooksSchema } from "./zod-schema.hooks.js";
@@ -9,6 +10,19 @@ import { CommandsSchema, MessagesSchema, SessionSchema } from "./zod-schema.sess
 const BrowserSnapshotDefaultsSchema = z
   .object({
     mode: z.literal("efficient").optional(),
+  })
+  .strict()
+  .optional();
+
+const NodeHostSchema = z
+  .object({
+    browserProxy: z
+      .object({
+        enabled: z.boolean().optional(),
+        allowProfiles: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .optional();
@@ -193,6 +207,7 @@ export const ClawdbotSchema = z
       .strict()
       .optional(),
     models: ModelsConfigSchema,
+    nodeHost: NodeHostSchema,
     agents: AgentsSchema,
     tools: ToolsSchema,
     bindings: BindingsSchema,
@@ -206,6 +221,7 @@ export const ClawdbotSchema = z
       .optional(),
     messages: MessagesSchema,
     commands: CommandsSchema,
+    approvals: ApprovalsSchema,
     session: SessionSchema,
     cron: z
       .object({
@@ -308,6 +324,7 @@ export const ClawdbotSchema = z
           })
           .strict()
           .optional(),
+        trustedProxies: z.array(z.string()).optional(),
         tailscale: z
           .object({
             mode: z.union([z.literal("off"), z.literal("serve"), z.literal("funnel")]).optional(),
@@ -318,6 +335,7 @@ export const ClawdbotSchema = z
         remote: z
           .object({
             url: z.string().optional(),
+            transport: z.union([z.literal("ssh"), z.literal("direct")]).optional(),
             token: z.string().optional(),
             password: z.string().optional(),
             tlsFingerprint: z.string().optional(),
@@ -403,6 +421,15 @@ export const ClawdbotSchema = z
           .optional(),
         nodes: z
           .object({
+            browser: z
+              .object({
+                mode: z
+                  .union([z.literal("auto"), z.literal("manual"), z.literal("off")])
+                  .optional(),
+                node: z.string().optional(),
+              })
+              .strict()
+              .optional(),
             allowCommands: z.array(z.string()).optional(),
             denyCommands: z.array(z.string()).optional(),
           })

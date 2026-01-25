@@ -129,4 +129,56 @@ describe("exec approvals", () => {
     expect(calls).toContain("node.invoke");
     expect(calls).not.toContain("exec.approval.request");
   });
+
+  it("honors ask=off for elevated gateway exec without prompting", async () => {
+    const { callGatewayTool } = await import("./tools/gateway.js");
+    const calls: string[] = [];
+    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
+      calls.push(method);
+      return { ok: true };
+    });
+
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({
+      ask: "off",
+      security: "full",
+      approvalRunningNoticeMs: 0,
+      elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
+    });
+
+    const result = await tool.execute("call3", { command: "echo ok", elevated: true });
+    expect(result.details.status).toBe("completed");
+    expect(calls).not.toContain("exec.approval.request");
+  });
+
+  it("requires approval for elevated ask when allowlist misses", async () => {
+    const { callGatewayTool } = await import("./tools/gateway.js");
+    const calls: string[] = [];
+    let resolveApproval: (() => void) | undefined;
+    const approvalSeen = new Promise<void>((resolve) => {
+      resolveApproval = resolve;
+    });
+
+    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
+      calls.push(method);
+      if (method === "exec.approval.request") {
+        resolveApproval?.();
+        return { decision: "deny" };
+      }
+      return { ok: true };
+    });
+
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({
+      ask: "on-miss",
+      security: "allowlist",
+      approvalRunningNoticeMs: 0,
+      elevated: { enabled: true, allowed: true, defaultLevel: "ask" },
+    });
+
+    const result = await tool.execute("call4", { command: "echo ok", elevated: true });
+    expect(result.details.status).toBe("approval-pending");
+    await approvalSeen;
+    expect(calls).toContain("exec.approval.request");
+  });
 });

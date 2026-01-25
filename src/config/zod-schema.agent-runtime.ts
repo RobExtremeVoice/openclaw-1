@@ -5,6 +5,7 @@ import {
   GroupChatSchema,
   HumanDelaySchema,
   IdentitySchema,
+  ToolsLinksSchema,
   ToolsMediaSchema,
 } from "./zod-schema.core.js";
 
@@ -22,19 +23,7 @@ export const HeartbeatSchema = z
     model: z.string().optional(),
     session: z.string().optional(),
     includeReasoning: z.boolean().optional(),
-    target: z
-      .union([
-        z.literal("last"),
-        z.literal("whatsapp"),
-        z.literal("telegram"),
-        z.literal("discord"),
-        z.literal("slack"),
-        z.literal("msteams"),
-        z.literal("signal"),
-        z.literal("imessage"),
-        z.literal("none"),
-      ])
-      .optional(),
+    target: z.string().optional(),
     to: z.string().optional(),
     prompt: z.string().optional(),
     ackMaxChars: z.number().int().nonnegative().optional(),
@@ -440,6 +429,7 @@ export const ToolsSchema = z
     byProvider: z.record(z.string(), ToolPolicyWithProfileSchema).optional(),
     web: ToolsWebSchema,
     media: ToolsMediaSchema,
+    links: ToolsLinksSchema,
     message: z
       .object({
         allowCrossContextSend: z.boolean().optional(),

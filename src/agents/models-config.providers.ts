@@ -1,15 +1,23 @@
 import type { ClawdbotConfig } from "../config/config.js";
+import type { ModelDefinitionConfig } from "../config/types.models.js";
 import {
-  normalizeGithubCopilotDomain,
-  resolveGithubCopilotBaseUrl,
-} from "../providers/github-copilot-utils.js";
+  DEFAULT_COPILOT_API_BASE_URL,
+  resolveCopilotApiToken,
+} from "../providers/github-copilot-token.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
+import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
   buildSyntheticModelDefinition,
   SYNTHETIC_BASE_URL,
   SYNTHETIC_MODEL_CATALOG,
 } from "./synthetic-models.js";
+import {
+  buildVeniceModelDefinition,
+  discoverVeniceModels,
+  VENICE_BASE_URL,
+  VENICE_MODEL_CATALOG,
+} from "./venice-models.js";
 
 type ModelsConfig = NonNullable<ClawdbotConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
@@ -60,6 +68,70 @@ const QWEN_PORTAL_DEFAULT_COST = {
   cacheRead: 0,
   cacheWrite: 0,
 };
+
+const OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1";
+const OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
+const OLLAMA_DEFAULT_CONTEXT_WINDOW = 128000;
+const OLLAMA_DEFAULT_MAX_TOKENS = 8192;
+const OLLAMA_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+interface OllamaModel {
+  name: string;
+  modified_at: string;
+  size: number;
+  digest: string;
+  details?: {
+    family?: string;
+    parameter_size?: string;
+  };
+}
+
+interface OllamaTagsResponse {
+  models: OllamaModel[];
+}
+
+async function discoverOllamaModels(): Promise<ModelDefinitionConfig[]> {
+  // Skip Ollama discovery in test environments
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return [];
+  }
+  try {
+    const response = await fetch(`${OLLAMA_API_BASE_URL}/api/tags`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      console.warn(`Failed to discover Ollama models: ${response.status}`);
+      return [];
+    }
+    const data = (await response.json()) as OllamaTagsResponse;
+    if (!data.models || data.models.length === 0) {
+      console.warn("No Ollama models found on local instance");
+      return [];
+    }
+    return data.models.map((model) => {
+      const modelId = model.name;
+      const isReasoning =
+        modelId.toLowerCase().includes("r1") || modelId.toLowerCase().includes("reasoning");
+      return {
+        id: modelId,
+        name: modelId,
+        reasoning: isReasoning,
+        input: ["text"],
+        cost: OLLAMA_DEFAULT_COST,
+        contextWindow: OLLAMA_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: OLLAMA_DEFAULT_MAX_TOKENS,
+      };
+    });
+  } catch (error) {
+    console.warn(`Failed to discover Ollama models: ${String(error)}`);
+    return [];
+  }
+}
 
 function normalizeApiKeyConfig(value: string): string {
   const trimmed = value.trim();
@@ -274,7 +346,27 @@ function buildSyntheticProvider(): ProviderConfig {
   };
 }
 
-export function resolveImplicitProviders(params: { agentDir: string }): ModelsConfig["providers"] {
+async function buildVeniceProvider(): Promise<ProviderConfig> {
+  const models = await discoverVeniceModels();
+  return {
+    baseUrl: VENICE_BASE_URL,
+    api: "openai-completions",
+    models,
+  };
+}
+
+async function buildOllamaProvider(): Promise<ProviderConfig> {
+  const models = await discoverOllamaModels();
+  return {
+    baseUrl: OLLAMA_BASE_URL,
+    api: "openai-completions",
+    models,
+  };
+}
+
+export async function resolveImplicitProviders(params: {
+  agentDir: string;
+}): Promise<ModelsConfig["providers"]> {
   const providers: Record<string, ProviderConfig> = {};
   const authStore = ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
@@ -308,12 +400,27 @@ export function resolveImplicitProviders(params: { agentDir: string }): ModelsCo
     providers.synthetic = { ...buildSyntheticProvider(), apiKey: syntheticKey };
   }
 
+  const veniceKey =
+    resolveEnvApiKeyVarName("venice") ??
+    resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
+  if (veniceKey) {
+    providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
+  }
+
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");
   if (qwenProfiles.length > 0) {
     providers["qwen-portal"] = {
       ...buildQwenPortalProvider(),
       apiKey: QWEN_PORTAL_OAUTH_PLACEHOLDER,
     };
+  }
+
+  // Ollama provider - only add if explicitly configured
+  const ollamaKey =
+    resolveEnvApiKeyVarName("ollama") ??
+    resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
+  if (ollamaKey) {
+    providers.ollama = { ...(await buildOllamaProvider()), apiKey: ollamaKey };
   }
 
   return providers;
@@ -331,18 +438,29 @@ export async function resolveImplicitCopilotProvider(params: {
 
   if (!hasProfile && !githubToken) return null;
 
-  let enterpriseDomain: string | null = null;
-  if (hasProfile) {
+  let selectedGithubToken = githubToken;
+  if (!selectedGithubToken && hasProfile) {
     // Use the first available profile as a default for discovery (it will be
     // re-resolved per-run by the embedded runner).
     const profileId = listProfilesForProvider(authStore, "github-copilot")[0];
     const profile = profileId ? authStore.profiles[profileId] : undefined;
-    if (profile && "enterpriseUrl" in profile && typeof profile.enterpriseUrl === "string") {
-      enterpriseDomain = normalizeGithubCopilotDomain(profile.enterpriseUrl);
+    if (profile && profile.type === "token") {
+      selectedGithubToken = profile.token;
     }
   }
 
-  const baseUrl = resolveGithubCopilotBaseUrl(enterpriseDomain);
+  let baseUrl = DEFAULT_COPILOT_API_BASE_URL;
+  if (selectedGithubToken) {
+    try {
+      const token = await resolveCopilotApiToken({
+        githubToken: selectedGithubToken,
+        env,
+      });
+      baseUrl = token.baseUrl;
+    } catch {
+      baseUrl = DEFAULT_COPILOT_API_BASE_URL;
+    }
+  }
 
   // pi-coding-agent's ModelRegistry marks a model "available" only if its
   // `AuthStorage` has auth configured for that provider (via auth.json/env/etc).
@@ -353,7 +471,7 @@ export async function resolveImplicitCopilotProvider(params: {
   // GitHub token (not the exchanged Copilot token), and (3) matches existing
   // patterns for OAuth-like providers in pi-coding-agent.
   // Note: we deliberately do not write pi-coding-agent's `auth.json` here.
-  // Clawdbot uses its own auth store and passes the GitHub token at runtime.
+  // Clawdbot uses its own auth store and exchanges tokens at runtime.
   // `models list` uses Clawdbot's auth heuristics for availability.
 
   // We intentionally do NOT define custom models for Copilot in models.json.
@@ -362,5 +480,29 @@ export async function resolveImplicitCopilotProvider(params: {
   return {
     baseUrl,
     models: [],
+  } satisfies ProviderConfig;
+}
+
+export async function resolveImplicitBedrockProvider(params: {
+  agentDir: string;
+  config?: ClawdbotConfig;
+  env?: NodeJS.ProcessEnv;
+}): Promise<ProviderConfig | null> {
+  const env = params.env ?? process.env;
+  const discoveryConfig = params.config?.models?.bedrockDiscovery;
+  const enabled = discoveryConfig?.enabled;
+  const hasAwsCreds = resolveAwsSdkEnvVarName(env) !== undefined;
+  if (enabled === false) return null;
+  if (enabled !== true && !hasAwsCreds) return null;
+
+  const region = discoveryConfig?.region ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1";
+  const models = await discoverBedrockModels({ region, config: discoveryConfig });
+  if (models.length === 0) return null;
+
+  return {
+    baseUrl: `https://bedrock-runtime.${region}.amazonaws.com`,
+    api: "bedrock-converse-stream",
+    auth: "aws-sdk",
+    models,
   } satisfies ProviderConfig;
 }

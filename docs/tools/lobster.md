@@ -23,6 +23,16 @@ Today, complex workflows require many back-and-forth tool calls. Each call costs
 - **Approvals built in**: Side effects (send email, post comment) halt the workflow until explicitly approved.
 - **Resumable**: Halted workflows return a token; approve and resume without re-running everything.
 
+## Why a DSL instead of plain programs?
+
+Lobster is intentionally small. The goal is not "a new language," it's a predictable, AI-friendly pipeline spec with first-class approvals and resume tokens.
+
+- **Approve/resume is built in**: A normal program can prompt a human, but it can’t *pause and resume* with a durable token without you inventing that runtime yourself.
+- **Determinism + auditability**: Pipelines are data, so they’re easy to log, diff, replay, and review.
+- **Constrained surface for AI**: A tiny grammar + JSON piping reduces “creative” code paths and makes validation realistic.
+- **Safety policy baked in**: Timeouts, output caps, sandbox checks, and allowlists are enforced by the runtime, not each script.
+- **Still programmable**: Each step can call any CLI or script. If you want JS/TS, generate `.lobster` files from code.
+
 ## How it works
 
 Clawdbot launches the local `lobster` CLI in **tool mode** and parses a JSON envelope from stdout.
@@ -64,6 +74,52 @@ Example: map input items into tool calls:
 gog.gmail.search --query 'newer_than:1d' \
   | clawd.invoke --tool message --action send --each --item-key message --args-json '{"provider":"telegram","to":"..."}'
 ```
+
+## JSON-only LLM steps (llm-task)
+
+For workflows that need a **structured LLM step**, enable the optional
+`llm-task` plugin tool and call it from Lobster. This keeps the workflow
+deterministic while still letting you classify/summarize/draft with a model.
+
+Enable the tool:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "llm-task": { "enabled": true }
+    }
+  },
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "tools": { "allow": ["llm-task"] }
+      }
+    ]
+  }
+}
+```
+
+Use it in a pipeline:
+
+```lobster
+clawd.invoke --tool llm-task --action json --args-json '{
+  "prompt": "Given the input email, return intent and draft.",
+  "input": { "subject": "Hello", "body": "Can you help?" },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "intent": { "type": "string" },
+      "draft": { "type": "string" }
+    },
+    "required": ["intent", "draft"],
+    "additionalProperties": false
+  }
+}'
+```
+
+See [LLM Task](/tools/llm-task) for details and configuration options.
 
 ## Workflow files (.lobster)
 
@@ -120,6 +176,10 @@ Lobster is an **optional** plugin tool (not enabled by default). Allow it per ag
 ```
 
 You can also allow it globally with `tools.allow` if every agent should see it.
+
+Note: allowlists are opt-in for optional plugins. If your allowlist only names
+plugin tools (like `lobster`), Clawdbot keeps core tools enabled. To restrict core
+tools, include the core tools or groups you want in the allowlist too.
 
 ## Example: Email triage
 

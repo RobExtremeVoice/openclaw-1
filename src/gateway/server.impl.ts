@@ -43,6 +43,7 @@ import {
 import { startGatewayDiscovery } from "./server-discovery-runtime.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
+import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
 import { createAgentEventHandler } from "./server-chat.js";
@@ -344,9 +345,19 @@ export async function startGatewayServer(
 
   setSkillsRemoteRegistry(nodeRegistry);
   void primeRemoteSkillsCache();
-  registerSkillsChangeListener(() => {
-    const latest = loadConfig();
-    void refreshRemoteBinsForConnectedNodes(latest);
+  // Debounce skills-triggered node probes to avoid feedback loops and rapid-fire invokes.
+  // Skills changes can happen in bursts (e.g., file watcher events), and each probe
+  // takes time to complete. A 30-second delay ensures we batch changes together.
+  let skillsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const skillsRefreshDelayMs = 30_000;
+  const skillsChangeUnsub = registerSkillsChangeListener((event) => {
+    if (event.reason === "remote-node") return;
+    if (skillsRefreshTimer) clearTimeout(skillsRefreshTimer);
+    skillsRefreshTimer = setTimeout(() => {
+      skillsRefreshTimer = null;
+      const latest = loadConfig();
+      void refreshRemoteBinsForConnectedNodes(latest);
+    }, skillsRefreshDelayMs);
   });
 
   const { tickInterval, healthInterval, dedupeCleanup } = startGatewayMaintenanceTimers({
@@ -386,7 +397,10 @@ export async function startGatewayServer(
   void cron.start().catch((err) => logCron.error(`failed to start: ${String(err)}`));
 
   const execApprovalManager = new ExecApprovalManager();
-  const execApprovalHandlers = createExecApprovalHandlers(execApprovalManager);
+  const execApprovalForwarder = createExecApprovalForwarder();
+  const execApprovalHandlers = createExecApprovalHandlers(execApprovalManager, {
+    forwarder: execApprovalForwarder,
+  });
 
   const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
 
@@ -544,6 +558,11 @@ export async function startGatewayServer(
       if (diagnosticsEnabled) {
         stopDiagnosticHeartbeat();
       }
+      if (skillsRefreshTimer) {
+        clearTimeout(skillsRefreshTimer);
+        skillsRefreshTimer = null;
+      }
+      skillsChangeUnsub();
       await close(opts);
     },
   };

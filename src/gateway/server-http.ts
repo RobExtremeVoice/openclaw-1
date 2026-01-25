@@ -29,6 +29,7 @@ import {
 import { applyHookMappings } from "./hooks-mapping.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
+import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -226,20 +227,36 @@ export function createGatewayHttpServer(opts: {
     if (String(req.headers.upgrade ?? "").toLowerCase() === "websocket") return;
 
     try {
+      const configSnapshot = loadConfig();
+      const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
       if (await handleHooksRequest(req, res)) return;
       if (await handleSlackHttpRequest(req, res)) return;
       if (handlePluginRequest && (await handlePluginRequest(req, res))) return;
+      if (
+        await handleToolsInvokeHttpRequest(req, res, {
+          auth: resolvedAuth,
+          trustedProxies,
+        })
+      )
+        return;
       if (openResponsesEnabled) {
         if (
           await handleOpenResponsesHttpRequest(req, res, {
             auth: resolvedAuth,
             config: openResponsesConfig,
+            trustedProxies,
           })
         )
           return;
       }
       if (openAiChatCompletionsEnabled) {
-        if (await handleOpenAiHttpRequest(req, res, { auth: resolvedAuth })) return;
+        if (
+          await handleOpenAiHttpRequest(req, res, {
+            auth: resolvedAuth,
+            trustedProxies,
+          })
+        )
+          return;
       }
       if (canvasHost) {
         if (await handleA2uiHttpRequest(req, res)) return;
@@ -249,14 +266,14 @@ export function createGatewayHttpServer(opts: {
         if (
           handleControlUiAvatarRequest(req, res, {
             basePath: controlUiBasePath,
-            resolveAvatar: (agentId) => resolveAgentAvatar(loadConfig(), agentId),
+            resolveAvatar: (agentId) => resolveAgentAvatar(configSnapshot, agentId),
           })
         )
           return;
         if (
           handleControlUiHttpRequest(req, res, {
             basePath: controlUiBasePath,
-            config: loadConfig(),
+            config: configSnapshot,
           })
         )
           return;
