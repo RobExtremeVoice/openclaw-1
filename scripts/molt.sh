@@ -239,7 +239,7 @@ The nightly update failed, but rollback succeeded. I'm running on the old versio
 ## Your Mission
 1. Diagnose what went wrong
 2. If fixable, fix it and retry the update
-3. If not fixable, report findings to Corey
+3. If not fixable, report findings to the user
 
 ## Context
 - Old HEAD (current): ${CURRENT_HEAD:0:8}
@@ -256,7 +256,7 @@ The nightly update failed, but rollback succeeded. I'm running on the old versio
    - If it succeeds, we're done!
 4. If you can't fix it:
    - Explain what went wrong
-   - Message Corey via Slack with your findings
+   - Notify the user via the configured channel with your findings
 
 ## Common Fixable Issues
 - "Cannot find module X" → Try: cd ~/clawd && pnpm install --force
@@ -265,7 +265,7 @@ The nightly update failed, but rollback succeeded. I'm running on the old versio
 - Lockfile conflict → Try: cd ~/clawd && rm pnpm-lock.yaml && git checkout pnpm-lock.yaml && pnpm install
 
 ## Important
-- You have 1 retry attempt. If molt.sh fails again, report to Corey.
+- You have 1 retry attempt. If molt.sh fails again, notify the user.
 - Don't get stuck in a loop - if unsure, ask for help.
 AGENT_PROMPT
 )" 2>&1 || log "Warning: Could not trigger recovery agent"
@@ -352,7 +352,7 @@ Update crashed during stability window. Rolled back successfully.
 1. Read crash log: cat ~/.clawdbot/molt/crash-log.txt
 2. Diagnose the crash (likely a runtime error, not build error)
 3. If fixable, fix and retry: ~/.clawdbot/molt/molt.sh
-4. If not, report to Corey via Slack
+4. If not, notify the user via the configured channel
 AGENT_PROMPT
 )" 2>&1 || log "Warning: Could not trigger recovery agent"
 
