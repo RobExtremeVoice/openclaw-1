@@ -12,6 +12,11 @@ import {
   SYNTHETIC_BASE_URL,
   SYNTHETIC_MODEL_CATALOG,
 } from "./synthetic-models.js";
+import {
+  buildNearAiModelDefinition,
+  NEAR_AI_BASE_URL,
+  NEAR_AI_MODEL_CATALOG,
+} from "./near-ai-models.js";
 import { discoverVeniceModels, VENICE_BASE_URL } from "./venice-models.js";
 
 type ModelsConfig = NonNullable<ClawdbotConfig["models"]>;
@@ -350,6 +355,14 @@ async function buildVeniceProvider(): Promise<ProviderConfig> {
   };
 }
 
+function buildNearAiProvider(): ProviderConfig {
+  return {
+    baseUrl: NEAR_AI_BASE_URL,
+    api: "openai-completions",
+    models: NEAR_AI_MODEL_CATALOG.map(buildNearAiModelDefinition),
+  };
+}
+
 async function buildOllamaProvider(): Promise<ProviderConfig> {
   const models = await discoverOllamaModels();
   return {
@@ -400,6 +413,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
   if (veniceKey) {
     providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
+  }
+
+  const nearAiKey =
+    resolveEnvApiKeyVarName("near-ai") ??
+    resolveApiKeyFromProfiles({ provider: "near-ai", store: authStore });
+  if (nearAiKey) {
+    providers["near-ai"] = { ...buildNearAiProvider(), apiKey: nearAiKey };
   }
 
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");

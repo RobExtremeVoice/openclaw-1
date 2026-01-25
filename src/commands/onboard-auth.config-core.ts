@@ -5,6 +5,12 @@ import {
   SYNTHETIC_MODEL_CATALOG,
 } from "../agents/synthetic-models.js";
 import {
+  buildNearAiModelDefinition,
+  NEAR_AI_BASE_URL,
+  NEAR_AI_DEFAULT_MODEL_REF,
+  NEAR_AI_MODEL_CATALOG,
+} from "../agents/near-ai-models.js";
+import {
   buildVeniceModelDefinition,
   VENICE_BASE_URL,
   VENICE_DEFAULT_MODEL_REF,
@@ -405,6 +411,81 @@ export function applyVeniceConfig(cfg: ClawdbotConfig): ClawdbotConfig {
               }
             : undefined),
           primary: VENICE_DEFAULT_MODEL_REF,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Apply NEAR AI provider configuration without changing the default model.
+ * Registers NEAR AI models and sets up the provider, but preserves existing model selection.
+ */
+export function applyNearAiProviderConfig(cfg: ClawdbotConfig): ClawdbotConfig {
+  const models = { ...cfg.agents?.defaults?.models };
+  models[NEAR_AI_DEFAULT_MODEL_REF] = {
+    ...models[NEAR_AI_DEFAULT_MODEL_REF],
+    alias: models[NEAR_AI_DEFAULT_MODEL_REF]?.alias ?? "DeepSeek V3.1",
+  };
+
+  const providers = { ...cfg.models?.providers };
+  const existingProvider = providers["near-ai"];
+  const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
+  const nearAiModels = NEAR_AI_MODEL_CATALOG.map(buildNearAiModelDefinition);
+  const mergedModels = [
+    ...existingModels,
+    ...nearAiModels.filter((model) => !existingModels.some((existing) => existing.id === model.id)),
+  ];
+  const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
+    string,
+    unknown
+  > as { apiKey?: string };
+  const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
+  const normalizedApiKey = resolvedApiKey?.trim();
+  providers["near-ai"] = {
+    ...existingProviderRest,
+    baseUrl: NEAR_AI_BASE_URL,
+    api: "openai-completions",
+    ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
+    models: mergedModels.length > 0 ? mergedModels : nearAiModels,
+  };
+
+  return {
+    ...cfg,
+    agents: {
+      ...cfg.agents,
+      defaults: {
+        ...cfg.agents?.defaults,
+        models,
+      },
+    },
+    models: {
+      mode: cfg.models?.mode ?? "merge",
+      providers,
+    },
+  };
+}
+
+/**
+ * Apply NEAR AI provider configuration AND set NEAR AI as the default model.
+ * Use this when NEAR AI is the primary provider choice during onboarding.
+ */
+export function applyNearAiConfig(cfg: ClawdbotConfig): ClawdbotConfig {
+  const next = applyNearAiProviderConfig(cfg);
+  const existingModel = next.agents?.defaults?.model;
+  return {
+    ...next,
+    agents: {
+      ...next.agents,
+      defaults: {
+        ...next.agents?.defaults,
+        model: {
+          ...(existingModel && "fallbacks" in (existingModel as Record<string, unknown>)
+            ? {
+                fallbacks: (existingModel as { fallbacks?: string[] }).fallbacks,
+              }
+            : undefined),
+          primary: NEAR_AI_DEFAULT_MODEL_REF,
         },
       },
     },
