@@ -71,7 +71,7 @@ clawdbot onboard --non-interactive \
 ### 3. Verify Setup
 
 ```bash
-clawdbot chat --model near-ai/deepseek-ai/DeepSeek-V3.1 "Hello, are you working?"
+clawdbot chat --model near-ai/zai-org/GLM-4.7 "Hello, are you working?"
 ```
 
 ## Model Selection
@@ -79,8 +79,8 @@ clawdbot chat --model near-ai/deepseek-ai/DeepSeek-V3.1 "Hello, are you working?
 After setup, you can use any available NEAR AI model:
 
 ```bash
+clawdbot models set near-ai/zai-org/GLM-4.7
 clawdbot models set near-ai/deepseek-ai/DeepSeek-V3.1
-clawdbot models set near-ai/meta-llama/Llama-3.3-70B-Instruct
 ```
 
 List all available models:
@@ -91,10 +91,13 @@ clawdbot models list | grep near-ai
 
 ## Available Models
 
-| Model ID | Name | Features |
-|----------|------|----------|
-| `deepseek-ai/DeepSeek-V3.1` | DeepSeek V3.1 | Reasoning, 128k context |
-| `meta-llama/Llama-3.3-70B-Instruct` | Llama 3.3 70B | General, 131k context |
+| Model ID | Name | Context | Cost ($/M tokens) |
+|----------|------|---------|-------------------|
+| `deepseek-ai/DeepSeek-V3.1` | DeepSeek V3.1 | 128K | $1.05 in / $3.10 out |
+| `openai/gpt-oss-120b` | GPT OSS 120B | 131K | $0.15 in / $0.55 out |
+| `Qwen/Qwen3-30B-A3B-Instruct-2507` | Qwen3 30B | 262K | $0.15 in / $0.55 out |
+| `zai-org/GLM-4.6` | GLM 4.6 | 200K | $0.85 in / $3.30 out |
+| `zai-org/GLM-4.7` | GLM 4.7 (default) | 131K | $0.85 in / $3.30 out |
 
 ## Configure via `clawdbot configure`
 
@@ -105,14 +108,17 @@ clawdbot models list | grep near-ai
 ## Usage Examples
 
 ```bash
-# Use default model
+# Use default model (GLM 4.7)
+clawdbot chat --model near-ai/zai-org/GLM-4.7
+
+# Use DeepSeek for reasoning tasks
 clawdbot chat --model near-ai/deepseek-ai/DeepSeek-V3.1
 
-# Use Llama
-clawdbot chat --model near-ai/meta-llama/Llama-3.3-70B-Instruct
+# Use Qwen for long context (262K!)
+clawdbot chat --model near-ai/Qwen/Qwen3-30B-A3B-Instruct-2507
 
 # Send a message
-clawdbot agent --message "Explain quantum computing" --model near-ai/deepseek-ai/DeepSeek-V3.1
+clawdbot agent --message "Explain quantum computing" --model near-ai/zai-org/GLM-4.7
 ```
 
 ## Troubleshooting
@@ -135,25 +141,15 @@ NEAR AI API is at `https://cloud-api.near.ai/v1`. Ensure your network allows HTT
 ```json5
 {
   env: { NEARAI_API_KEY: "..." },
-  agents: { defaults: { model: { primary: "near-ai/deepseek-ai/DeepSeek-V3.1" } } },
+  agents: { defaults: { model: { primary: "near-ai/zai-org/GLM-4.7" } } },
   models: {
     mode: "merge",
     providers: {
       "near-ai": {
         baseUrl: "https://cloud-api.near.ai/v1",
         apiKey: "${NEARAI_API_KEY}",
-        api: "openai-completions",
-        models: [
-          {
-            id: "deepseek-ai/DeepSeek-V3.1",
-            name: "DeepSeek V3.1",
-            reasoning: true,
-            input: ["text"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 128000,
-            maxTokens: 8192
-          }
-        ]
+        api: "openai-completions"
+        // Models are auto-discovered from the built-in catalog
       }
     }
   }

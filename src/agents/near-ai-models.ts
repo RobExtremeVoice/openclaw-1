@@ -1,7 +1,7 @@
 import type { ModelDefinitionConfig } from "../config/types.js";
 
 export const NEAR_AI_BASE_URL = "https://cloud-api.near.ai/v1";
-export const NEAR_AI_DEFAULT_MODEL_ID = "deepseek-ai/DeepSeek-V3.1";
+export const NEAR_AI_DEFAULT_MODEL_ID = "zai-org/GLM-4.7";
 export const NEAR_AI_DEFAULT_MODEL_REF = `near-ai/${NEAR_AI_DEFAULT_MODEL_ID}`;
 
 // NEAR AI uses credit-based pricing (per million tokens).
