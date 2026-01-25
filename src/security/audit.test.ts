@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ClawdbotConfig } from "../config/config.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
@@ -13,6 +13,15 @@ import path from "node:path";
 const isWindows = process.platform === "win32";
 
 describe("security audit", () => {
+  // Isolate gateway auth env vars so tests don't inherit from shell
+  beforeEach(() => {
+    vi.stubEnv("CLAWDBOT_GATEWAY_TOKEN", "");
+    vi.stubEnv("CLAWDBOT_GATEWAY_PASSWORD", "");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("includes an attack surface summary (info)", async () => {
     const cfg: ClawdbotConfig = {
       channels: { whatsapp: { groupPolicy: "open" }, telegram: { groupPolicy: "allowlist" } },
