@@ -7,6 +7,7 @@ import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
+import { createDocxTool } from "./tools/docx-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
@@ -101,6 +102,7 @@ export function createClawdbotTools(options?: {
       agentChannel: options?.agentChannel,
       config: options?.config,
     }),
+    createDocxTool({ sandboxRoot: options?.sandboxRoot }),
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,

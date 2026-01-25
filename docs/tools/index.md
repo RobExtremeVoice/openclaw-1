@@ -324,6 +324,35 @@ Notes:
 - Only available when `agents.defaults.imageModel` is configured (primary or fallbacks), or when an implicit image model can be inferred from your default model + configured auth (best-effort pairing).
 - Uses the image model directly (independent of the main chat model).
 
+### `docx`
+Create, read, and edit Microsoft Word documents (DOCX).
+
+Core actions:
+- `create` — Create a new DOCX file from structured content
+- `read` — Extract content from an existing DOCX file
+- `edit` — Modify an existing DOCX file (append/prepend content)
+
+Parameters by action:
+
+**create**:
+- `path` (required) — Output file path
+- `content.paragraphs` — Array of paragraph objects: `{ text, heading?: 1-6, bold?: boolean, italic?: boolean, underline?: boolean }`
+- `content.tables` — Array of table objects with `rows` (2D array of cell text)
+
+**read**:
+- `path` (required) — Input file path
+- Returns: `text` (plain text content) and `html` (HTML representation)
+
+**edit**:
+- `path` (required) — File to modify
+- `operations` — Array of operations: `{ type: "append" | "prepend", content: { paragraphs?: [...], tables?: [...] } }`
+- `operations[].content` uses the same `content` shape as `create`
+
+Notes:
+- DOCX text extraction uses mammoth for reliable parsing of paragraphs, tables, and lists.
+- Created documents use the docx library for full Office Open XML support.
+- **Edit preserves formatting**: the edit action uses docx-merger to merge content while preserving all original formatting, styles, tables, images, and embedded objects from the source document.
+
 ### `message`
 Send messages and channel actions across Discord/Google Chat/Slack/Telegram/WhatsApp/Signal/iMessage/MS Teams.
 

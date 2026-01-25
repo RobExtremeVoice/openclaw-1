@@ -2,6 +2,13 @@
 
 Docs: https://docs.clawd.bot
 
+## 2026.1.25
+
+### Added
+
+- DOCX file support: agents can now read and extract text from Microsoft Word documents
+- New `docx` agent tool for creating and editing Word documents programmatically (edits preserve all formatting using docx-merger)
+
 ## 2026.1.24
 
 ### Highlights

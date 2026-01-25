@@ -163,7 +163,7 @@ Supports base64 or URL sources:
 ```
 
 Allowed MIME types (current): `text/plain`, `text/markdown`, `text/html`, `text/csv`,
-`application/json`, `application/pdf`.
+`application/json`, `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX).
 
 Max size (current): 5MB.
 
@@ -172,6 +172,7 @@ Current behavior:
   so it stays ephemeral (not persisted in session history).
 - PDFs are parsed for text. If little text is found, the first pages are rasterized
   into images and passed to the model.
+- DOCX files are parsed for text content (paragraphs, tables, lists).
 
 PDF parsing uses the Node-friendly `pdfjs-dist` legacy build (no worker). The modern
 PDF.js build expects browser workers/DOM globals, so it is not used in the Gateway.
@@ -195,7 +196,7 @@ Defaults can be tuned under `gateway.http.endpoints.responses`:
           maxBodyBytes: 20000000,
           files: {
             allowUrl: true,
-            allowedMimes: ["text/plain", "text/markdown", "text/html", "text/csv", "application/json", "application/pdf"],
+            allowedMimes: ["text/plain", "text/markdown", "text/html", "text/csv", "application/json", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
             maxBytes: 5242880,
             maxChars: 200000,
             maxRedirects: 3,

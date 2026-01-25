@@ -42,6 +42,7 @@ The WhatsApp channel runs via **Baileys Web**. This document captures the curren
   - Audio sets `{{Transcript}}` and uses the transcript for command parsing so slash commands still work.
   - Video and image descriptions preserve any caption text for command parsing.
 - By default only the first matching image/audio/video attachment is processed; set `tools.media.<cap>.attachments` to process multiple attachments.
+- **Document text extraction:** PDF and DOCX files are parsed for text content and included in the agent context. PDFs use pdfjs-dist; DOCX uses mammoth.
 
 ## Limits & Errors
 **Outbound send caps (WhatsApp web send)**
