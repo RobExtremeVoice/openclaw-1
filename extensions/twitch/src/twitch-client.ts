@@ -143,7 +143,7 @@ export class TwitchClientManager {
 			rejoinChannelsOnReconnect: true,
 			requestMembershipEvents: true,
 			logger: {
-				// minLevel: LogLevel.ERROR,
+				minLevel: LogLevel.WARNING,
 				custom: {
 					log: (level, message) => {
 						switch (level) {
