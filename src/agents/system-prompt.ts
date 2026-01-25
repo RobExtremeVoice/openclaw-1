@@ -1,7 +1,7 @@
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
-import type { ResolvedTimeFormat } from "./date-time.js";
+import { formatUserTime, type ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 
 /**
@@ -49,9 +49,19 @@ function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: bool
   return ["## User Identity", ownerLine, ""];
 }
 
-function buildTimeSection(params: { userTimezone?: string }) {
+function buildTimeSection(params: {
+  userTimezone?: string;
+  userTime?: string;
+  userTimeFormat?: ResolvedTimeFormat;
+}) {
   if (!params.userTimezone) return [];
-  return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
+  const formattedTime =
+    params.userTime ??
+    formatUserTime(new Date(), params.userTimezone, params.userTimeFormat ?? "12");
+  const lines = ["## Current Date & Time"];
+  if (formattedTime) lines.push(`Current: ${formattedTime}`);
+  lines.push(`Time zone: ${params.userTimezone}`, "");
+  return lines;
 }
 
 function buildReplyTagsSection(isMinimal: boolean) {
@@ -459,6 +469,8 @@ export function buildAgentSystemPrompt(params: {
     ...buildUserIdentitySection(ownerLine, isMinimal),
     ...buildTimeSection({
       userTimezone,
+      userTime: params.userTime,
+      userTimeFormat: params.userTimeFormat,
     }),
     "## Workspace Files (injected)",
     "These user-editable files are loaded by Clawdbot and included below in Project Context.",

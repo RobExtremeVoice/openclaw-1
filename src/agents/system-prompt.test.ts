@@ -145,6 +145,7 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Current Date & Time");
+    expect(prompt).toContain("Current: Monday, January 5th, 2026 — 3:26 PM");
     expect(prompt).toContain("Time zone: America/Chicago");
   });
 
@@ -157,10 +158,11 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Current Date & Time");
+    expect(prompt).toContain("Current: Monday, January 5th, 2026 — 15:26");
     expect(prompt).toContain("Time zone: America/Chicago");
   });
 
-  it("shows timezone when only timezone is provided", () => {
+  it("generates current date when only timezone is provided", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/clawd",
       userTimezone: "America/Chicago",
@@ -168,6 +170,8 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Current Date & Time");
+    // Should generate a Current: line with formatted date
+    expect(prompt).toMatch(/Current: \w+, \w+ \d+\w+, \d{4} — \d{2}:\d{2}/);
     expect(prompt).toContain("Time zone: America/Chicago");
   });
 
