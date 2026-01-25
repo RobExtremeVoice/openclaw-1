@@ -27,10 +27,10 @@ function normalizeUsername(input: string): string {
  */
 function createLogger(logger?: ChannelLogSink): ChannelLogSink {
   return {
-    info: (msg: string) => logger?.info(`[twitch] ${msg}`),
-    warn: (msg: string) => logger?.warn(`[twitch] ${msg}`),
-    error: (msg: string) => logger?.error(`[twitch] ${msg}`),
-    debug: (msg: string) => logger?.debug?.(`[twitch] ${msg}`) ?? (() => {}),
+    info: (msg: string) => logger?.info(msg),
+    warn: (msg: string) => logger?.warn(msg),
+    error: (msg: string) => logger?.error(msg),
+    debug: (msg: string) => logger?.debug?.(msg) ?? (() => {}),
   };
 }
 

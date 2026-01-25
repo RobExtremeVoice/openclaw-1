@@ -95,7 +95,7 @@ async function processTwitchMessage(params: {
     sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
     ctx: ctxPayload,
     onRecordError: (err) => {
-      runtime.error?.(`[twitch] Failed updating session meta: ${String(err)}`);
+      runtime.error?.(`Failed updating session meta: ${String(err)}`);
     },
   });
 
@@ -144,10 +144,10 @@ async function deliverTwitchReply(params: {
 
   try {
     const clientManager = getOrCreateClientManager(accountId, {
-      info: (msg) => runtime.log?.(`[twitch] ${msg}`),
-      warn: (msg) => runtime.log?.(`[twitch] ${msg}`),
-      error: (msg) => runtime.error?.(`[twitch] ${msg}`),
-      debug: (msg) => runtime.log?.(`[twitch] ${msg}`),
+      info: (msg) => runtime.log?.(msg),
+      warn: (msg) => runtime.log?.(msg),
+      error: (msg) => runtime.error?.(msg),
+      debug: (msg) => runtime.log?.(msg),
     });
 
     const client = await clientManager.getClient(
@@ -156,19 +156,19 @@ async function deliverTwitchReply(params: {
       accountId,
     );
     if (!client) {
-      runtime.error?.(`[twitch] No client available for sending reply`);
+      runtime.error?.(`No client available for sending reply`);
       return;
     }
 
     // Send the reply
     if (!payload.text) {
-      runtime.error?.(`[twitch] No text to send in reply payload`);
+      runtime.error?.(`No text to send in reply payload`);
       return;
     }
     await client.say(channel, payload.text);
     statusSink?.({ lastOutboundAt: Date.now() });
   } catch (err) {
-    runtime.error?.(`[twitch] Failed to send reply: ${String(err)}`);
+    runtime.error?.(`Failed to send reply: ${String(err)}`);
   }
 }
 
@@ -186,10 +186,10 @@ export async function monitorTwitchProvider(
   let stopped = false;
 
   const logger = {
-    info: (msg: string) => runtime.log?.(`[twitch] ${msg}`),
-    warn: (msg: string) => runtime.log?.(`[twitch] ${msg}`),
-    error: (msg: string) => runtime.error?.(`[twitch] ${msg}`),
-    debug: (msg: string) => runtime.log?.(`[twitch] ${msg}`),
+    info: (msg: string) => runtime.log?.(msg),
+    warn: (msg: string) => runtime.log?.(msg),
+    error: (msg: string) => runtime.error?.(msg),
+    debug: (msg: string) => runtime.log?.(msg),
   };
 
   const clientManager = getOrCreateClientManager(accountId, logger);
@@ -200,10 +200,10 @@ export async function monitorTwitchProvider(
       config as Parameters<typeof clientManager.getClient>[1],
       accountId,
     );
-    runtime.log?.(`[twitch] Connected to Twitch as ${account.username}`);
+    runtime.log?.(`Connected to Twitch as ${account.username}`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    runtime.error?.(`[twitch] Failed to connect: ${errorMsg}`);
+    runtime.error?.(`Failed to connect: ${errorMsg}`);
     throw error;
   }
 
@@ -223,9 +223,7 @@ export async function monitorTwitchProvider(
     });
 
     if (!access.allowed) {
-      runtime.log?.(
-        `[twitch] Ignored message from ${message.username}: ${access.reason ?? "blocked"}`,
-      );
+      runtime.log?.(`Ignored message from ${message.username}: ${access.reason ?? "blocked"}`);
       return;
     }
 
@@ -242,7 +240,7 @@ export async function monitorTwitchProvider(
         statusSink,
       });
     } catch (err) {
-      runtime.error?.(`[twitch] Message processing failed: ${String(err)}`);
+      runtime.error?.(`Message processing failed: ${String(err)}`);
     }
   });
 

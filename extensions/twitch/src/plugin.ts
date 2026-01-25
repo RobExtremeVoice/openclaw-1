@@ -60,9 +60,7 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
     notifyApproval: async ({ id }) => {
       // Note: Twitch doesn't support DMs from bots, so pairing approval is limited
       // We'll log the approval instead
-      console.warn(
-        `[twitch] Pairing approved for user ${id} (notification sent via chat if possible)`,
-      );
+      console.warn(`Pairing approved for user ${id} (notification sent via chat if possible)`);
     },
   },
 
@@ -243,7 +241,7 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
         lastError: null,
       });
 
-      ctx.log?.info(`[twitch] Starting Twitch connection for ${account.username}`);
+      ctx.log?.info(`Starting Twitch connection for ${account.username}`);
 
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
       const { monitorTwitchProvider } = await import("./monitor.js");
@@ -270,7 +268,7 @@ export const twitchPlugin: ChannelPlugin<TwitchAccountConfig> = {
         lastStopAt: Date.now(),
       });
 
-      ctx.log?.info(`[twitch] Stopped Twitch connection for ${account.username}`);
+      ctx.log?.info(`Stopped Twitch connection for ${account.username}`);
     },
   },
 };

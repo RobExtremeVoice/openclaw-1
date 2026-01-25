@@ -52,7 +52,7 @@ export function getOrCreateClientManager(
     createdAt: Date.now(),
   });
 
-  logger.info(`[twitch] Registered client manager for account: ${accountId}`);
+  logger.info(`Registered client manager for account: ${accountId}`);
   return manager;
 }
 
@@ -83,7 +83,7 @@ export async function removeClientManager(accountId: string): Promise<void> {
 
   // Remove from registry
   registry.delete(accountId);
-  entry.logger.info(`[twitch] Unregistered client manager for account: ${accountId}`);
+  entry.logger.info(`Unregistered client manager for account: ${accountId}`);
 }
 
 /**

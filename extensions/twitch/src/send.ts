@@ -126,7 +126,7 @@ export async function sendMessageTwitchInternal(
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    logger.error(`[twitch] Failed to send message: ${errorMsg}`);
+    logger.error(`Failed to send message: ${errorMsg}`);
     return {
       ok: false,
       messageId: generateMessageId(),

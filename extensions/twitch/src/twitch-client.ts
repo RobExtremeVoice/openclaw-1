@@ -40,40 +40,34 @@ export class TwitchClientManager {
         })
         .then((userId) => {
           this.logger.info(
-            `[twitch] Added user ${userId} to RefreshingAuthProvider for ${account.username}`,
+            `Added user ${userId} to RefreshingAuthProvider for ${account.username}`,
           );
         })
         .catch((err) => {
           this.logger.error(
-            `[twitch] Failed to add user to RefreshingAuthProvider: ${err instanceof Error ? err.message : String(err)}`,
+            `Failed to add user to RefreshingAuthProvider: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
 
       authProvider.onRefresh((userId, token) => {
         this.logger.info(
-          `[twitch] Access token refreshed for user ${userId} (expires in ${token.expiresIn ? `${token.expiresIn}s` : "unknown"})`,
+          `Access token refreshed for user ${userId} (expires in ${token.expiresIn ? `${token.expiresIn}s` : "unknown"})`,
         );
       });
 
       authProvider.onRefreshFailure((userId, error) => {
-        this.logger.error(
-          `[twitch] Failed to refresh access token for user ${userId}: ${error.message}`,
-        );
+        this.logger.error(`Failed to refresh access token for user ${userId}: ${error.message}`);
       });
 
       const refreshStatus = account.refreshToken
         ? "automatic token refresh enabled"
         : "token refresh disabled (no refresh token)";
-      this.logger.info(
-        `[twitch] Using RefreshingAuthProvider for ${account.username} (${refreshStatus})`,
-      );
+      this.logger.info(`Using RefreshingAuthProvider for ${account.username} (${refreshStatus})`);
 
       return authProvider;
     }
 
-    this.logger.info(
-      `[twitch] Using StaticAuthProvider for ${account.username} (no clientSecret provided)`,
-    );
+    this.logger.info(`Using StaticAuthProvider for ${account.username} (no clientSecret provided)`);
     return new StaticAuthProvider(account.clientId, normalizedToken);
   }
 
@@ -98,17 +92,15 @@ export class TwitchClientManager {
 
     if (!tokenResolution.token) {
       this.logger.error(
-        `[twitch] Missing Twitch token for account ${account.username} (set channels.twitch.accounts.${account.username}.token or CLAWDBOT_TWITCH_ACCESS_TOKEN for default)`,
+        `Missing Twitch token for account ${account.username} (set channels.twitch.accounts.${account.username}.token or CLAWDBOT_TWITCH_ACCESS_TOKEN for default)`,
       );
       throw new Error("Missing Twitch token");
     }
 
-    this.logger.debug?.(
-      `[twitch] Using ${tokenResolution.source} token source for ${account.username}`,
-    );
+    this.logger.debug?.(`Using ${tokenResolution.source} token source for ${account.username}`);
 
     if (!account.clientId) {
-      this.logger.error(`[twitch] Missing Twitch client ID for account ${account.username}`);
+      this.logger.error(`Missing Twitch client ID for account ${account.username}`);
       throw new Error("Missing Twitch client ID");
     }
 
@@ -127,22 +119,22 @@ export class TwitchClientManager {
           log: (level, message) => {
             switch (level) {
               case LogLevel.CRITICAL:
-                this.logger.error(`[twitch] ${message}`);
+                this.logger.error(`${message}`);
                 break;
               case LogLevel.ERROR:
-                this.logger.error(`[twitch] ${message}`);
+                this.logger.error(`${message}`);
                 break;
               case LogLevel.WARNING:
-                this.logger.warn(`[twitch] ${message}`);
+                this.logger.warn(`${message}`);
                 break;
               case LogLevel.INFO:
-                this.logger.info(`[twitch] ${message}`);
+                this.logger.info(`${message}`);
                 break;
               case LogLevel.DEBUG:
-                this.logger.debug?.(`[twitch] ${message}`);
+                this.logger.debug?.(`${message}`);
                 break;
               case LogLevel.TRACE:
-                this.logger.debug?.(`[twitch] ${message}`);
+                this.logger.debug?.(`${message}`);
                 break;
             }
           },
@@ -155,7 +147,7 @@ export class TwitchClientManager {
     client.connect();
 
     this.clients.set(key, client);
-    this.logger.info(`[twitch] Connected to Twitch as ${account.username}`);
+    this.logger.info(`Connected to Twitch as ${account.username}`);
 
     return client;
   }
@@ -171,6 +163,12 @@ export class TwitchClientManager {
       const handler = this.messageHandlers.get(key);
       if (handler) {
         const normalizedChannel = channelName.startsWith("#") ? channelName.slice(1) : channelName;
+        const from = `twitch:${msg.userInfo.userName}`;
+        const preview = messageText.slice(0, 100).replace(/\n/g, "\\n");
+        this.logger.debug?.(
+          `twitch inbound: channel=${normalizedChannel} from=${from} len=${messageText.length} preview="${preview}"`,
+        );
+
         handler({
           username: msg.userInfo.userName,
           displayName: msg.userInfo.displayName,
@@ -192,6 +190,12 @@ export class TwitchClientManager {
     client.onWhisper((_user, messageText, msg) => {
       const handler = this.messageHandlers.get(key);
       if (handler) {
+        const from = `twitch:${msg.userInfo.userName}`;
+        const preview = messageText.slice(0, 100).replace(/\n/g, "\\n");
+        this.logger.debug?.(
+          `twitch inbound: whisper from=${from} len=${messageText.length} preview="${preview}"`,
+        );
+
         handler({
           username: msg.userInfo.userName,
           displayName: msg.userInfo.displayName,
@@ -209,7 +213,7 @@ export class TwitchClientManager {
       }
     });
 
-    this.logger.info(`[twitch] Set up handlers for ${key}`);
+    this.logger.info(`Set up handlers for ${key}`);
   }
 
   /**
@@ -238,7 +242,7 @@ export class TwitchClientManager {
       client.quit();
       this.clients.delete(key);
       this.messageHandlers.delete(key);
-      this.logger.info(`[twitch] Disconnected ${key}`);
+      this.logger.info(`Disconnected ${key}`);
     }
   }
 
@@ -249,7 +253,7 @@ export class TwitchClientManager {
     this.clients.forEach((client) => client.quit());
     this.clients.clear();
     this.messageHandlers.clear();
-    this.logger.info("[twitch] Disconnected all clients");
+    this.logger.info(" Disconnected all clients");
   }
 
   /**
@@ -274,7 +278,7 @@ export class TwitchClientManager {
       return { ok: true, messageId };
     } catch (error) {
       this.logger.error(
-        `[twitch] Failed to send message: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to send message: ${error instanceof Error ? error.message : String(error)}`,
       );
       return {
         ok: false,
