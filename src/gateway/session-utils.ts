@@ -88,7 +88,7 @@ function resolveIdentityAvatarUrl(
   cfg: ClawdbotConfig,
   agentId: string,
   avatar: string | undefined,
-  ): string | undefined {
+): string | undefined {
   if (!avatar) return undefined;
   const trimmed = avatar.trim();
   if (!trimmed) return undefined;
