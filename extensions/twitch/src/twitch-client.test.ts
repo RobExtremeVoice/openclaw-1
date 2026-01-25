@@ -18,8 +18,23 @@ const mockConnect = vi.fn().mockResolvedValue(undefined);
 const mockJoin = vi.fn().mockResolvedValue(undefined);
 const mockSay = vi.fn().mockResolvedValue({ messageId: "test-msg-123" });
 const mockQuit = vi.fn();
-const mockOnMessage = vi.fn();
-const mockOnWhisper = vi.fn();
+const mockUnbind = vi.fn();
+
+// Event handler storage for testing
+const messageHandlers: Array<(channel: string, user: string, message: string, msg: any) => void> = [];
+const whisperHandlers: Array<(user: string, message: string, msg: any) => void> = [];
+
+// Mock functions that track handlers and return unbind objects
+const mockOnMessage = vi.fn((handler: any) => {
+  messageHandlers.push(handler);
+  return { unbind: mockUnbind };
+});
+
+const mockOnWhisper = vi.fn((handler: any) => {
+  whisperHandlers.push(handler);
+  return { unbind: mockUnbind };
+});
+
 const mockAddUserForToken = vi.fn().mockResolvedValue("123456");
 const mockOnRefresh = vi.fn();
 const mockOnRefreshFailure = vi.fn();
@@ -32,6 +47,14 @@ vi.mock("@twurple/chat", () => ({
     join = mockJoin;
     say = mockSay;
     quit = mockQuit;
+  },
+  LogLevel: {
+    CRITICAL: "CRITICAL",
+    ERROR: "ERROR",
+    WARNING: "WARNING",
+    INFO: "INFO",
+    DEBUG: "DEBUG",
+    TRACE: "TRACE",
   },
 }));
 
@@ -84,6 +107,10 @@ describe("TwitchClientManager", () => {
   beforeEach(async () => {
     // Clear all mocks first
     vi.clearAllMocks();
+
+    // Clear handler arrays
+    messageHandlers.length = 0;
+    whisperHandlers.length = 0;
 
     // Re-set up the default token mock implementation after clearing
     const { resolveTwitchToken } = await import("./token.js");
@@ -396,7 +423,7 @@ describe("TwitchClientManager", () => {
       await manager.getClient(testAccount);
 
       // Get the onMessage callback
-      const onMessageCallback = mockOnMessage.mock.calls[0]?.[0];
+      const onMessageCallback = messageHandlers[0];
       if (!onMessageCallback) throw new Error("onMessageCallback not found");
 
       // Simulate Twitch message
@@ -426,7 +453,7 @@ describe("TwitchClientManager", () => {
       await manager.getClient(testAccount);
 
       // Get the onWhisper callback
-      const onWhisperCallback = mockOnWhisper.mock.calls[0]?.[0];
+      const onWhisperCallback = whisperHandlers[0];
       if (!onWhisperCallback) throw new Error("onWhisperCallback not found");
 
       // Simulate Twitch whisper
@@ -452,7 +479,7 @@ describe("TwitchClientManager", () => {
     it("should normalize channel names without # prefix", async () => {
       await manager.getClient(testAccount);
 
-      const onMessageCallback = mockOnMessage.mock.calls[0]?.[0];
+      const onMessageCallback = messageHandlers[0];
 
       onMessageCallback("testchannel", "testuser", "Test", {
         userInfo: {
@@ -473,7 +500,7 @@ describe("TwitchClientManager", () => {
     it("should include user role flags in message", async () => {
       await manager.getClient(testAccount);
 
-      const onMessageCallback = mockOnMessage.mock.calls[0]?.[0];
+      const onMessageCallback = messageHandlers[0];
 
       onMessageCallback("#testchannel", "moduser", "Test", {
         userInfo: {
@@ -497,7 +524,7 @@ describe("TwitchClientManager", () => {
     it("should handle broadcaster messages", async () => {
       await manager.getClient(testAccount);
 
-      const onMessageCallback = mockOnMessage.mock.calls[0]?.[0];
+      const onMessageCallback = messageHandlers[0];
 
       onMessageCallback("#testchannel", "broadcaster", "Test", {
         userInfo: {
@@ -528,7 +555,7 @@ describe("TwitchClientManager", () => {
       await manager.getClient(testAccount2);
 
       // Simulate message for first account
-      const onMessage1 = mockOnMessage.mock.calls[0]?.[0];
+      const onMessage1 = messageHandlers[0];
       if (!onMessage1) throw new Error("onMessage1 not found");
       onMessage1("#testchannel", "user1", "msg1", {
         userInfo: {
@@ -544,7 +571,7 @@ describe("TwitchClientManager", () => {
       });
 
       // Simulate message for second account
-      const onMessage2 = mockOnMessage.mock.calls[1]?.[0];
+      const onMessage2 = messageHandlers[1];
       if (!onMessage2) throw new Error("onMessage2 not found");
       onMessage2("#testchannel2", "user2", "msg2", {
         userInfo: {

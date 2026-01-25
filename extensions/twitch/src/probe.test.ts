@@ -3,13 +3,50 @@ import { probeTwitch } from "./probe.js";
 import type { TwitchAccountConfig } from "./types.js";
 
 // Mock Twurple modules - Vitest v4 compatible mocking
-const mockConnect = vi.fn().mockResolvedValue(undefined);
+const mockUnbind = vi.fn();
+
+// Event handler storage
+let connectHandler: (() => void) | null = null;
+let disconnectHandler: ((manually: boolean, reason?: Error) => void) | null = null;
+let authFailHandler: (() => void) | null = null;
+
+// Event listener mocks that store handlers and return unbind function
+const mockOnConnect = vi.fn((handler: () => void) => {
+  connectHandler = handler;
+  return { unbind: mockUnbind };
+});
+
+const mockOnDisconnect = vi.fn((handler: (manually: boolean, reason?: Error) => void) => {
+  disconnectHandler = handler;
+  return { unbind: mockUnbind };
+});
+
+const mockOnAuthenticationFailure = vi.fn((handler: () => void) => {
+  authFailHandler = handler;
+  return { unbind: mockUnbind };
+});
+
+// Connect mock that triggers the registered handler
+const defaultConnectImpl = async () => {
+  // Simulate successful connection by calling the handler after a delay
+  if (connectHandler) {
+    // Use setTimeout to simulate async connection
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    connectHandler();
+  }
+};
+
+const mockConnect = vi.fn().mockImplementation(defaultConnectImpl);
+
 const mockQuit = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@twurple/chat", () => ({
   ChatClient: class {
     connect = mockConnect;
     quit = mockQuit;
+    onConnect = mockOnConnect;
+    onDisconnect = mockOnDisconnect;
+    onAuthenticationFailure = mockOnAuthenticationFailure;
   },
 }));
 
@@ -25,6 +62,10 @@ describe("probeTwitch", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset handlers
+    connectHandler = null;
+    disconnectHandler = null;
+    authFailHandler = null;
   });
 
   it("returns error when username is missing", async () => {
@@ -85,11 +126,18 @@ describe("probeTwitch", () => {
     expect(result.error).toContain("timeout");
 
     // Reset mock
-    mockConnect.mockResolvedValue(undefined);
+    mockConnect.mockImplementation(defaultConnectImpl);
   });
 
   it("cleans up client even on failure", async () => {
-    mockConnect.mockRejectedValueOnce(new Error("Connection failed"));
+    mockConnect.mockImplementationOnce(async () => {
+      // Simulate connection failure by calling disconnect handler
+      // onDisconnect signature: (manually: boolean, reason?: Error) => void
+      if (disconnectHandler) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        disconnectHandler(false, new Error("Connection failed"));
+      }
+    });
 
     const result = await probeTwitch(mockAccount, 5000);
 
@@ -98,7 +146,7 @@ describe("probeTwitch", () => {
     expect(mockQuit).toHaveBeenCalled();
 
     // Reset mocks
-    mockConnect.mockResolvedValue(undefined);
+    mockConnect.mockImplementation(defaultConnectImpl);
   });
 
   it("measures elapsed time", async () => {
@@ -109,7 +157,14 @@ describe("probeTwitch", () => {
   });
 
   it("handles connection errors gracefully", async () => {
-    mockConnect.mockRejectedValueOnce(new Error("Network error"));
+    mockConnect.mockImplementationOnce(async () => {
+      // Simulate connection failure by calling disconnect handler
+      // onDisconnect signature: (manually: boolean, reason?: Error) => void
+      if (disconnectHandler) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        disconnectHandler(false, new Error("Network error"));
+      }
+    });
 
     const result = await probeTwitch(mockAccount, 5000);
 
@@ -117,7 +172,7 @@ describe("probeTwitch", () => {
     expect(result.error).toContain("Network error");
 
     // Reset mock
-    mockConnect.mockResolvedValue(undefined);
+    mockConnect.mockImplementation(defaultConnectImpl);
   });
 
   it("trims token before validation", async () => {
@@ -132,7 +187,14 @@ describe("probeTwitch", () => {
   });
 
   it("handles non-Error objects in catch block", async () => {
-    mockConnect.mockRejectedValueOnce("String error");
+    mockConnect.mockImplementationOnce(async () => {
+      // Simulate connection failure by calling disconnect handler
+      // onDisconnect signature: (manually: boolean, reason?: Error) => void
+      if (disconnectHandler) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        disconnectHandler(false, "String error" as unknown as Error);
+      }
+    });
 
     const result = await probeTwitch(mockAccount, 5000);
 
@@ -140,6 +202,6 @@ describe("probeTwitch", () => {
     expect(result.error).toBe("String error");
 
     // Reset mock
-    mockConnect.mockResolvedValue(undefined);
+    mockConnect.mockImplementation(defaultConnectImpl);
   });
 });
