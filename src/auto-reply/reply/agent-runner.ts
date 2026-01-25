@@ -41,6 +41,17 @@ import { incrementCompactionCount } from "./session-updates.js";
 import type { TypingController } from "./typing.js";
 import { createTypingSignaler } from "./typing-mode.js";
 import { emitDiagnosticEvent, isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
+import {
+  createAgentStatusController,
+  createStatusUpdateRunContext,
+  completeStatusUpdate,
+  cleanupStatusUpdate,
+  noopStatusCallbacks,
+  type StatusUpdateRunContext,
+} from "./status-updates-integration.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const log = createSubsystemLogger("agent-runner");
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
 
@@ -298,6 +309,29 @@ export async function runReplyAgent(params: {
         `Role ordering conflict (${reason}). Restarting session ${sessionKey} -> ${nextSessionId}.`,
       cleanupTranscripts: true,
     });
+
+  // ===== STATUS UPDATES INTEGRATION =====
+  // Create status update controller for this agent run
+  const agentId = resolveAgentIdFromSessionKey(sessionKey);
+
+  log.info(`Setting up status updates for agentId=${agentId}, channel=${replyToChannel}`);
+
+  // TODO: Create proper callbacks that integrate with the channel's send/edit methods
+  // For now, using noop callbacks to trace the integration path
+  const statusCallbacks = noopStatusCallbacks;
+
+  const statusController = createAgentStatusController({
+    cfg,
+    agentId,
+    callbacks: statusCallbacks,
+  });
+
+  const statusUpdateContext = createStatusUpdateRunContext(statusController);
+  log.info(
+    `Status update context created, controller=${statusController ? "present" : "undefined"}`,
+  );
+  // ===== END STATUS UPDATES INTEGRATION =====
+
   try {
     const runStartedAt = Date.now();
     const runOutcome = await runAgentTurnWithFallback({
@@ -322,6 +356,7 @@ export async function runReplyAgent(params: {
       activeSessionStore,
       storePath,
       resolvedVerboseLevel,
+      statusUpdateContext,
     });
 
     if (runOutcome.kind === "final") {
@@ -502,6 +537,19 @@ export async function runReplyAgent(params: {
       finalPayloads = appendUsageLine(finalPayloads, responseUsageLine);
     }
 
+    // ===== STATUS UPDATES: Complete and mark final response =====
+    if (statusUpdateContext && finalPayloads.length > 0) {
+      const lastPayload = finalPayloads[finalPayloads.length - 1];
+      if (lastPayload?.text) {
+        log.info(`Completing status update with final text`);
+        const markedText = await completeStatusUpdate(statusUpdateContext, lastPayload.text);
+        if (markedText && markedText !== lastPayload.text) {
+          finalPayloads[finalPayloads.length - 1] = { ...lastPayload, text: markedText };
+        }
+      }
+    }
+    // ===== END STATUS UPDATES =====
+
     return finalizeWithFollowup(
       finalPayloads.length === 1 ? finalPayloads[0] : finalPayloads,
       queueKey,
@@ -510,5 +558,12 @@ export async function runReplyAgent(params: {
   } finally {
     blockReplyPipeline?.stop();
     typing.markRunComplete();
+
+    // ===== STATUS UPDATES: Cleanup =====
+    if (statusUpdateContext) {
+      log.info(`Cleaning up status update context`);
+      await cleanupStatusUpdate(statusUpdateContext);
+    }
+    // ===== END STATUS UPDATES =====
   }
 }

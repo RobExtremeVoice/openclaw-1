@@ -14,6 +14,9 @@ import {
   type StatusUpdateCallbacks,
   type StatusUpdateController,
 } from "./status-updates.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const log = createSubsystemLogger("status-updates-integration");
 
 /**
  * Resolve status update configuration from the Clawdbot config.
@@ -22,16 +25,21 @@ export function resolveStatusUpdateConfigFromConfig(
   cfg: ClawdbotConfig,
   agentId?: string,
 ): StatusUpdateConfig {
+  log.debug(`Resolving status update config for agentId=${agentId}`);
+
   // Check agent-specific config first
   if (agentId && cfg.agents?.list) {
     const agentCfg = cfg.agents.list.find((a) => a.id === agentId);
     if (agentCfg?.statusUpdates) {
+      log.debug(`Found agent-specific config: ${JSON.stringify(agentCfg.statusUpdates)}`);
       return agentCfg.statusUpdates;
     }
   }
 
   // Fall back to agent defaults
-  return cfg.agents?.defaults?.statusUpdates ?? {};
+  const defaultConfig = cfg.agents?.defaults?.statusUpdates ?? {};
+  log.debug(`Using default config: ${JSON.stringify(defaultConfig)}`);
+  return defaultConfig;
 }
 
 /**
@@ -51,21 +59,30 @@ export function createAgentStatusController(params: {
   callbacks: StatusUpdateCallbacks;
 }): StatusUpdateController | undefined {
   const { cfg, agentId, callbacks } = params;
+  log.info(`createAgentStatusController called for agentId=${agentId}`);
+
   const config = resolveStatusUpdateConfigFromConfig(cfg, agentId);
 
   if (!config.enabled) {
+    log.info(`Status updates disabled (enabled=${config.enabled})`);
     return undefined;
   }
 
-  return createStatusUpdateController(config, callbacks);
+  log.info(
+    `Creating status update controller with mode=${config.mode}, supportsEdit=${callbacks.supportsEdit?.()}`,
+  );
+  const controller = createStatusUpdateController(config, callbacks);
+  log.info(`Status update controller created successfully`);
+  return controller;
 }
 
 /**
  * Map agent lifecycle events to status phases.
  */
-export function mapAgentEventToPhase(
-  event: { stream: string; data: Record<string, unknown> },
-): StatusPhase | undefined {
+export function mapAgentEventToPhase(event: {
+  stream: string;
+  data: Record<string, unknown>;
+}): StatusPhase | undefined {
   const { stream, data } = event;
   const phase = typeof data.phase === "string" ? data.phase : "";
 
@@ -104,11 +121,25 @@ export type StatusUpdateRunContext = {
 export function createStatusUpdateRunContext(
   controller?: StatusUpdateController,
 ): StatusUpdateRunContext {
-  return {
+  log.info(`createStatusUpdateRunContext: controller=${controller ? "present" : "undefined"}`);
+
+  const ctx = {
     controller,
     startedAt: Date.now(),
-    currentPhase: "sending_query",
+    currentPhase: "sending_query" as StatusPhase,
   };
+
+  if (controller) {
+    log.info(`Status update context created with controller, starting...`);
+    // Start the controller asynchronously
+    controller.start().catch((err) => {
+      log.debug(`Failed to start status controller: ${String(err)}`);
+    });
+  } else {
+    log.info(`Status update context created WITHOUT controller (status updates disabled)`);
+  }
+
+  return ctx;
 }
 
 /**
@@ -118,10 +149,18 @@ export async function handleAgentEventForStatus(
   ctx: StatusUpdateRunContext,
   event: { stream: string; data: Record<string, unknown> },
 ): Promise<void> {
-  if (!ctx.controller) return;
+  if (!ctx.controller) {
+    log.debug(`handleAgentEventForStatus: no controller, skipping event stream=${event.stream}`);
+    return;
+  }
 
   const phase = mapAgentEventToPhase(event);
+  log.debug(
+    `handleAgentEventForStatus: stream=${event.stream}, phase=${event.data.phase}, mappedPhase=${phase}, currentPhase=${ctx.currentPhase}`,
+  );
+
   if (phase && phase !== ctx.currentPhase) {
+    log.info(`Status phase change: ${ctx.currentPhase} -> ${phase}`);
     ctx.currentPhase = phase;
     await ctx.controller.setPhase(phase);
   }
@@ -134,8 +173,15 @@ export async function completeStatusUpdate(
   ctx: StatusUpdateRunContext,
   finalText?: string,
 ): Promise<string | undefined> {
-  if (!ctx.controller) return finalText;
-  return ctx.controller.complete(finalText);
+  if (!ctx.controller) {
+    log.debug(`completeStatusUpdate: no controller, returning original text`);
+    return finalText;
+  }
+
+  log.info(`completeStatusUpdate: finalizing status update`);
+  const result = await ctx.controller.complete(finalText);
+  log.debug(`completeStatusUpdate: result=${result?.substring(0, 50)}...`);
+  return result;
 }
 
 /**
