@@ -4,6 +4,7 @@ import type { ClawdbotConfig } from "../../config/config.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
+import { logDebug } from "../../logger.js";
 import {
   CacheEntry,
   DEFAULT_CACHE_TTL_MINUTES,
@@ -108,6 +109,7 @@ type QueritSearchResult = {
   title?: string;
   url?: string;
   snippet?: string;
+  site_name?: string;
 };
 
 type QueritSearchResponse = {
@@ -343,7 +345,7 @@ async function runQueritSearch(params: {
   query: string;
   apiKey: string;
   timeoutSeconds: number;
-}): Promise<Array<{ title: string; url: string; snippet: string }>> {
+}): Promise<Array<{ title: string; url: string; snippet: string; siteName: string }>> {
   const res = await fetch(QUERIT_SEARCH_ENDPOINT, {
     method: "POST",
     headers: {
@@ -373,6 +375,7 @@ async function runQueritSearch(params: {
     title: entry.title ?? "",
     url: entry.url ?? "",
     snippet: entry.snippet ?? "",
+    siteName: entry.site_name ?? resolveSiteName(entry.url) ?? "",
   }));
 }
 
@@ -432,7 +435,7 @@ async function runWebSearch(params: {
       title: entry.title,
       url: entry.url,
       description: entry.snippet,
-      siteName: resolveSiteName(entry.url),
+      siteName: entry.siteName,
     }));
 
     const payload = {
