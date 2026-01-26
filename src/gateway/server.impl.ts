@@ -352,7 +352,6 @@ export async function startGatewayServer(
       : undefined,
     wideAreaDiscoveryEnabled: cfgAtStart.discovery?.wideArea?.enabled === true,
     tailscaleMode,
-    tailscaleMode,
     mdnsMode: cfgAtStart.discovery?.mdns?.mode,
     logDiscovery,
   });
