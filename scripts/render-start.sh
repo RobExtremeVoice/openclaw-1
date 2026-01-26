@@ -7,33 +7,45 @@ echo "=== Render startup script ==="
 echo "CLAWDBOT_STATE_DIR=${CLAWDBOT_STATE_DIR}"
 echo "HOME=${HOME}"
 
-# Determine config directory
-# Prefer CLAWDBOT_STATE_DIR if set and writable, otherwise use $HOME/.clawdbot
+# Ensure HOME is set (fallback to /tmp if not set)
+if [ -z "${HOME}" ]; then
+  HOME="/tmp"
+  echo "Warning: HOME not set, using ${HOME}"
+fi
+
+# Determine config directory with fallback chain
+# 1. Try CLAWDBOT_STATE_DIR if set
+# 2. Try /data/.clawdbot (Render persistent disk)
+# 3. Fall back to $HOME/.clawdbot (always writable by node user)
+CONFIG_DIR=""
 if [ -n "${CLAWDBOT_STATE_DIR}" ]; then
-  # Try to use the explicitly set directory
-  if mkdir -p "${CLAWDBOT_STATE_DIR}" 2>/dev/null && [ -w "${CLAWDBOT_STATE_DIR}" ]; then
+  if mkdir -p "${CLAWDBOT_STATE_DIR}" 2>/dev/null && touch "${CLAWDBOT_STATE_DIR}/.test" 2>/dev/null && rm -f "${CLAWDBOT_STATE_DIR}/.test" 2>/dev/null; then
     CONFIG_DIR="${CLAWDBOT_STATE_DIR}"
+    echo "Using CLAWDBOT_STATE_DIR: ${CONFIG_DIR}"
   else
-    echo "Warning: ${CLAWDBOT_STATE_DIR} is not writable, using ${HOME}/.clawdbot instead"
-    CONFIG_DIR="${HOME}/.clawdbot"
-  fi
-else
-  # Default: try /data/.clawdbot, fall back to $HOME/.clawdbot
-  if mkdir -p "/data/.clawdbot" 2>/dev/null && [ -w "/data/.clawdbot" ]; then
-    CONFIG_DIR="/data/.clawdbot"
-  else
-    CONFIG_DIR="${HOME}/.clawdbot"
+    echo "Warning: ${CLAWDBOT_STATE_DIR} is not writable"
   fi
 fi
 
+if [ -z "${CONFIG_DIR}" ]; then
+  if mkdir -p "/data/.clawdbot" 2>/dev/null && touch "/data/.clawdbot/.test" 2>/dev/null && rm -f "/data/.clawdbot/.test" 2>/dev/null; then
+    CONFIG_DIR="/data/.clawdbot"
+    echo "Using /data/.clawdbot: ${CONFIG_DIR}"
+  else
+    echo "Warning: /data/.clawdbot is not writable"
+  fi
+fi
+
+if [ -z "${CONFIG_DIR}" ]; then
+  # Final fallback: use HOME (always writable by node user)
+  CONFIG_DIR="${HOME}/.clawdbot"
+  echo "Using fallback: ${CONFIG_DIR}"
+fi
+
 CONFIG_FILE="${CONFIG_DIR}/clawdbot.json"
-HOME_CONFIG_DIR="${HOME}/.clawdbot"
-HOME_CONFIG_FILE="${HOME_CONFIG_DIR}/clawdbot.json"
 
 echo "Config dir: ${CONFIG_DIR}"
 echo "Config file: ${CONFIG_FILE}"
-echo "Home config dir: ${HOME_CONFIG_DIR}"
-echo "Home config file: ${HOME_CONFIG_FILE}"
 
 # Create config directory (should succeed now)
 mkdir -p "${CONFIG_DIR}"
@@ -52,18 +64,20 @@ CONFIG_CONTENT='{
 # Write config file
 echo "${CONFIG_CONTENT}" > "${CONFIG_FILE}"
 
-echo "=== Config written to BOTH locations ==="
+echo "=== Config written ==="
 echo "=== ${CONFIG_FILE}: ==="
 cat "${CONFIG_FILE}"
-echo "=== ${HOME_CONFIG_FILE}: ==="
-cat "${HOME_CONFIG_FILE}"
 echo "=== End config ==="
 
-# Verify files exist
-echo "=== Listing ${CONFIG_DIR}/ ==="
-ls -la "${CONFIG_DIR}/"
-echo "=== Listing ${HOME_CONFIG_DIR}/ ==="
-ls -la "${HOME_CONFIG_DIR}/"
+# Verify file exists
+echo "=== Verifying config file ==="
+if [ -f "${CONFIG_FILE}" ]; then
+  echo "Config file exists: ${CONFIG_FILE}"
+  ls -la "${CONFIG_FILE}" || true
+else
+  echo "ERROR: Config file not found: ${CONFIG_FILE}"
+  exit 1
+fi
 
 # Start the gateway with token from env var
 # Explicitly set CLAWDBOT_CONFIG_PATH to ensure config is loaded from the file we wrote
