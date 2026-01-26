@@ -1,0 +1,80 @@
+# ============================================
+# Dockerfile.production
+# Minimal multi-stage build for GCP deployment
+# Final image: ~150-200MB
+# ============================================
+
+# --------------------------------------------
+# Stage 1: Builder
+# --------------------------------------------
+FROM node:22-bookworm AS builder
+
+# Install Bun (required for build scripts)
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copy package files for dependency caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY ui/package.json ./ui/package.json
+COPY patches ./patches
+COPY scripts ./scripts
+
+# Install ALL dependencies (including dev for build)
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build
+COPY . .
+RUN pnpm build
+
+# Build UI
+ENV CLAWDBOT_PREFER_PNPM=1
+RUN pnpm ui:install
+RUN pnpm ui:build
+
+# Prune dev dependencies for production
+RUN pnpm prune --prod
+
+# --------------------------------------------
+# Stage 2: Production (Minimal)
+# --------------------------------------------
+FROM node:22-bookworm-slim AS production
+
+# Only essential runtime packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+WORKDIR /app
+
+# Copy only production artifacts
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/assets ./assets
+COPY --from=builder /app/skills ./skills
+COPY --from=builder /app/extensions ./extensions
+COPY --from=builder /app/docs ./docs
+
+# Copy UI build output if present
+COPY --from=builder /app/ui/dist ./ui/dist
+
+# Create non-root user (node user already exists in node image)
+RUN chown -R node:node /app
+USER node
+
+# Gateway port
+EXPOSE 18789
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=5s --retries=2 \
+    CMD curl -sf http://localhost:18789/health || exit 1
+
+ENV NODE_ENV=production
+
+CMD ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]

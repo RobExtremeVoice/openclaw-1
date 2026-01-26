@@ -15,6 +15,51 @@ Run a persistent Clawdbot Gateway on a GCP Compute Engine VM using Docker, with 
 If you want "Clawdbot 24/7 for ~$5-12/mo", this is a reliable setup on Google Cloud.
 Pricing varies by machine type and region; pick the smallest VM that fits your workload and scale up if you hit OOMs.
 
+---
+
+## Minimal container deployment (scripted)
+
+For a streamlined deployment with a smaller image (~150MB), use the provided scripts:
+
+```bash
+cd scripts/gcp
+
+# 1. Create a NEW GCP project (use a unique name)
+./setup-project.sh clawdbot-$(date +%Y%m%d) us-east1
+
+# 2. Store secrets (interactive prompts)
+./store-secrets.sh
+
+# 3. Build production image
+./build-push.sh local   # or: ./build-push.sh cloud
+
+# 4. Deploy
+./deploy-vm.sh          # e2-micro (free tier)
+./deploy-vm.sh e2-small # 2GB RAM
+
+# 5. Connect via IAP tunnel
+./connect.sh
+```
+
+This uses `Dockerfile.production` (multi-stage build) and deploys with:
+- No public IP (secure IAP tunnel access)
+- Secrets in GCP Secret Manager
+- Container-optimized VM with auto-restart
+
+See `scripts/gcp/README.md` for full details.
+
+**Cost comparison:**
+
+| Option | Monthly Cost | Notes |
+|--------|--------------|-------|
+| e2-micro VM | $0 (free tier) | 1 vCPU shared, 1GB RAM |
+| e2-small VM | ~$13/mo | 2 vCPU shared, 2GB RAM |
+| Cloud Run | ~$0-5/mo | Pay per request, scales to 0 |
+
+---
+
+The rest of this guide covers manual setup with full control over the Docker configuration.
+
 ## What are we doing (simple terms)?
 
 - Create a GCP project and enable billing
