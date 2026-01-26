@@ -1,9 +1,10 @@
 services:
-  clawdbot-gateway:
+  clawdbot: 
     image: ${CLAWDBOT_IMAGE:-ghcr.io/clawdbot/clawdbot:main}
     environment:
       HOME: /home/node
       TERM: xterm-256color
+      BROWSER: echo
       CLAWDBOT_GATEWAY_TOKEN: ${CLAWDBOT_GATEWAY_TOKEN}
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
@@ -16,6 +17,8 @@ services:
       - "${CLAWDBOT_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
+    stdin_open: true
+    tty: true
     command:
       [
         "node",
@@ -26,20 +29,3 @@ services:
         "--port",
         "${CLAWDBOT_GATEWAY_PORT:-18789}"
       ]
-
-  clawdbot-cli:
-    image: ${CLAWDBOT_IMAGE:-ghcr.io/clawdbot/clawdbot:main}
-    environment:
-      HOME: /home/node
-      TERM: xterm-256color
-      BROWSER: echo
-      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
-      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
-      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
-    volumes:
-      - ${CLAWDBOT_CONFIG_DIR}:/home/node/.clawdbot
-      - ${CLAWDBOT_WORKSPACE_DIR}:/home/node/clawd
-    stdin_open: true
-    tty: true
-    init: true
-    entrypoint: ["node", "dist/index.js"]
