@@ -141,7 +141,7 @@ Rollback succeeds
 Gateway is UP (old version)
        │
        ▼
-clawdbot wake --text "diagnose and fix"
+clawdbot wake --mode now --text "diagnose and fix"
        │
        ▼
 Agent reads crash log
@@ -167,7 +167,10 @@ trap "rmdir ~/.clawdbot/molt/lock" EXIT
 
 # Fetch and check if there's anything to do
 cd $CLAWDBOT_DIR
-git fetch origin
+if ! git fetch origin; then
+  echo "Failed to fetch from remote, aborting"
+  exit 1
+fi
 
 CURRENT=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
@@ -202,10 +205,16 @@ if ! git merge origin/main --ff-only; then
 fi
 
 # Install deps
-pnpm install --frozen-lockfile --prefer-offline
+if ! pnpm install --frozen-lockfile --prefer-offline; then
+  echo "pnpm install failed, aborting"
+  exit 1
+fi
 
 # Build (if applicable)
-pnpm build
+if ! pnpm build; then
+  echo "Build failed, aborting"
+  exit 1
+fi
 
 # Now restart the gateway
 clawdbot daemon restart
@@ -221,21 +230,21 @@ Health check with stability window:
 # Wait for gateway to come up
 MAX_WAIT=60
 STABILITY_WINDOW=30
+PING_TIMEOUT=5
 
 # Stage 1: Gateway responds to ping
-waited=0
-while [ $waited -lt $MAX_WAIT ]; do
-  if clawdbot ping --timeout 5 2>/dev/null; then
+start_time=$(date +%s)
+while true; do
+  if clawdbot ping --timeout $PING_TIMEOUT 2>/dev/null; then
     break
   fi
+  elapsed=$(($(date +%s) - start_time))
+  if [ $elapsed -ge $MAX_WAIT ]; then
+    echo "Gateway didn't come up"
+    exit 1
+  fi
   sleep 5
-  waited=$((waited + 5))
 done
-
-if [ $waited -ge $MAX_WAIT ]; then
-  echo "Gateway didn't come up"
-  exit 1
-fi
 
 # Stage 2: Stability window (catch crash loops)
 echo "Gateway up, waiting ${STABILITY_WINDOW}s for stability..."
@@ -318,7 +327,7 @@ Update fails → Rollback succeeds → Gateway UP → Trigger agent → Diagnose
 
 ```bash
 # After successful rollback, wake the agent to diagnose and fix
-clawdbot wake --mode now --text "$(cat <<'EOF'
+clawdbot wake --mode now --text "$(cat <<EOF
 🦞 MOLT AUTONOMOUS RECOVERY
 
 The nightly update failed, but rollback succeeded. I'm running on the old version.
@@ -514,7 +523,7 @@ The script handles its own rollback, but capture the output for debugging.
 4. Reply with: "Molt failed — rolled back. See crash-log.txt"
 
 ## Notes
-- The script writes changelog to your workspace: update-changelog.md
+- The script writes changelog to: ~/.clawdbot/molt/changelog.md
 - History is appended to: ~/.clawdbot/molt/history.jsonl
 - Crash logs go to: ~/.clawdbot/molt/crash-log.txt
 - Do not retry automatically — the morning report handles user notification
@@ -545,7 +554,7 @@ Compare the timestamp to now. If older than 30 hours, the data is stale.
 ## Step 4: Decision tree
 
 **If status = "success" AND commits > 0:**
-1. Read the changelog from your workspace: update-changelog.md
+1. Read the changelog: ~/.clawdbot/molt/changelog.md
 2. Summarize key changes in 2-4 bullet points (user-facing features, fixes, integrations)
 3. Send notification (see below)
 
