@@ -32,6 +32,8 @@ export type GetReplyOptions = {
   /** Called when the actual model is selected (including after fallback).
    * Use this to get model/provider/thinkLevel for responsePrefix template interpolation. */
   onModelSelected?: (ctx: ModelSelectedContext) => void;
+  /** Called when usage statistics are available after the agent run completes. */
+  onUsageAvailable?: (usage: ReplyUsage) => void;
   disableBlockStreaming?: boolean;
   /** Timeout for block reply delivery (ms). */
   blockReplyTimeoutMs?: number;
@@ -54,4 +56,22 @@ export type ReplyPayload = {
   isError?: boolean;
   /** Channel-specific payload data (per-channel envelope). */
   channelData?: Record<string, unknown>;
+};
+
+/** Usage statistics from an agent run. */
+export type ReplyUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  model?: string;
+  provider?: string;
+  durationMs?: number;
+};
+
+/** Result from getReplyFromConfig including reply payload(s) and usage stats. */
+export type ReplyResult = {
+  replies: ReplyPayload[];
+  usage?: ReplyUsage;
 };

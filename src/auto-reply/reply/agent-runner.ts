@@ -418,41 +418,58 @@ export async function runReplyAgent(params: {
 
     await signalTypingIfNeeded(replyPayloads, typingSignals);
 
-    if (isDiagnosticsEnabled(cfg) && hasNonzeroUsage(usage)) {
+    // Compute usage stats and notify via callback if available
+    if (hasNonzeroUsage(usage)) {
       const input = usage.input ?? 0;
       const output = usage.output ?? 0;
       const cacheRead = usage.cacheRead ?? 0;
       const cacheWrite = usage.cacheWrite ?? 0;
       const promptTokens = input + cacheRead + cacheWrite;
       const totalTokens = usage.total ?? promptTokens + output;
-      const costConfig = resolveModelCostConfig({
-        provider: providerUsed,
+      const durationMs = Date.now() - runStartedAt;
+
+      // Notify usage callback (for presence updates, analytics, etc.)
+      opts?.onUsageAvailable?.({
+        inputTokens: input,
+        outputTokens: output,
+        totalTokens,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
         model: modelUsed,
-        config: cfg,
-      });
-      const costUsd = estimateUsageCost({ usage, cost: costConfig });
-      emitDiagnosticEvent({
-        type: "model.usage",
-        sessionKey,
-        sessionId: followupRun.run.sessionId,
-        channel: replyToChannel,
         provider: providerUsed,
-        model: modelUsed,
-        usage: {
-          input,
-          output,
-          cacheRead,
-          cacheWrite,
-          promptTokens,
-          total: totalTokens,
-        },
-        context: {
-          limit: contextTokensUsed,
-          used: totalTokens,
-        },
-        costUsd,
-        durationMs: Date.now() - runStartedAt,
+        durationMs,
       });
+
+      if (isDiagnosticsEnabled(cfg)) {
+        const costConfig = resolveModelCostConfig({
+          provider: providerUsed,
+          model: modelUsed,
+          config: cfg,
+        });
+        const costUsd = estimateUsageCost({ usage, cost: costConfig });
+        emitDiagnosticEvent({
+          type: "model.usage",
+          sessionKey,
+          sessionId: followupRun.run.sessionId,
+          channel: replyToChannel,
+          provider: providerUsed,
+          model: modelUsed,
+          usage: {
+            input,
+            output,
+            cacheRead,
+            cacheWrite,
+            promptTokens,
+            total: totalTokens,
+          },
+          context: {
+            limit: contextTokensUsed,
+            used: totalTokens,
+          },
+          costUsd,
+          durationMs,
+        });
+      }
     }
 
     const responseUsageRaw =

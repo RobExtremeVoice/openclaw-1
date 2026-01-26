@@ -11,7 +11,7 @@ import {
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { getReplyFromConfig } from "../reply.js";
 import type { FinalizedMsgContext } from "../templating.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import type { GetReplyOptions, ReplyPayload, ReplyUsage } from "../types.js";
 import { formatAbortReplyText, tryFastAbortFromMessage } from "./abort.js";
 import { shouldSkipDuplicateInbound } from "./inbound-dedupe.js";
 import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
@@ -266,10 +266,18 @@ export async function dispatchReplyFromConfig(params: {
       return { queuedFinal, counts };
     }
 
+    // Mutable ref to capture usage stats from the agent run
+    const usageRef: { value?: ReplyUsage } = {};
+
     const replyResult = await (params.replyResolver ?? getReplyFromConfig)(
       ctx,
       {
         ...params.replyOptions,
+        onUsageAvailable: (usage) => {
+          usageRef.value = usage;
+          // Also call the original callback if provided
+          params.replyOptions?.onUsageAvailable?.(usage);
+        },
         onBlockReply: (payload: ReplyPayload, context) => {
           const run = async () => {
             const ttsPayload = await maybeApplyTtsToPayload({
@@ -332,13 +340,7 @@ export async function dispatchReplyFromConfig(params: {
     const counts = dispatcher.getQueuedCounts();
     counts.final += routedFinalCount;
 
-    // Trigger message_sent hook for final replies
-    // NOTE: Usage stats (tokens, model, etc.) are not currently available here.
-    // They are computed in agent-runner.ts but not returned through the reply pipeline.
-    // To enable full usage tracking, getReplyFromConfig/replyResolver would need to
-    // return usage data alongside the reply text. For now, hooks receive the message
-    // content without usage stats - presence managers can track cumulative tokens
-    // via other means (e.g., diagnostic events or session metadata).
+    // Trigger message_sent hook for final replies with usage stats
     if (hookRunner?.hasHooks("message_sent") && replies.length > 0) {
       const targetSessionKey =
         ctx.CommandSource === "native" ? ctx.CommandTargetSessionKey?.trim() : undefined;
@@ -349,6 +351,9 @@ export async function dispatchReplyFromConfig(params: {
       const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
       const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
 
+      // Get captured usage stats from the agent run
+      const usage = usageRef.value;
+
       for (const reply of replies) {
         void hookRunner
           .runMessageSent(
@@ -356,6 +361,19 @@ export async function dispatchReplyFromConfig(params: {
               to: conversationId ?? "",
               content: reply.text ?? "",
               success: queuedFinal,
+              // Include usage stats if available
+              usage: usage
+                ? {
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                    totalTokens: usage.totalTokens,
+                    cacheReadTokens: usage.cacheReadTokens,
+                    cacheCreationTokens: usage.cacheWriteTokens,
+                    model: usage.model,
+                    provider: usage.provider,
+                  }
+                : undefined,
+              durationMs: usage?.durationMs,
             },
             {
               channelId,
