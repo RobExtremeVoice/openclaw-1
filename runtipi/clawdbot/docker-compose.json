@@ -65,15 +65,9 @@
           "containerPath": "/home/node/clawd"
         }
       ],
-      "command": ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"],
+      "command": "node dist/index.js gateway --bind lan --port 18789",
       "internalPort": 18789,
-      "isMain": true,
-      "healthCheck": {
-        "test": "node dist/index.js health --token \"$CLAWDBOT_GATEWAY_TOKEN\" || exit 1",
-        "interval": "30s",
-        "timeout": "10s",
-        "retries": 3
-      }
+      "isMain": true
     }
   ]
 }
