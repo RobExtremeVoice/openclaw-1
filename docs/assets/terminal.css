@@ -87,7 +87,7 @@ body {
     radial-gradient(900px 600px at 95% 10%, color-mix(in oklab, var(--accent2) 14%, transparent), transparent 60%),
     radial-gradient(900px 600px at 50% 120%, color-mix(in oklab, var(--link) 10%, transparent), transparent 55%),
     linear-gradient(180deg, var(--bg0), var(--bg1));
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 
 body::before,
@@ -126,10 +126,13 @@ body::after {
     linear-gradient(180deg, color-mix(in oklab, var(--panel2) 88%, transparent), color-mix(in oklab, var(--panel) 92%, transparent));
   box-shadow: var(--shadow-px);
   border: var(--border) solid var(--frame-border);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .shell__titlebar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -295,6 +298,9 @@ body::after {
 }
 
 .shell__nav {
+  position: sticky;
+  top: 68px; /* Adjust this value based on the height of your titlebar */
+  z-index: 99;
   display: flex;
   align-items: center;
   justify-content: space-between;
