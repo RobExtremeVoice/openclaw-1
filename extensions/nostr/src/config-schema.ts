@@ -75,6 +75,14 @@ export const NostrConfigSchema = z.object({
   /** DM access policy: pairing, allowlist, open, or disabled */
   dmPolicy: z.enum(["pairing", "allowlist", "open", "disabled"]).optional(),
 
+  /**
+   * DM protocol preference:
+   * - "dual" (default): Accept both NIP-04 and NIP-17, send using NIP-17
+   * - "nip17": NIP-17 only (private DMs with gift wrap)
+   * - "nip04": NIP-04 only (legacy encrypted DMs)
+   */
+  dmProtocol: z.enum(["dual", "nip17", "nip04"]).optional(),
+
   /** Allowed sender pubkeys (npub or hex format) */
   allowFrom: z.array(allowFromEntry).optional(),
 

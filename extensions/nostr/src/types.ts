@@ -1,5 +1,5 @@
 import type { ClawdbotConfig } from "clawdbot/plugin-sdk";
-import { getPublicKeyFromPrivate } from "./nostr-bus.js";
+import { getPublicKeyFromPrivate, type DmProtocol } from "./nostr-bus.js";
 import { DEFAULT_RELAYS } from "./nostr-bus.js";
 import type { NostrProfile } from "./config-schema.js";
 
@@ -9,6 +9,7 @@ export interface NostrAccountConfig {
   privateKey?: string;
   relays?: string[];
   dmPolicy?: "pairing" | "allowlist" | "open" | "disabled";
+  dmProtocol?: DmProtocol;
   allowFrom?: Array<string | number>;
   profile?: NostrProfile;
 }
@@ -21,6 +22,7 @@ export interface ResolvedNostrAccount {
   privateKey: string;
   publicKey: string;
   relays: string[];
+  dmProtocol: DmProtocol;
   profile?: NostrProfile;
   config: NostrAccountConfig;
 }
@@ -85,6 +87,7 @@ export function resolveNostrAccount(opts: {
     privateKey,
     publicKey,
     relays: nostrCfg?.relays ?? DEFAULT_RELAYS,
+    dmProtocol: nostrCfg?.dmProtocol ?? "dual",
     profile: nostrCfg?.profile,
     config: {
       enabled: nostrCfg?.enabled,
@@ -92,6 +95,7 @@ export function resolveNostrAccount(opts: {
       privateKey: nostrCfg?.privateKey,
       relays: nostrCfg?.relays,
       dmPolicy: nostrCfg?.dmPolicy,
+      dmProtocol: nostrCfg?.dmProtocol,
       allowFrom: nostrCfg?.allowFrom,
       profile: nostrCfg?.profile,
     },
