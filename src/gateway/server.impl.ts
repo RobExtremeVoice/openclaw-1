@@ -52,6 +52,7 @@ import { createGatewayCloseHandler } from "./server-close.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
+import { loadPluginCronJobs } from "./server-plugin-cron.js";
 import { coreGatewayHandlers } from "./server-methods.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
@@ -503,6 +504,18 @@ export async function startGatewayServer(
     logChannels,
     logBrowser,
   }));
+
+  // Load cron jobs from plugins that expose a *.getCronJobs gateway method.
+  // This runs after plugin services start so storage is initialized.
+  void loadPluginCronJobs({
+    cron,
+    handlers: pluginRegistry.gatewayHandlers,
+    log: {
+      info: (msg) => logCron.info(msg),
+      warn: (msg) => logCron.warn(msg),
+      error: (msg) => logCron.error(msg),
+    },
+  }).catch((err) => logCron.error(`failed to load plugin cron jobs: ${String(err)}`));
 
   const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers({
     deps,
