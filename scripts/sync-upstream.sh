@@ -67,7 +67,10 @@ backup_local() {
         if [[ -d "$REPO_DIR/$ext" ]]; then
             local dest="$BACKUP_DIR/$ext"
             mkdir -p "$(dirname "$dest")"
-            cp -r "$REPO_DIR/$ext" "$dest"
+            # Use rsync to exclude node_modules and avoid circular symlinks
+            rsync -a --exclude='node_modules' "$REPO_DIR/$ext/" "$dest/" 2>/dev/null || {
+                warn "  Backup of $ext had warnings (likely circular symlinks)"
+            }
             info "  Backed up: $ext"
         fi
     done
@@ -91,7 +94,9 @@ restore_local() {
         if [[ -d "$src" ]]; then
             # Remove upstream version if exists (unlikely for local-only)
             rm -rf "$dest"
-            cp -r "$src" "$dest"
+            mkdir -p "$dest"
+            # Use rsync for consistency with backup
+            rsync -a "$src/" "$dest/"
             info "  Restored: $ext"
         fi
     done
