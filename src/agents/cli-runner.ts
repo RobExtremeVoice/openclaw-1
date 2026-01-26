@@ -265,6 +265,19 @@ export async function runCliAgent(params: {
       const outputMode = useResume ? (backend.resumeOutput ?? backend.output) : backend.output;
 
       if (outputMode === "text") {
+        // If outputPrefix is set, extract only lines starting with that prefix
+        if (backend.outputPrefix) {
+          const prefix = backend.outputPrefix;
+          const lines = stdout.split("\n");
+          const responseLines: string[] = [];
+          for (const line of lines) {
+            if (line.startsWith(prefix)) {
+              responseLines.push(line.slice(prefix.length));
+            }
+          }
+          const text = responseLines.join("\n").trim();
+          return { text: text || stdout, sessionId: undefined };
+        }
         return { text: stdout, sessionId: undefined };
       }
       if (outputMode === "jsonl") {

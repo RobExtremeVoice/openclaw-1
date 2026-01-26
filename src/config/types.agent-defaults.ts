@@ -55,6 +55,8 @@ export type CliBackendConfig = {
   output?: "json" | "text" | "jsonl";
   /** Output parsing mode when resuming a CLI session. */
   resumeOutput?: "json" | "text" | "jsonl";
+  /** For text output: prefix that marks response lines (e.g. "> " for kiro-cli). */
+  outputPrefix?: string;
   /** Prompt input mode (default: arg). */
   input?: "arg" | "stdin";
   /** Max prompt length for arg mode (if exceeded, stdin is used). */

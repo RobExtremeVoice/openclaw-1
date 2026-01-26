@@ -90,6 +90,7 @@ const DEFAULT_KIRO_BACKEND: CliBackendConfig = {
   command: "kiro-cli",
   args: ["chat", "--no-interactive", "--wrap", "never"],
   output: "text",
+  outputPrefix: "> ",
   input: "arg",
   modelArg: "--model",
   modelAliases: KIRO_MODEL_ALIASES,
