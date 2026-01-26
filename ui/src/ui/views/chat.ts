@@ -52,6 +52,8 @@ export type ChatProps = {
   splitRatio?: number;
   assistantName: string;
   assistantAvatar: string | null;
+  userName?: string;
+  userAvatar?: string | null;
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
@@ -147,7 +149,7 @@ function renderAttachmentPreview(props: ChatProps) {
   return html`
     <div class="chat-attachments">
       ${attachments.map(
-        (att) => html`
+    (att) => html`
           <div class="chat-attachment">
             <img
               src=${att.dataUrl}
@@ -159,17 +161,17 @@ function renderAttachmentPreview(props: ChatProps) {
               type="button"
               aria-label="Remove attachment"
               @click=${() => {
-                const next = (props.attachments ?? []).filter(
-                  (a) => a.id !== att.id,
-                );
-                props.onAttachmentsChange?.(next);
-              }}
+        const next = (props.attachments ?? []).filter(
+          (a) => a.id !== att.id,
+        );
+        props.onAttachmentsChange?.(next);
+      }}
             >
               ${icons.x}
             </button>
           </div>
         `,
-      )}
+  )}
     </div>
   `;
 }
@@ -206,47 +208,49 @@ export function renderChat(props: ChatProps) {
     >
       ${props.loading ? html`<div class="muted">Loading chat…</div>` : nothing}
       ${repeat(buildChatItems(props), (item) => item.key, (item) => {
-        if (item.kind === "reading-indicator") {
-          return renderReadingIndicatorGroup(assistantIdentity);
-        }
+    if (item.kind === "reading-indicator") {
+      return renderReadingIndicatorGroup(assistantIdentity);
+    }
 
-        if (item.kind === "stream") {
-          return renderStreamingGroup(
-            item.text,
-            item.startedAt,
-            props.onOpenSidebar,
-            assistantIdentity,
-          );
-        }
+    if (item.kind === "stream") {
+      return renderStreamingGroup(
+        item.text,
+        item.startedAt,
+        props.onOpenSidebar,
+        assistantIdentity,
+      );
+    }
 
-        if (item.kind === "group") {
-          return renderMessageGroup(item, {
-            onOpenSidebar: props.onOpenSidebar,
-            showReasoning,
-            assistantName: props.assistantName,
-            assistantAvatar: assistantIdentity.avatar,
-          });
-        }
+    if (item.kind === "group") {
+      return renderMessageGroup(item, {
+        onOpenSidebar: props.onOpenSidebar,
+        showReasoning,
+        assistantName: props.assistantName,
+        assistantAvatar: assistantIdentity.avatar,
+        userName: props.userName,
+        userAvatar: props.userAvatar,
+      });
+    }
 
-        return nothing;
-      })}
+    return nothing;
+  })}
     </div>
   `;
 
   return html`
     <section class="card chat">
       ${props.disabledReason
-        ? html`<div class="callout">${props.disabledReason}</div>`
-        : nothing}
+      ? html`<div class="callout">${props.disabledReason}</div>`
+      : nothing}
 
       ${props.error
-        ? html`<div class="callout danger">${props.error}</div>`
-        : nothing}
+      ? html`<div class="callout danger">${props.error}</div>`
+      : nothing}
 
       ${renderCompactionIndicator(props.compactionStatus)}
 
       ${props.focusMode
-        ? html`
+      ? html`
             <button
               class="chat-focus-exit"
               type="button"
@@ -257,7 +261,7 @@ export function renderChat(props: ChatProps) {
               ${icons.x}
             </button>
           `
-        : nothing}
+      : nothing}
 
       <div
         class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
@@ -270,40 +274,40 @@ export function renderChat(props: ChatProps) {
         </div>
 
         ${sidebarOpen
-          ? html`
+      ? html`
               <resizable-divider
                 .splitRatio=${splitRatio}
                 @resize=${(e: CustomEvent) =>
-                  props.onSplitRatioChange?.(e.detail.splitRatio)}
+          props.onSplitRatioChange?.(e.detail.splitRatio)}
               ></resizable-divider>
               <div class="chat-sidebar">
                 ${renderMarkdownSidebar({
-                  content: props.sidebarContent ?? null,
-                  error: props.sidebarError ?? null,
-                  onClose: props.onCloseSidebar!,
-                  onViewRawText: () => {
-                    if (!props.sidebarContent || !props.onOpenSidebar) return;
-                    props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
-                  },
-                })}
+            content: props.sidebarContent ?? null,
+            error: props.sidebarError ?? null,
+            onClose: props.onCloseSidebar!,
+            onViewRawText: () => {
+              if (!props.sidebarContent || !props.onOpenSidebar) return;
+              props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
+            },
+          })}
               </div>
             `
-          : nothing}
+      : nothing}
       </div>
 
       ${props.queue.length
-        ? html`
+      ? html`
             <div class="chat-queue" role="status" aria-live="polite">
               <div class="chat-queue__title">Queued (${props.queue.length})</div>
               <div class="chat-queue__list">
                 ${props.queue.map(
-                  (item) => html`
+        (item) => html`
                     <div class="chat-queue__item">
                       <div class="chat-queue__text">
                         ${item.text ||
-                        (item.attachments?.length
-                          ? `Image (${item.attachments.length})`
-                          : "")}
+          (item.attachments?.length
+            ? `Image (${item.attachments.length})`
+            : "")}
                       </div>
                       <button
                         class="btn chat-queue__remove"
@@ -315,11 +319,11 @@ export function renderChat(props: ChatProps) {
                       </button>
                     </div>
                   `,
-                )}
+      )}
               </div>
             </div>
           `
-        : nothing}
+      : nothing}
 
       <div class="chat-compose">
         ${renderAttachmentPreview(props)}
@@ -330,15 +334,15 @@ export function renderChat(props: ChatProps) {
               .value=${props.draft}
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
-                if (e.key !== "Enter") return;
-                if (e.isComposing || e.keyCode === 229) return;
-                if (e.shiftKey) return; // Allow Shift+Enter for line breaks
-                if (!props.connected) return;
-                e.preventDefault();
-                if (canCompose) props.onSend();
-              }}
+      if (e.key !== "Enter") return;
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.shiftKey) return; // Allow Shift+Enter for line breaks
+      if (!props.connected) return;
+      e.preventDefault();
+      if (canCompose) props.onSend();
+    }}
               @input=${(e: Event) =>
-                props.onDraftChange((e.target as HTMLTextAreaElement).value)}
+      props.onDraftChange((e.target as HTMLTextAreaElement).value)}
               @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
               placeholder=${composePlaceholder}
             ></textarea>

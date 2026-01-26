@@ -87,14 +87,14 @@ export function renderStreamingGroup(
       ${renderAvatar("assistant", assistant)}
       <div class="chat-group-messages">
         ${renderGroupedMessage(
-          {
-            role: "assistant",
-            content: [{ type: "text", text }],
-            timestamp: startedAt,
-          },
-          { isStreaming: true, showReasoning: false },
-          onOpenSidebar,
-        )}
+    {
+      role: "assistant",
+      content: [{ type: "text", text }],
+      timestamp: startedAt,
+    },
+    { isStreaming: true, showReasoning: false },
+    onOpenSidebar,
+  )}
         <div class="chat-group-footer">
           <span class="chat-sender-name">${name}</span>
           <span class="chat-group-timestamp">${timestamp}</span>
@@ -111,13 +111,15 @@ export function renderMessageGroup(
     showReasoning: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
+    userName?: string;
+    userAvatar?: string | null;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
   const assistantName = opts.assistantName ?? "Assistant";
   const who =
     normalizedRole === "user"
-      ? "You"
+      ? (opts.userName || "You")
       : normalizedRole === "assistant"
         ? assistantName
         : normalizedRole;
@@ -135,21 +137,24 @@ export function renderMessageGroup(
   return html`
     <div class="chat-group ${roleClass}">
       ${renderAvatar(group.role, {
-        name: assistantName,
-        avatar: opts.assistantAvatar ?? null,
-      })}
+    name: assistantName,
+    avatar: opts.assistantAvatar ?? null,
+  }, {
+    name: opts.userName,
+    avatar: opts.userAvatar,
+  })}
       <div class="chat-group-messages">
         ${group.messages.map((item, index) =>
-          renderGroupedMessage(
-            item.message,
-            {
-              isStreaming:
-                group.isStreaming && index === group.messages.length - 1,
-              showReasoning: opts.showReasoning,
-            },
-            opts.onOpenSidebar,
-          ),
-        )}
+    renderGroupedMessage(
+      item.message,
+      {
+        isStreaming:
+          group.isStreaming && index === group.messages.length - 1,
+        showReasoning: opts.showReasoning,
+      },
+      opts.onOpenSidebar,
+    ),
+  )}
         <div class="chat-group-footer">
           <span class="chat-sender-name">${who}</span>
           <span class="chat-group-timestamp">${timestamp}</span>
@@ -162,13 +167,17 @@ export function renderMessageGroup(
 function renderAvatar(
   role: string,
   assistant?: Pick<AssistantIdentity, "name" | "avatar">,
+  user?: { name?: string; avatar?: string | null },
 ) {
   const normalized = normalizeRoleForGrouping(role);
   const assistantName = assistant?.name?.trim() || "Assistant";
   const assistantAvatar = assistant?.avatar?.trim() || "";
+  const userName = user?.name?.trim() || "You";
+  const userAvatar = user?.avatar?.trim() || "";
+
   const initial =
     normalized === "user"
-      ? "U"
+      ? (userName === "You" ? "U" : userName.charAt(0).toUpperCase())
       : normalized === "assistant"
         ? assistantName.charAt(0).toUpperCase() || "A"
         : normalized === "tool"
@@ -179,7 +188,7 @@ function renderAvatar(
       ? "user"
       : normalized === "assistant"
         ? "assistant"
-      : normalized === "tool"
+        : normalized === "tool"
           ? "tool"
           : "other";
 
@@ -192,6 +201,16 @@ function renderAvatar(
       />`;
     }
     return html`<div class="chat-avatar ${className}">${assistantAvatar}</div>`;
+  }
+
+  if (userAvatar && normalized === "user") {
+    if (isAvatarUrl(userAvatar)) {
+      return html`<img
+        class="chat-avatar ${className}"
+        src="${userAvatar}"
+        alt="${userName}"
+      />`;
+    }
   }
 
   return html`<div class="chat-avatar ${className}">${initial}</div>`;
@@ -211,7 +230,7 @@ function renderMessageImages(images: ImageBlock[]) {
   return html`
     <div class="chat-message-images">
       ${images.map(
-        (img) => html`
+    (img) => html`
           <img
             src=${img.url}
             alt=${img.alt ?? "Attached image"}
@@ -219,7 +238,7 @@ function renderMessageImages(images: ImageBlock[]) {
             @click=${() => window.open(img.url, "_blank")}
           />
         `,
-      )}
+  )}
     </div>
   `;
 }
@@ -277,13 +296,13 @@ function renderGroupedMessage(
       ${canCopyMarkdown ? renderCopyAsMarkdownButton(markdown!) : nothing}
       ${renderMessageImages(images)}
       ${reasoningMarkdown
-        ? html`<div class="chat-thinking">${unsafeHTML(
-            toSanitizedMarkdownHtml(reasoningMarkdown),
-          )}</div>`
-        : nothing}
+      ? html`<div class="chat-thinking">${unsafeHTML(
+        toSanitizedMarkdownHtml(reasoningMarkdown),
+      )}</div>`
+      : nothing}
       ${markdown
-        ? html`<div class="chat-text">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`
-        : nothing}
+      ? html`<div class="chat-text">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`
+      : nothing}
       ${toolCards.map((card) => renderToolCardSidebar(card, onOpenSidebar))}
     </div>
   `;

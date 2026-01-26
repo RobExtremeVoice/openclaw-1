@@ -275,7 +275,10 @@ const FIELD_LABELS: Record<string, string> = {
   "commands.useAccessGroups": "Use Access Groups",
   "ui.seamColor": "Accent Color",
   "ui.assistant.name": "Assistant Name",
+  "ui.assistant.name": "Assistant Name",
   "ui.assistant.avatar": "Assistant Avatar",
+  "ui.user.name": "User Name",
+  "ui.user.avatar": "User Avatar",
   "browser.controlUrl": "Browser Control URL",
   "browser.snapshotDefaults": "Browser Snapshot Defaults",
   "browser.snapshotDefaults.mode": "Browser Snapshot Mode",
@@ -875,9 +878,9 @@ function applyPluginSchemas(schema: ConfigSchema, plugins: PluginUiMetadata[]): 
     const pluginSchema = asSchemaObject(plugin.configSchema);
     const nextConfigSchema =
       baseConfigSchema &&
-      pluginSchema &&
-      isObjectSchema(baseConfigSchema) &&
-      isObjectSchema(pluginSchema)
+        pluginSchema &&
+        isObjectSchema(baseConfigSchema) &&
+        isObjectSchema(pluginSchema)
         ? mergeObjectSchema(baseConfigSchema, pluginSchema)
         : cloneSchema(plugin.configSchema);
 
