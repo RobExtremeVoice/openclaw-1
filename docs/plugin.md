@@ -44,6 +44,7 @@ See [Voice Call](/plugins/voice-call) for a concrete example plugin.
 - [Nostr](/channels/nostr) — `@clawdbot/nostr`
 - [Zalo](/channels/zalo) — `@clawdbot/zalo`
 - [Microsoft Teams](/channels/msteams) — `@clawdbot/msteams`
+- [Tlon/Urbit](/channels/tlon) — bundled as `tlon` (disabled by default; auto-installs deps)
 - Google Antigravity OAuth (provider auth) — bundled as `google-antigravity-auth` (disabled by default)
 - Gemini CLI OAuth (provider auth) — bundled as `google-gemini-cli-auth` (disabled by default)
 - Qwen OAuth (provider auth) — bundled as `qwen-portal-auth` (disabled by default)
@@ -128,8 +129,9 @@ A plugin directory may include a `package.json` with `clawdbot.extensions`:
 Each entry becomes a plugin. If the pack lists multiple extensions, the plugin id
 becomes `name/<fileBase>`.
 
-If your plugin imports npm deps, install them in that directory so
-`node_modules` is available (`npm install` / `pnpm install`).
+If your plugin imports npm deps, bundled plugins will **auto-install** them on
+first load. For workspace/linked plugins during development, run `npm install`
+or `pnpm install` in the plugin directory manually.
 
 ### Channel catalog metadata
 

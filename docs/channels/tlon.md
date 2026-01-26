@@ -12,30 +12,35 @@ be further restricted via allowlists.
 Status: supported via plugin. DMs, group mentions, thread replies, and text-only media fallback
 (URL appended to caption). Reactions, polls, and native media uploads are not supported.
 
-## Plugin required
+## Plugin setup
 
-Tlon ships as a plugin and is not bundled with the core install.
+Tlon is bundled with Clawdbot. Its dependencies (`@urbit/http-api`, `@urbit/aura`) are
+automatically installed on first load when you enable the plugin.
 
-Install via CLI (npm registry):
+To enable, add `tlon` to your plugins allow list and configure the channel:
 
-```bash
-clawdbot plugins install @clawdbot/tlon
-```
-
-Local checkout (when running from a git repo):
-
-```bash
-clawdbot plugins install ./extensions/tlon
+```json5
+{
+  plugins: {
+    allow: ["tlon"]
+  },
+  channels: {
+    tlon: {
+      enabled: true,
+      // ... config below
+    }
+  }
+}
 ```
 
 Details: [Plugins](/plugin)
 
 ## Setup
 
-1) Install the Tlon plugin.
-2) Gather your ship URL and login code.
+1) Gather your ship URL and login code.
+2) Add `tlon` to your plugins allow list.
 3) Configure `channels.tlon`.
-4) Restart the gateway.
+4) Restart the gateway (dependencies install automatically on first load).
 5) DM the bot or mention it in a group channel.
 
 Minimal config (single account):

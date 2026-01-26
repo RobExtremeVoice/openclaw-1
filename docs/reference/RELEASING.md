@@ -81,14 +81,24 @@ When the operator says “release”, immediately do this preflight (no extra qu
 
 ## Plugin publish scope (npm)
 
-We only publish **existing npm plugins** under the `@clawdbot/*` scope. Bundled
-plugins that are not on npm stay **disk-tree only** (still shipped in
-`extensions/**`).
+We publish some plugins to npm under the `@clawdbot/*` scope for users who prefer
+explicit installation. However, **all plugins are bundled** in `extensions/**` and
+their dependencies are **auto-installed on first load** when enabled.
 
-Process to derive the list:
-1) `npm search @clawdbot --json` and capture the package names.
-2) Compare with `extensions/*/package.json` names.
-3) Publish only the **intersection** (already on npm).
+### Bundled plugins with auto-install
+
+Bundled plugins ship with source code but not `node_modules`. When a bundled plugin
+is enabled and has external dependencies (not `clawdbot` workspace refs), the loader
+automatically runs `npm install` in the plugin directory on first load.
+
+This means users don't need to manually install plugins or their dependencies—they
+just enable the plugin in config and restart.
+
+### npm-published plugins (optional)
+
+Some plugins are also published to npm for users who prefer explicit installation
+via `clawdbot plugins install @clawdbot/xxx`. This copies the plugin to
+`~/.clawdbot/extensions/` and runs `npm install` there.
 
 Current npm plugin list (update as needed):
 - @clawdbot/bluebubbles
@@ -103,5 +113,14 @@ Current npm plugin list (update as needed):
 - @clawdbot/zalo
 - @clawdbot/zalouser
 
-Release notes must also call out **new optional bundled plugins** that are **not
-on by default** (example: `tlon`).
+To add a new plugin to npm:
+1) First-publish manually: `cd extensions/<plugin> && npm publish --access public`
+2) Add to the list above
+3) Future releases will include it automatically
+
+### Bundled-only plugins
+
+Some plugins are bundled but not published to npm (e.g., `tlon`). These work via
+the auto-install mechanism—users just enable them in config.
+
+Release notes should call out **new bundled plugins** so users know they're available.

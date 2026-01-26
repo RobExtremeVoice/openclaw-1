@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +43,69 @@ export type PluginLoadOptions = {
 const registryCache = new Map<string, PluginRegistry>();
 
 const defaultLogger = () => createSubsystemLogger("plugins");
+
+/**
+ * Ensures plugin dependencies are installed for bundled plugins.
+ * Bundled plugins ship with source but not node_modules; this installs
+ * deps on first load if the plugin has dependencies in package.json.
+ */
+function ensureBundledPluginDeps(params: {
+  rootDir: string;
+  pluginId: string;
+  logger: PluginLogger;
+}): { ok: boolean; error?: string } {
+  const { rootDir, pluginId, logger } = params;
+  const packageJsonPath = path.join(rootDir, "package.json");
+
+  if (!fs.existsSync(packageJsonPath)) {
+    return { ok: true }; // No package.json, nothing to install
+  }
+
+  let manifest: { dependencies?: Record<string, string> };
+  try {
+    manifest = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+  } catch {
+    return { ok: true }; // Can't parse, skip
+  }
+
+  const deps = manifest.dependencies ?? {};
+  const depNames = Object.keys(deps).filter(
+    (name) => !name.startsWith("clawdbot") && name !== "clawdbot",
+  );
+
+  if (depNames.length === 0) {
+    return { ok: true }; // No external dependencies
+  }
+
+  // Check if first dependency exists in node_modules
+  const firstDep = depNames[0];
+  const depPath = path.join(rootDir, "node_modules", ...firstDep.split("/"));
+
+  if (fs.existsSync(depPath)) {
+    return { ok: true }; // Dependencies already installed
+  }
+
+  logger.info?.(`[plugins] ${pluginId}: installing dependencies…`);
+
+  try {
+    const result = spawnSync("npm", ["install", "--omit=dev", "--silent"], {
+      cwd: rootDir,
+      encoding: "utf-8",
+      timeout: 300_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (result.status !== 0) {
+      const errorMsg = result.stderr?.trim() || result.stdout?.trim() || "unknown error";
+      return { ok: false, error: `npm install failed: ${errorMsg}` };
+    }
+
+    logger.info?.(`[plugins] ${pluginId}: dependencies installed`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: `failed to install dependencies: ${String(err)}` };
+  }
+}
 
 const resolvePluginSdkAlias = (): string | null => {
   try {
@@ -280,6 +344,29 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
         message: record.error,
       });
       continue;
+    }
+
+    // Ensure bundled plugin dependencies are installed before loading
+    if (candidate.origin === "bundled") {
+      const depsResult = ensureBundledPluginDeps({
+        rootDir: candidate.rootDir,
+        pluginId,
+        logger,
+      });
+      if (!depsResult.ok) {
+        logger.error(`[plugins] ${record.id} failed to install deps: ${depsResult.error}`);
+        record.status = "error";
+        record.error = depsResult.error ?? "failed to install dependencies";
+        registry.plugins.push(record);
+        seenIds.set(pluginId, candidate.origin);
+        registry.diagnostics.push({
+          level: "error",
+          pluginId: record.id,
+          source: record.source,
+          message: record.error,
+        });
+        continue;
+      }
     }
 
     let mod: ClawdbotPluginModule | null = null;
