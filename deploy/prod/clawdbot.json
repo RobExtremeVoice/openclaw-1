@@ -76,12 +76,10 @@
   },
   "plugins": {
     "entries": {
-      "discord": {
-        "enabled": true
-      },
       "checkins": {
         "enabled": true
       }
-    }
+    },
+    "slots": {}
   }
 }
