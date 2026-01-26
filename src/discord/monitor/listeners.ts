@@ -276,10 +276,12 @@ type PresenceUpdateEvent = Parameters<PresenceUpdateListener["handle"]>[0];
 
 export class DiscordPresenceListener extends PresenceUpdateListener {
   private logger?: Logger;
+  private accountId?: string;
 
-  constructor(logger?: Logger) {
+  constructor(params: { logger?: Logger; accountId?: string }) {
     super();
-    this.logger = logger;
+    this.logger = params.logger;
+    this.accountId = params.accountId;
   }
 
   async handle(data: PresenceUpdateEvent) {
@@ -289,7 +291,11 @@ export class DiscordPresenceListener extends PresenceUpdateListener {
           ? String(data.user.id)
           : undefined;
       if (!userId) return;
-      setPresence(userId, data as import("discord-api-types/v10").GatewayPresenceUpdate);
+      setPresence(
+        this.accountId,
+        userId,
+        data as import("discord-api-types/v10").GatewayPresenceUpdate,
+      );
     } catch (err) {
       const logger = this.logger ?? discordEventQueueLog;
       logger.error(danger(`discord presence handler failed: ${String(err)}`));

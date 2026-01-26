@@ -542,7 +542,10 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
   );
 
   if (discordCfg.intents?.presence) {
-    registerDiscordListener(client.listeners, new DiscordPresenceListener(logger));
+    registerDiscordListener(
+      client.listeners,
+      new DiscordPresenceListener({ logger, accountId: account.accountId }),
+    );
     runtime.log?.("discord: GuildPresences intent enabled — presence listener registered");
   }
 

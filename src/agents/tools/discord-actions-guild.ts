@@ -55,7 +55,7 @@ export async function handleDiscordGuildAction(
       const member = accountId
         ? await fetchMemberInfoDiscord(guildId, userId, { accountId })
         : await fetchMemberInfoDiscord(guildId, userId);
-      const presence = getPresence(userId);
+      const presence = getPresence(accountId, userId);
       const activities = presence?.activities ?? undefined;
       const status = presence?.status ?? undefined;
       return jsonResult({ ok: true, member, ...(presence ? { status, activities } : {}) });
