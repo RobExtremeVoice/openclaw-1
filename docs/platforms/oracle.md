@@ -140,7 +140,7 @@ tailscale serve status
 curl http://localhost:18789
 ```
 
-## 9) Lock Down VCN Security
+## 8) Lock Down VCN Security
 
 Now that everything is working, lock down the VCN to block all traffic except Tailscale. OCI's Virtual Cloud Network acts as a firewall at the network edge — traffic is blocked before it reaches your instance.
 
