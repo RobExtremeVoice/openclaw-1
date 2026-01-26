@@ -17,7 +17,7 @@ import {
   writeCache,
 } from "./web-shared.js";
 
-const SEARCH_PROVIDERS = ["brave", "perplexity"] as const;
+const SEARCH_PROVIDERS = ["brave", "perplexity", "exa"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
@@ -27,6 +27,10 @@ const PERPLEXITY_DIRECT_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_PERPLEXITY_MODEL = "perplexity/sonar-pro";
 const PERPLEXITY_KEY_PREFIXES = ["pplx-"];
 const OPENROUTER_KEY_PREFIXES = ["sk-or-"];
+
+// Exa configuration
+const EXA_SEARCH_ENDPOINT = "https://api.exa.ai/search";
+const DEFAULT_EXA_MAX_CHARS = 1500;
 
 const SEARCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 const BRAVE_FRESHNESS_SHORTCUTS = new Set(["pd", "pw", "pm", "py"]);
@@ -88,6 +92,12 @@ type PerplexityConfig = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+};
+
+type ExaConfig = {
+  apiKey?: string;
+  contents?: boolean;
+  maxChars?: number;
 };
 
 type PerplexityApiKeySource = "config" | "perplexity_env" | "openrouter_env" | "none";
@@ -155,6 +165,20 @@ function resolvePerplexityConfig(search?: WebSearchConfig): PerplexityConfig {
   return perplexity as PerplexityConfig;
 }
 
+function resolveExaConfig(search?: WebSearchConfig): ExaConfig {
+  if (!search || typeof search !== "object") return {};
+  const exa = "exa" in search ? search.exa : undefined;
+  if (!exa || typeof exa !== "object") return {};
+  return exa as ExaConfig;
+}
+
+function resolveExaApiKey(exa?: ExaConfig): string | undefined {
+  // Config key takes precedence
+  if (exa?.apiKey) return exa.apiKey;
+  // Fall back to environment variable
+  return process.env.EXA_API_KEY;
+}
+
 function resolvePerplexityApiKey(perplexity?: PerplexityConfig): {
   apiKey?: string;
   source: PerplexityApiKeySource;
@@ -219,6 +243,16 @@ function resolvePerplexityModel(perplexity?: PerplexityConfig): string {
       ? perplexity.model.trim()
       : "";
   return fromConfig || DEFAULT_PERPLEXITY_MODEL;
+}
+
+function resolveExaContents(exa?: ExaConfig): boolean {
+  if (typeof exa?.contents === "boolean") return exa.contents;
+  return true;
+}
+
+function resolveExaMaxChars(exa?: ExaConfig): number {
+  if (typeof exa?.maxChars === "number" && exa.maxChars > 0) return exa.maxChars;
+  return DEFAULT_EXA_MAX_CHARS;
 }
 
 function resolveSearchCount(value: unknown, fallback: number): number {
@@ -306,6 +340,71 @@ async function runPerplexitySearch(params: {
   return { content, citations };
 }
 
+type ExaSearchResponse = {
+  results?: Array<{
+    title?: string;
+    url?: string;
+    text?: string;
+    publishedDate?: string;
+  }>;
+};
+
+async function runExaSearch(params: {
+  query: string;
+  count: number;
+  apiKey: string;
+  timeoutSeconds: number;
+  contents: boolean;
+  maxChars: number;
+}): Promise<{
+  results: Array<{
+    title: string;
+    url: string;
+    description: string;
+    published?: string;
+  }>;
+}> {
+  const body: Record<string, unknown> = {
+    query: params.query,
+    numResults: params.count,
+    type: "auto",
+  };
+
+  // Add contents configuration if enabled
+  if (params.contents) {
+    body.contents = {
+      text: { maxCharacters: params.maxChars },
+    };
+  }
+
+  const res = await fetch(EXA_SEARCH_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": params.apiKey,
+    },
+    body: JSON.stringify(body),
+    signal: withTimeout(undefined, params.timeoutSeconds * 1000),
+  });
+
+  if (!res.ok) {
+    const detail = await readResponseText(res);
+    throw new Error(`Exa API error (${res.status}): ${detail || res.statusText}`);
+  }
+
+  const data = (await res.json()) as ExaSearchResponse;
+  const results = Array.isArray(data.results) ? data.results : [];
+
+  return {
+    results: results.map((entry) => ({
+      title: entry.title ?? "(no title)",
+      url: entry.url ?? "",
+      description: entry.text ?? "",
+      published: entry.publishedDate,
+    })),
+  };
+}
+
 async function runWebSearch(params: {
   query: string;
   count: number;
@@ -319,11 +418,15 @@ async function runWebSearch(params: {
   freshness?: string;
   perplexityBaseUrl?: string;
   perplexityModel?: string;
+  exaContents?: boolean;
+  exaMaxChars?: number;
 }): Promise<Record<string, unknown>> {
   const cacheKey = normalizeCacheKey(
     params.provider === "brave"
       ? `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}:${params.freshness || "default"}`
-      : `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
+      : params.provider === "exa"
+        ? `${params.provider}:${params.query}:${params.count}`
+        : `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
   );
   const cached = readCache(SEARCH_CACHE, cacheKey);
   if (cached) return { ...cached.value, cached: true };
@@ -346,6 +449,27 @@ async function runWebSearch(params: {
       tookMs: Date.now() - start,
       content,
       citations,
+    };
+    writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+    return payload;
+  }
+
+  if (params.provider === "exa") {
+    const { results } = await runExaSearch({
+      query: params.query,
+      count: params.count,
+      apiKey: params.apiKey,
+      timeoutSeconds: params.timeoutSeconds,
+      contents: params.exaContents ?? true,
+      maxChars: params.exaMaxChars ?? DEFAULT_EXA_MAX_CHARS,
+    });
+
+    const payload = {
+      query: params.query,
+      provider: params.provider,
+      count: results.length,
+      tookMs: Date.now() - start,
+      results,
     };
     writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
     return payload;
@@ -415,11 +539,14 @@ export function createWebSearchTool(options?: {
 
   const provider = resolveSearchProvider(search);
   const perplexityConfig = resolvePerplexityConfig(search);
+  const exaConfig = resolveExaConfig(search);
 
   const description =
     provider === "perplexity"
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
-      : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+      : provider === "exa"
+        ? "Search the web using Exa AI. Returns URLs with titles and page text (up to 1500 chars per result by default)."
+        : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
     label: "Web Search",
@@ -430,7 +557,11 @@ export function createWebSearchTool(options?: {
       const perplexityAuth =
         provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
       const apiKey =
-        provider === "perplexity" ? perplexityAuth?.apiKey : resolveSearchApiKey(search);
+        provider === "perplexity"
+          ? perplexityAuth?.apiKey
+          : provider === "exa"
+            ? resolveExaApiKey(exaConfig)
+            : resolveSearchApiKey(search);
 
       if (!apiKey) {
         return jsonResult(missingSearchKeyPayload(provider));
@@ -476,6 +607,8 @@ export function createWebSearchTool(options?: {
           perplexityAuth?.apiKey,
         ),
         perplexityModel: resolvePerplexityModel(perplexityConfig),
+        exaContents: resolveExaContents(exaConfig),
+        exaMaxChars: resolveExaMaxChars(exaConfig),
       });
       return jsonResult(result);
     },
@@ -486,4 +619,6 @@ export const __testing = {
   inferPerplexityBaseUrlFromApiKey,
   resolvePerplexityBaseUrl,
   normalizeFreshness,
+  resolveExaContents,
+  resolveExaMaxChars,
 } as const;

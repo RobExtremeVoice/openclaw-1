@@ -445,6 +445,11 @@ const FIELD_HELP: Record<string, string> = {
     "Perplexity base URL override (default: https://openrouter.ai/api/v1 or https://api.perplexity.ai).",
   "tools.web.search.perplexity.model":
     'Perplexity model override (default: "perplexity/sonar-pro").',
+  "tools.web.search.exa.apiKey": "Exa API key (fallback: EXA_API_KEY env var).",
+  "tools.web.search.exa.contents":
+    "Include page text in results; when false, only URLs and titles are returned (default: true).",
+  "tools.web.search.exa.maxChars":
+    "Max characters of page text per result; higher values provide more context but use more tokens (default: 1500).",
   "tools.web.fetch.enabled": "Enable the web_fetch tool (lightweight HTTP fetch).",
   "tools.web.fetch.maxChars": "Max characters returned by web_fetch (truncated).",
   "tools.web.fetch.timeoutSeconds": "Timeout in seconds for web_fetch requests.",

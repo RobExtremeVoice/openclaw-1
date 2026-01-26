@@ -10,7 +10,7 @@ read_when:
 
 Moltbot ships two lightweight web tools:
 
-- `web_search` — Search the web via Brave Search API (default) or Perplexity Sonar (direct or via OpenRouter).
+- `web_search` — Search the web via Brave Search API (default), Perplexity Sonar, or Exa.
 - `web_fetch` — HTTP fetch + readable extraction (HTML → markdown/text).
 
 These are **not** browser automation. For JS-heavy sites or logins, use the
@@ -21,6 +21,7 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 - `web_search` calls your configured provider and returns results.
   - **Brave** (default): returns structured results (title, URL, snippet).
   - **Perplexity**: returns AI-synthesized answers with citations from real-time web search.
+  - **Exa**: fast search built for AI, returns results with optional page text.
 - Results are cached by query for 15 minutes (configurable).
 - `web_fetch` does a plain HTTP GET and extracts readable content
   (HTML → markdown/text). It does **not** execute JavaScript.
@@ -32,8 +33,9 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 |----------|------|------|---------|
 | **Brave** (default) | Fast, structured results, free tier | Traditional search results | `BRAVE_API_KEY` |
 | **Perplexity** | AI-synthesized answers, citations, real-time | Requires Perplexity or OpenRouter access | `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` |
+| **Exa** | Fast search built for AI, results with optional page text | Requires Exa API key | `EXA_API_KEY` |
 
-See [Brave Search setup](/brave-search) and [Perplexity Sonar](/perplexity) for provider-specific details.
+See [Brave Search setup](/brave-search), [Perplexity Sonar](/perplexity), and [Exa AI](/exa) for provider-specific details.
 
 Set the provider in config:
 
@@ -42,7 +44,7 @@ Set the provider in config:
   tools: {
     web: {
       search: {
-        provider: "brave"  // or "perplexity"
+        provider: "brave"  // or "perplexity" or "exa"
       }
     }
   }
@@ -138,6 +140,48 @@ If no base URL is set, Moltbot chooses a default based on the API key source:
 | `perplexity/sonar-pro` (default) | Multi-step reasoning with web search | Complex questions |
 | `perplexity/sonar-reasoning-pro` | Chain-of-thought analysis | Deep research |
 
+## Using Exa
+
+Exa is a search API built for AI agents.
+
+### Getting an Exa API key
+
+1) Create an account at https://exa.ai/
+2) Generate an API key at https://dashboard.exa.ai/api-keys
+3) Store the key in config or set `EXA_API_KEY` in the Gateway environment
+
+### Setting up Exa search
+
+```json5
+{
+  tools: {
+    web: {
+      search: {
+        enabled: true,
+        provider: "exa",
+        exa: {
+          // API key (optional if EXA_API_KEY is set)
+          apiKey: "your-exa-api-key",
+          // Include page text in results (default: true)
+          contents: true,
+          // Max characters of page text per result (default: 1500)
+          maxChars: 1500
+        }
+      }
+    }
+  }
+}
+```
+
+**Environment alternative:** set `EXA_API_KEY` in the Gateway environment. For a gateway install, put it in `~/.clawdbot/.env`.
+
+### Exa options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `contents` | Include page text; when false, only URLs/titles returned | `true` |
+| `maxChars` | Max characters of page text per result (higher = more tokens) | `1500` |
+
 ## web_search
 
 Search the web using your configured provider.
@@ -148,6 +192,7 @@ Search the web using your configured provider.
 - API key for your chosen provider:
   - **Brave**: `BRAVE_API_KEY` or `tools.web.search.apiKey`
   - **Perplexity**: `OPENROUTER_API_KEY`, `PERPLEXITY_API_KEY`, or `tools.web.search.perplexity.apiKey`
+  - **Exa**: `EXA_API_KEY` or `tools.web.search.exa.apiKey`
 
 ### Config
 

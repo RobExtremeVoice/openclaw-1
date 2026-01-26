@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./web-search.js";
 
-const { inferPerplexityBaseUrlFromApiKey, resolvePerplexityBaseUrl, normalizeFreshness } =
-  __testing;
+const {
+  inferPerplexityBaseUrlFromApiKey,
+  resolvePerplexityBaseUrl,
+  normalizeFreshness,
+  resolveExaContents,
+  resolveExaMaxChars,
+} = __testing;
 
 describe("web_search perplexity baseUrl defaults", () => {
   it("detects a Perplexity key prefix", () => {
@@ -67,5 +72,32 @@ describe("web_search freshness normalization", () => {
     expect(normalizeFreshness("2024-13-01to2024-01-31")).toBeUndefined();
     expect(normalizeFreshness("2024-02-30to2024-03-01")).toBeUndefined();
     expect(normalizeFreshness("2024-03-10to2024-03-01")).toBeUndefined();
+  });
+});
+
+describe("web_search exa configuration", () => {
+  it("defaults contents to true", () => {
+    expect(resolveExaContents(undefined)).toBe(true);
+    expect(resolveExaContents({})).toBe(true);
+  });
+
+  it("respects explicit contents setting", () => {
+    expect(resolveExaContents({ contents: false })).toBe(false);
+    expect(resolveExaContents({ contents: true })).toBe(true);
+  });
+
+  it("defaults maxChars to 1500", () => {
+    expect(resolveExaMaxChars(undefined)).toBe(1500);
+    expect(resolveExaMaxChars({})).toBe(1500);
+  });
+
+  it("respects explicit maxChars setting", () => {
+    expect(resolveExaMaxChars({ maxChars: 3000 })).toBe(3000);
+    expect(resolveExaMaxChars({ maxChars: 500 })).toBe(500);
+  });
+
+  it("ignores invalid maxChars values", () => {
+    expect(resolveExaMaxChars({ maxChars: 0 })).toBe(1500);
+    expect(resolveExaMaxChars({ maxChars: -100 })).toBe(1500);
   });
 });

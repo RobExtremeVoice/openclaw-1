@@ -334,8 +334,8 @@ export type ToolsConfig = {
     search?: {
       /** Enable web search tool (default: true when API key is present). */
       enabled?: boolean;
-      /** Search provider ("brave" or "perplexity"). */
-      provider?: "brave" | "perplexity";
+      /** Search provider ("brave", "perplexity", or "exa"). */
+      provider?: "brave" | "perplexity" | "exa";
       /** Brave Search API key (optional; defaults to BRAVE_API_KEY env var). */
       apiKey?: string;
       /** Default search results count (1-10). */
@@ -352,6 +352,15 @@ export type ToolsConfig = {
         baseUrl?: string;
         /** Model to use (defaults to "perplexity/sonar-pro"). */
         model?: string;
+      };
+      /** Exa-specific configuration (used when provider="exa"). */
+      exa?: {
+        /** API key for Exa (defaults to EXA_API_KEY env var). */
+        apiKey?: string;
+        /** Include page text in results; when false, only URLs and titles are returned (default: true). */
+        contents?: boolean;
+        /** Max characters of page text per result; higher values use more tokens (default: 1500). */
+        maxChars?: number;
       };
     };
     fetch?: {
