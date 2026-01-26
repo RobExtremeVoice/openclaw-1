@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { GatewayClient, type AgentEventPayload } from '../services/gateway'
+import { GatewayClient, type AgentEventPayload, type AgentFinalResult } from '../services/gateway'
 import { useSettings } from './useSettings'
+
+export type { AgentFinalResult }
 
 export type ToolCallEvent = {
   toolCallId: string
@@ -41,7 +43,10 @@ export const useGateway = () => {
     if (settingsLoading) return
     if (!settings.gatewayUrl) return
 
-    const client = new GatewayClient(settings.gatewayUrl)
+    const url = settings.gatewayUrl.trim()
+    if (!url) return
+
+    const client = new GatewayClient(url, settings.gatewayToken)
     clientRef.current = client
 
     setState((s) => ({ ...s, connecting: true, error: null }))
@@ -49,10 +54,12 @@ export const useGateway = () => {
     // Handle agent events
     const unsubscribe = client.onEvent('agent', (payload) => {
       const evt = payload as AgentEventPayload
+      console.log('[useGateway] Agent event:', evt.stream, JSON.stringify(evt.data).slice(0, 100))
 
       switch (evt.stream) {
         case 'tool': {
           const data = evt.data as ToolCallEvent
+          console.log('[useGateway] Tool event:', data.name, data.phase)
           for (const handler of toolCallHandlersRef.current) {
             handler(data)
           }
@@ -60,12 +67,14 @@ export const useGateway = () => {
         }
         case 'assistant': {
           const data = evt.data as AssistantEvent
+          console.log('[useGateway] Assistant event, delta length:', data.delta?.length ?? 0)
           for (const handler of assistantHandlersRef.current) {
             handler(data)
           }
           break
         }
         case 'lifecycle': {
+          console.log('[useGateway] Lifecycle event:', evt.data)
           for (const handler of lifecycleHandlersRef.current) {
             handler(evt.data)
           }
@@ -88,11 +97,12 @@ export const useGateway = () => {
       clientRef.current = null
       setState({ connected: false, connecting: false, error: null })
     }
-  }, [settings.gatewayUrl, settingsLoading])
+  }, [settings.gatewayUrl?.trim(), settingsLoading])
 
   const sendMessage = useCallback(async (
     message: string,
-    repoContext?: { owner: string; name: string; branch: string }
+    repoContext?: { owner: string; name: string; branch: string },
+    onFinalResult?: (result: AgentFinalResult) => void
   ): Promise<{ status: string; runId: string } | null> => {
     const client = clientRef.current
     if (!client?.connected) {
@@ -101,11 +111,14 @@ export const useGateway = () => {
     }
 
     try {
-      const result = await client.startAgent({
-        message,
-        repoContext,
-        idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      })
+      const result = await client.startAgent(
+        {
+          message,
+          repoContext,
+          idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
+        onFinalResult
+      )
       return result
     } catch (e) {
       console.error('[useGateway] Failed to send message', e)

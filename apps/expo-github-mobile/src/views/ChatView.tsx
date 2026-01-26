@@ -173,20 +173,41 @@ const ChatView: React.FC<Props> = ({ session, onBack }) => {
       scrollViewRef.current?.scrollToEnd({ animated: true })
     }, 50)
 
-    // Send to gateway
-    const result = await sendGatewayMessage(textToSend, {
+    // Send to gateway with repo context for workspace management
+    const repoContext = {
       owner: currentSession.repository.owner,
       name: currentSession.repository.name,
       branch: currentSession.repository.defaultBranch,
-    })
+    }
+    console.log('[ChatView] Sending with repoContext:', repoContext)
+
+    // Handle final result (success or error from agent)
+    const handleFinalResult = (finalResult: { status: string; error?: string; summary?: string }) => {
+      console.log('[ChatView] Agent final result:', finalResult)
+      if (finalResult.status === 'error') {
+        setIsRunning(false)
+        setMessages((prev) => {
+          const errorMsg: Message = {
+            id: `msg-${Date.now()}-agent-error`,
+            role: MessageRole.Assistant,
+            content: `⚠️ Agent Error\n\n${finalResult.error || finalResult.summary || 'Unknown error'}\n\nRepo: ${repoContext.owner}/${repoContext.name}\nBranch: ${repoContext.branch}`,
+            timestamp: new Date(),
+            toolCalls: [],
+          }
+          return [...prev, errorMsg]
+        })
+      }
+    }
+
+    const result = await sendGatewayMessage(textToSend, repoContext, handleFinalResult)
 
     if (!result) {
-      // Failed to send - show error
+      // Failed to send - show error with details
       setMessages((prev) => {
         const errorMsg: Message = {
           id: `msg-${Date.now()}-error`,
           role: MessageRole.Assistant,
-          content: 'Failed to connect to clawdbot gateway. Please check your settings.',
+          content: `Failed to connect to clawdbot gateway.\n\nRepo: ${repoContext.owner}/${repoContext.name}\nBranch: ${repoContext.branch}\n\nPlease check:\n• Gateway is running\n• Settings are correct\n• The repository exists on GitHub`,
           timestamp: new Date(),
           toolCalls: [],
         }

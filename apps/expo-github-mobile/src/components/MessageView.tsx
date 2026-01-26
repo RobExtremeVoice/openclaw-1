@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import { View, StyleSheet } from 'react-native'
 import { Colors, Spacing } from '../theme/colors'
-import { Message } from '../models/types'
+import { Message, MessageRole } from '../models/types'
 import ToolCallView from './ToolCallView'
+import MarkdownView from './MarkdownView'
 
 interface Props {
   message: Message
@@ -23,11 +24,21 @@ const MessageView: React.FC<Props> = ({ message }) => {
     })
   }
 
+  const isUser = message.role === MessageRole.User
+
   return (
     <View style={styles.container}>
       {/* Message content */}
       {message.content && (
-        <Text style={styles.messageContent}>{message.content}</Text>
+        <View style={isUser ? styles.userMessageWrapper : styles.assistantMessageWrapper}>
+          {isUser ? (
+            <View style={styles.userBubble}>
+              <MarkdownView content={message.content} />
+            </View>
+          ) : (
+            <MarkdownView content={message.content} />
+          )}
+        </View>
       )}
 
       {/* Tool calls */}
@@ -47,10 +58,19 @@ const styles = StyleSheet.create({
   container: {
     gap: Spacing.MD,
   },
-  messageContent: {
-    fontSize: 16,
-    color: Colors.primaryText,
-    paddingHorizontal: Spacing.LG,
+  userMessageWrapper: {
+    alignItems: 'flex-end',
+  },
+  assistantMessageWrapper: {
+    alignItems: 'stretch',
+  },
+  userBubble: {
+    backgroundColor: '#3a3a3a',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: Spacing.MD,
+    paddingVertical: Spacing.SM,
+    maxWidth: '80%',
   },
 })
 

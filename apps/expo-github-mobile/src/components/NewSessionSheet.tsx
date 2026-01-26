@@ -82,11 +82,12 @@ const NewSessionSheet: React.FC<Props> = ({ visible, onClose, onSessionCreate })
     if (!messageText.trim() || !selectedRepo) return
 
     // Convert GitHubRepo to app Repository
+    // Use selectedBranch (user's choice) not default_branch
     const repository: Repository = {
       id: String(selectedRepo.id),
       name: selectedRepo.name,
       owner: selectedRepo.owner.login,
-      defaultBranch: selectedRepo.default_branch,
+      defaultBranch: selectedBranch || selectedRepo.default_branch,
       language: selectedRepo.language || undefined,
     }
 

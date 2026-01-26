@@ -20,9 +20,14 @@ const SettingsView: React.FC<Props> = ({ onBack }) => {
   const { settings, updateSettings } = useSettings()
   const [githubUsername, setGithubUsername] = useState(settings.githubUsername)
   const [gatewayUrl, setGatewayUrl] = useState(settings.gatewayUrl)
+  const [gatewayToken, setGatewayToken] = useState(settings.gatewayToken || '')
 
   const handleSave = async () => {
-    await updateSettings({ githubUsername, gatewayUrl })
+    await updateSettings({
+      githubUsername,
+      gatewayUrl: gatewayUrl.trim(),
+      gatewayToken: gatewayToken.trim() || undefined,
+    })
     Alert.alert('Settings Saved', 'Your settings have been saved successfully.')
   }
 
@@ -61,12 +66,28 @@ const SettingsView: React.FC<Props> = ({ onBack }) => {
             style={styles.input}
             value={gatewayUrl}
             onChangeText={setGatewayUrl}
-            placeholder="ws://localhost:18789"
+            placeholder="ws://192.168.1.x:18789"
             placeholderTextColor={Colors.secondaryText}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <Text style={styles.hint}>WebSocket URL of your clawdbot gateway</Text>
+        </View>
+
+        {/* Gateway Token */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Gateway Token (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={gatewayToken}
+            onChangeText={setGatewayToken}
+            placeholder="Enter gateway token if required"
+            placeholderTextColor={Colors.secondaryText}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+          />
+          <Text style={styles.hint}>Required if gateway auth is enabled (check ~/.clawdbot/clawdbot.json)</Text>
         </View>
 
         {/* Save Button */}
