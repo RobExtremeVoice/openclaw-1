@@ -6,6 +6,7 @@ Docs: https://docs.clawd.bot
 Status: unreleased.
 
 ### Changes
+- Agents: include full date with day of week in system prompt. (#2108)
 - Doctor: warn on gateway exposure without auth. (#2016) Thanks @Alex-Alaniz.
 - Docs: add Vercel AI Gateway to providers sidebar. (#1901) Thanks @jerilynzheng.
 - Agents: expand cron tool description with full schema docs. (#1988) Thanks @tomascupr.
