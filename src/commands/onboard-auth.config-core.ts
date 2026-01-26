@@ -4,6 +4,7 @@ import {
   SYNTHETIC_DEFAULT_MODEL_REF,
   SYNTHETIC_MODEL_CATALOG,
 } from "../agents/synthetic-models.js";
+import { discoverTogetherModels } from "../agents/together-models.js";
 
 // Together AI constants and models - inline to avoid separate models file
 const TOGETHER_BASE_URL = "https://api.together.xyz/v1";
@@ -518,7 +519,7 @@ export function applyVeniceConfig(cfg: ClawdbotConfig): ClawdbotConfig {
   };
 }
 
-export function applyTogetherProviderConfig(cfg: ClawdbotConfig): ClawdbotConfig {
+export async function applyTogetherProviderConfig(cfg: ClawdbotConfig): Promise<ClawdbotConfig> {
   const models = { ...cfg.agents?.defaults?.models };
   models[TOGETHER_DEFAULT_MODEL_REF] = {
     ...models[TOGETHER_DEFAULT_MODEL_REF],
@@ -528,19 +529,37 @@ export function applyTogetherProviderConfig(cfg: ClawdbotConfig): ClawdbotConfig
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.together;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  const togetherModels = TOGETHER_MODEL_CATALOG.map(buildTogetherModelDefinition);
-  const mergedModels = [
-    ...existingModels,
-    ...togetherModels.filter(
-      (model) => !existingModels.some((existing) => existing.id === model.id),
-    ),
-  ];
+
+  // Try dynamic discovery if API key is available, otherwise fall back to static catalog
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
+
+  let togetherModels;
+  if (normalizedApiKey) {
+    // Try dynamic discovery with API key
+    try {
+      togetherModels = await discoverTogetherModels(normalizedApiKey);
+      console.log(`[together-models] Dynamic discovery found ${togetherModels.length} models`);
+    } catch (error) {
+      console.warn(`[together-models] Dynamic discovery failed, using static catalog: ${error}`);
+      togetherModels = TOGETHER_MODEL_CATALOG.map(buildTogetherModelDefinition);
+    }
+  } else {
+    // No API key, use static catalog
+    togetherModels = TOGETHER_MODEL_CATALOG.map(buildTogetherModelDefinition);
+  }
+
+  const mergedModels = [
+    ...existingModels,
+    ...togetherModels.filter(
+      (model) => !existingModels.some((existing) => existing.id === model.id),
+    ),
+  ];
+
   providers.together = {
     ...existingProviderRest,
     baseUrl: TOGETHER_BASE_URL,
@@ -565,8 +584,8 @@ export function applyTogetherProviderConfig(cfg: ClawdbotConfig): ClawdbotConfig
   };
 }
 
-export function applyTogetherConfig(cfg: ClawdbotConfig): ClawdbotConfig {
-  const next = applyTogetherProviderConfig(cfg);
+export async function applyTogetherConfig(cfg: ClawdbotConfig): Promise<ClawdbotConfig> {
+  const next = await applyTogetherProviderConfig(cfg);
   const existingModel = next.agents?.defaults?.model;
   return {
     ...next,
