@@ -37,6 +37,7 @@ import {
 import { logConfigUpdated } from "../config/logging.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
+import { colorize, isRich, theme } from "../terminal/theme.js";
 import { resolveUserPath } from "../utils.js";
 import { finalizeOnboardingWizard } from "./onboarding.finalize.js";
 import { configureGatewayForOnboarding } from "./onboarding.gateway-config.js";
@@ -49,24 +50,40 @@ async function requireRiskAcknowledgement(params: {
 }) {
   if (params.opts.acceptRisk === true) return;
 
+  const rich = isRich();
+  const danger = (value: string) => colorize(rich, theme.error.bold, value);
+  const warning = (value: string) => colorize(rich, theme.warn.bold, value);
+  const ok = (value: string) => colorize(rich, theme.success.bold, value);
+  const subtle = (value: string) => colorize(rich, theme.warn, value);
+  const alert = (value: string) => colorize(rich, theme.error, value);
+
   await params.prompter.note(
     [
-      "STOP — SECURITY WARNING",
+      danger("STOP - SECURITY WARNING"),
       "",
-      "Prompt injection can override your bot. This risk is real and not solved.",
+      alert("Prompt injection can override your bot. This risk is real and not solved."),
       "",
-      "Untrusted content can carry hostile instructions (links, web pages, files, logs, pasted text).",
-      "If tools are enabled, a bad prompt can leak secrets, run commands, or access files.",
+      subtle(
+        "Untrusted content can carry hostile instructions (links, web pages, files, logs, pasted text).",
+      ),
+      subtle("If tools are enabled, a bad prompt can leak secrets, run commands, or access files."),
       "",
-      "Model policy (required for tool-enabled or untrusted input):",
-      "- Recommended: Anthropic Opus 4.5.",
-      "- Not recommended: weaker tiers like Sonnet or Haiku.",
-      "- Supported but not recommended: free models, cheap models, or local models.",
+      warning("Model policy (required for tool-enabled or untrusted input):"),
+      `- ${ok("Recommended:")} Anthropic Opus 4.5.`,
+      `- ${warning("Not recommended:")} weaker tiers like Sonnet or Haiku.`,
+      `- ${warning("Supported but not recommended:")} free models, cheap models, or local models.`,
       "",
-      "Required safeguards:",
+      warning("Required safeguards:"),
       "- Pairing/allowlists + mention-gating.",
       "- Sandboxing + minimal tool access.",
-      "- Keep secrets out of the agent’s reachable filesystem.",
+      "- Keep secrets out of the agent's reachable filesystem.",
+      "",
+      warning(
+        "Run this regularly (especially after changing config or exposing network surfaces):",
+      ),
+      "clawdbot security audit",
+      "clawdbot security audit --deep",
+      "clawdbot security audit --fix",
       "",
       "Docs: https://docs.clawd.bot/gateway/security",
     ].join("\n"),
