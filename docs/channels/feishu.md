@@ -1,220 +1,278 @@
 ---
-summary: "Feishu (Lark) bot support, capabilities, and configuration"
+summary: "Feishu (Lark) bot support via WebSocket long connection with markdown card messages"
 read_when:
   - Working on Feishu features
   - Integrating with Chinese enterprise messaging
+  - Setting up Lark bot
 ---
 # Feishu (飞书/Lark)
 
 Status: experimental. Supports direct messages and groups via Bot API using WebSocket long connection.
 
-## Plugin required
+## Key Features
+
+- **WebSocket long connection**: No public IP or webhook setup required
+- **Markdown support**: Rich formatting via interactive card messages
+- **Multi-account**: Support for multiple Feishu bot accounts
+- **Access control**: Pairing-based DM access and group allowlists
+
+## Plugin Required
+
 Feishu ships as a plugin and is not bundled with the core install.
-- Install via CLI: `clawdbot plugins install @clawdbot/feishu`
-- Or select **Feishu** during onboarding and confirm the install prompt
-- Details: [Plugins](/plugin)
 
-## Quick setup (beginner)
-1) Install the Feishu plugin:
-   - From a source checkout: `clawdbot plugins install ./extensions/feishu`
-   - From npm (if published): `clawdbot plugins install @clawdbot/feishu`
-   - Or pick **Feishu** in onboarding and confirm the install prompt
-2) Create an app in Feishu Open Platform and get App ID + App Secret
-3) Set the credentials:
-   - Env: `FEISHU_APP_ID=...` and `FEISHU_APP_SECRET=...`
-   - Or config: `channels.feishu.appId` and `channels.feishu.appSecret`
-4) Configure event subscription in Feishu console:
-   - Set subscription method to **"Long Connection"**
-   - Add `im.message.receive_v1` event
-5) Restart the gateway (or finish onboarding)
-6) DM access is pairing by default; approve the pairing code on first contact
+```bash
+clawdbot plugins install @clawdbot/feishu
+```
 
-Minimal config:
+Or select **Feishu** during onboarding and confirm the install prompt. Details: [Plugins](/plugin)
+
+## Quick Start
+
+### 1. Create a Feishu App
+
+1. Go to [Feishu Open Platform](https://open.feishu.cn/app) and sign in
+2. Click **Create App** > **Enterprise Self-built App**
+3. Fill in basic info (name, description, icon)
+4. Add **Bot** capability in "Add Application Capabilities"
+5. Get your **App ID** and **App Secret** from "Credentials and Basic Info"
+
+### 2. Configure Permissions
+
+In your app's "Permission Management", add these permissions:
+
+| Permission | Description |
+|------------|-------------|
+| `im:message` | Send messages |
+| `im:message.receive_v1` | Receive messages (event subscription) |
+| `im:chat` | Access chat information |
+| `contact:user.id:readonly` | Read user info (optional) |
+
+Request approval if required by your organization.
+
+### 3. Enable WebSocket Event Subscription
+
+1. Go to **Events and Callbacks** page
+2. Set subscription method to **Long Connection** (WebSocket)
+3. Add event: `im.message.receive_v1` (Receive messages)
+4. Click Save
+
+> **Note**: WebSocket mode requires no public IP. Events are pushed directly to the gateway.
+
+### 4. Configure Credentials
+
+**Option A: Environment variables**
+
+```bash
+export FEISHU_APP_ID=cli_xxxxxxxxxx
+export FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Option B: Configuration file**
+
 ```json5
 {
   channels: {
     feishu: {
       enabled: true,
       appId: "cli_xxxxxxxxxx",
-      appSecret: "xxxxxxxxxxxxxxxxxxxxxxxx",
-      dmPolicy: "pairing"
+      appSecret: "xxxxxxxxxxxxxxxxxxxxxxxx"
     }
   }
 }
 ```
 
-## What it is
-Feishu (飞书) is an enterprise collaboration platform by ByteDance, also known as Lark internationally. Its Bot API allows the Gateway to run a bot for 1:1 conversations and group chats.
-- A Feishu Bot API channel owned by the Gateway
-- Uses WebSocket long connection for receiving events (no public IP needed)
-- Deterministic routing: replies go back to Feishu; the model never chooses channels
-- DMs share the agent's main session
+### 5. Publish and Start
+
+1. Go to "Version Management and Release" in Feishu console
+2. Create a new version and submit for review
+3. Start the gateway: `clawdbot gateway run`
+
+## How It Works
+
+```
+┌─────────────┐    WebSocket    ┌─────────────┐
+│   Feishu    │ ◄─────────────► │   Gateway   │
+│   Server    │   Long Conn     │             │
+└─────────────┘                 └─────────────┘
+       │                              │
+       │ Events pushed               │ Card messages
+       │ (no public IP)              │ with markdown
+       ▼                              ▼
+```
+
+- Gateway establishes WebSocket connection to Feishu servers
+- Events are pushed in real-time (no polling, no webhook)
+- Replies use interactive card format with full markdown support
+- Long responses are automatically chunked (3800 chars per card)
+
+## Markdown Support
+
+All outbound messages use Feishu interactive card format with markdown:
+
+| Syntax | Example | Result |
+|--------|---------|--------|
+| Bold | `**text**` | **text** |
+| Italic | `*text*` | *text* |
+| Strikethrough | `~~text~~` | ~~text~~ |
+| Code | `` `code` `` | `code` |
+| Link | `[text](url)` | [text](url) |
+| List | `- item` | bullet list |
+| Code block | ` ```code``` ` | code block |
+
+## Access Control
+
+### Direct Messages
+
+| Policy | Behavior |
+|--------|----------|
+| `pairing` (default) | Unknown senders receive pairing code; approve via CLI |
+| `allowlist` | Only users in `allowFrom` can message |
+| `open` | Anyone can message (requires `allowFrom: ["*"]`) |
+| `disabled` | DMs blocked |
+
+**Approve pairing requests:**
+
+```bash
+clawdbot pairing list feishu
+clawdbot pairing approve feishu <CODE>
+```
+
+### Groups
+
+- Default policy: `allowlist` - only allowed groups receive responses
+- Configure via `groupAllowFrom` or `groups.<chat_id>`
 - Groups require @mention by default
 
-## Setup (fast path)
-
-### 1) Create an app in Feishu Open Platform
-1) Go to **https://open.feishu.cn/app** and sign in
-2) Click "Create App" and choose "Enterprise Self-built App"
-3) Fill in the basic information (name, description, icon)
-4) Add **Bot** capability in "Add Application Capabilities"
-5) Go to "Credentials and Basic Info" to get your **App ID** and **App Secret**
-
-### 2) Configure permissions
-1) Go to "Permission Management" in your app
-2) Add at least these permissions:
-   - `im:message` - Send messages
-   - `im:message.receive_v1` - Receive messages (event subscription)
-   - `im:chat` - Access chat information
-   - `contact:user.id:readonly` - Read user info (optional, for name display)
-3) Request approval if required by your organization
-
-### 3) Configure event subscription
-1) Go to "Events and Callbacks" page
-2) Set subscription method to **"Long Connection"** (WebSocket)
-3) Add event subscription: `im.message.receive_v1` (Receive messages)
-4) Click Save
-
-### 4) Configure the token (env or config)
-Example:
-
 ```json5
 {
   channels: {
     feishu: {
-      enabled: true,
-      appId: "cli_xxxxxxxxxx",
-      appSecret: "xxxxxxxxxxxxxxxxxxxxxxxx",
-      dmPolicy: "pairing"
+      groupPolicy: "allowlist",
+      groupAllowFrom: ["oc_xxx", "oc_yyy"],
+      groups: {
+        "oc_xxx": {
+          name: "Team Chat",
+          requireMention: true
+        }
+      }
     }
   }
 }
 ```
 
-Env option (works for the default account only):
-- `FEISHU_APP_ID=cli_xxxxxxxxxx`
-- `FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx`
-
-Multi-account support: use `channels.feishu.accounts` with per-account credentials and optional `name`.
-
-### 5) Publish the app
-1) Go to "Version Management and Release"
-2) Create a new version
-3) Submit for review (or use within your organization if no review required)
-4) Once approved, the bot is ready to use
-
-### 6) Start the gateway
-Restart the gateway. Feishu starts when credentials are resolved.
-DM access defaults to pairing. Approve the code when the bot is first contacted.
-
-## How it works (behavior)
-- The gateway establishes a WebSocket long connection to Feishu servers
-- Events are pushed directly through the WebSocket (no public IP needed)
-- Messages are normalized into the shared channel envelope
-- Replies always route back to the same Feishu chat
-- Long responses are chunked to 4000 characters (Feishu API limit)
-
-## Limits
-- Outbound text is chunked to 4000 characters (Feishu API limit)
-- Media downloads/uploads are capped by `channels.feishu.mediaMaxMb` (default 20)
-- Rate limits apply per the Feishu API documentation
-
-## Access control (DMs)
-
-### DM access
-- Default: `channels.feishu.dmPolicy = "pairing"`. Unknown senders receive a pairing code; messages are ignored until approved (codes expire after 1 hour)
-- Approve via:
-  - `clawdbot pairing list feishu`
-  - `clawdbot pairing approve feishu <CODE>`
-- Pairing is the default token exchange. Details: [Pairing](/start/pairing)
-- `channels.feishu.allowFrom` accepts Feishu user IDs (open_id like `ou_xxx` or user_id)
-
-### Group access
-- Default: `channels.feishu.groupPolicy = "allowlist"`. Only groups in the allowlist receive responses
-- Configure allowed groups via `channels.feishu.groupAllowFrom` or `channels.feishu.groups`
-- Groups require @mention by default; configure per-group via `channels.feishu.groups.<chat_id>.requireMention`
-
-## Supported message types
-- **Interactive cards**: Full markdown support via card messages (default for replies)
-- **Text messages**: Plain text fallback
-- **Image messages**: Requires image_key (pre-uploaded images)
-- **Rich text (post)**: Planned support
-
-### Markdown support
-All outbound messages use Feishu interactive card format, which supports markdown syntax:
-- **Bold**: `**text**`
-- *Italic*: `*text*`
-- ~~Strikethrough~~: `~~text~~`
-- `Code`: `` `code` ``
-- Links: `[text](url)`
-- Lists and more
-
 ## Capabilities
+
 | Feature | Status |
 |---------|--------|
 | Direct messages | Supported |
-| Groups | Supported |
-| Markdown formatting | Supported (via card messages) |
-| Media (images) | Partial (requires image_key) |
+| Group messages | Supported |
+| Markdown formatting | Supported (card messages) |
+| WebSocket connection | Supported (default) |
+| Multi-account | Supported |
+| Image messages | Partial (requires image_key) |
 | Reactions | Not supported |
 | Threads | Not supported |
-| Polls | Not supported |
-| Native commands | Not supported |
-| Streaming | Blocked |
+| Streaming | Not supported |
 
-## Delivery targets (CLI/cron)
-- Use an open_id, user_id, or chat_id as the target
-- Example: `clawdbot message send --channel feishu --target ou_xxxxxxxxxx --message "hi"`
-- For groups: `clawdbot message send --channel feishu --target oc_xxxxxxxxxx --message "hi"`
+## CLI Usage
+
+**Send a message:**
+
+```bash
+# To user (open_id)
+clawdbot message send --channel feishu --target ou_xxx --message "Hello!"
+
+# To group (chat_id)
+clawdbot message send --channel feishu --target oc_xxx --message "Hello team!"
+```
+
+**Check status:**
+
+```bash
+clawdbot channels status --probe
+```
 
 ## Troubleshooting
 
-**Bot does not respond:**
-- Check that the app credentials are valid: `clawdbot channels status --probe`
-- Verify the event subscription is set to "Long Connection" mode in Feishu console
-- Verify the sender is approved (pairing or allowFrom)
-- Check gateway logs: `clawdbot logs --follow`
+### Bot does not respond
 
-**WebSocket connection fails:**
-- Ensure the gateway has network access to Feishu servers
-- Check that the App ID and App Secret are correct
-- Verify the app is published and active
+1. Verify credentials: `clawdbot channels status --probe`
+2. Check event subscription is set to "Long Connection" in Feishu console
+3. Verify sender is approved (pairing or allowFrom)
+4. Check logs: `clawdbot logs --follow`
 
-**Permission errors:**
-- Ensure the app has required permissions (`im:message`, `im:message.receive_v1`)
-- Check if permissions need admin approval in your organization
-- Verify the app is published and active
+### WebSocket connection fails
 
-**Cannot send messages:**
-- Check that the bot has been added to the chat (for groups)
-- Verify the target ID format (open_id starts with `ou_`, chat_id starts with `oc_`)
-- Check API quota limits
+1. Ensure gateway has network access to `open.feishu.cn`
+2. Verify App ID and App Secret are correct
+3. Check app is published and active in Feishu console
 
-## Configuration reference (Feishu)
-Full configuration: [Configuration](/gateway/configuration)
+### Permission errors
 
-Provider options:
-- `channels.feishu.enabled`: enable/disable channel startup
-- `channels.feishu.appId`: App ID from Feishu Open Platform
-- `channels.feishu.appSecret`: App Secret from Feishu Open Platform
-- `channels.feishu.appSecretFile`: read app secret from file path
-- `channels.feishu.dmPolicy`: `pairing | allowlist | open | disabled` (default: pairing)
-- `channels.feishu.allowFrom`: DM allowlist (open_id or user_id). `open` requires `"*"`
-- `channels.feishu.groupPolicy`: `open | allowlist` (default: allowlist)
-- `channels.feishu.groupAllowFrom`: group allowlist (chat_id)
-- `channels.feishu.groups`: per-group configuration
-- `channels.feishu.mediaMaxMb`: inbound/outbound media cap (MB, default 20)
+1. Verify required permissions are added
+2. Check if permissions need admin approval
+3. Ensure app version is published
 
-Multi-account options:
-- `channels.feishu.accounts.<id>.appId`: per-account App ID
-- `channels.feishu.accounts.<id>.appSecret`: per-account App Secret
-- `channels.feishu.accounts.<id>.appSecretFile`: per-account secret file
-- `channels.feishu.accounts.<id>.name`: display name
-- `channels.feishu.accounts.<id>.enabled`: enable/disable account
-- `channels.feishu.accounts.<id>.dmPolicy`: per-account DM policy
-- `channels.feishu.accounts.<id>.allowFrom`: per-account allowlist
+### Cannot send messages
 
-## International users (Lark)
-For Lark (international version), use the same configuration. The API endpoints are compatible.
-Consider using `lark` or `fs` as channel aliases in CLI commands:
-- `clawdbot message send --channel lark --target ou_xxx --message "hi"`
+1. Verify bot is added to the group chat
+2. Check target ID format:
+   - User: `ou_xxx` (open_id) or `on_xxx` (union_id)
+   - Group: `oc_xxx` (chat_id)
+3. Check API quota limits in Feishu console
+
+## Configuration Reference
+
+### Basic Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | true | Enable/disable channel |
+| `appId` | string | - | App ID from Feishu console |
+| `appSecret` | string | - | App Secret from Feishu console |
+| `appSecretFile` | string | - | Path to file containing app secret |
+| `dmPolicy` | string | "pairing" | DM access policy |
+| `allowFrom` | string[] | [] | DM allowlist (user IDs) |
+| `groupPolicy` | string | "allowlist" | Group access policy |
+| `groupAllowFrom` | string[] | [] | Group allowlist (chat IDs) |
+| `mediaMaxMb` | number | 20 | Max media size in MB |
+
+### Multi-account
+
+```json5
+{
+  channels: {
+    feishu: {
+      defaultAccount: "main",
+      accounts: {
+        main: {
+          name: "Main Bot",
+          appId: "cli_xxx",
+          appSecret: "xxx"
+        },
+        support: {
+          name: "Support Bot",
+          appId: "cli_yyy",
+          appSecret: "yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+## Lark (International)
+
+For Lark (international version), use the same configuration. The API is compatible.
+
+```bash
+# Use 'lark' or 'fs' as channel alias
+clawdbot message send --channel lark --target ou_xxx --message "Hello!"
+```
+
+## Related
+
+- [Feishu Open Platform](https://open.feishu.cn)
+- [Feishu Bot API Documentation](https://open.feishu.cn/document/home/develop-a-bot-in-5-minutes/create-an-app)
+- [Pairing](/start/pairing) - DM access control
+- [Configuration](/gateway/configuration) - Full config reference
