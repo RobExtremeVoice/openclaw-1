@@ -38,9 +38,6 @@ const ACTIVITY_TYPE_MAP: Record<string, number> = {
   Competing: 5, // "Competing in {name}"
 };
 
-// Track cumulative tokens per session
-const sessionTokens = new Map<string, number>();
-
 /**
  * Create a presence manager for a Discord gateway
  */
@@ -50,6 +47,9 @@ export function createPresenceManager(params: {
   accountId: string;
 }) {
   const { gateway, config, accountId } = params;
+
+  // Track cumulative tokens per session (scoped per-account to avoid cross-account collisions)
+  const sessionTokens = new Map<string, number>();
 
   const defaultFormat = config.showTokenUsage ? "📊 {tokens} tokens" : "";
   const format = config.format ?? defaultFormat;

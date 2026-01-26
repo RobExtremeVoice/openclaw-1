@@ -333,6 +333,12 @@ export async function dispatchReplyFromConfig(params: {
     counts.final += routedFinalCount;
 
     // Trigger message_sent hook for final replies
+    // NOTE: Usage stats (tokens, model, etc.) are not currently available here.
+    // They are computed in agent-runner.ts but not returned through the reply pipeline.
+    // To enable full usage tracking, getReplyFromConfig/replyResolver would need to
+    // return usage data alongside the reply text. For now, hooks receive the message
+    // content without usage stats - presence managers can track cumulative tokens
+    // via other means (e.g., diagnostic events or session metadata).
     if (hookRunner?.hasHooks("message_sent") && replies.length > 0) {
       const targetSessionKey =
         ctx.CommandSource === "native" ? ctx.CommandTargetSessionKey?.trim() : undefined;
