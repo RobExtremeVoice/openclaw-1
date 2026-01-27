@@ -83,15 +83,27 @@ function cleanupExpiredBatches(nowMs: number): void {
 }
 
 export function getBatchApprovalIds(batchId: string): string[] | null {
-  const entry = batchRegistry.get(batchId);
-  if (!entry) return null;
   // Cleanup expired batches opportunistically
   cleanupExpiredBatches(Date.now());
+  const entry = batchRegistry.get(batchId);
+  if (!entry) return null;
   return entry.approvalIds;
 }
 
 export function deleteBatch(batchId: string): void {
   batchRegistry.delete(batchId);
+}
+
+export function updateBatchApprovalIds(batchId: string, approvalIds: string[]): void {
+  if (approvalIds.length === 0) {
+    batchRegistry.delete(batchId);
+    return;
+  }
+  // Cleanup expired batches opportunistically
+  cleanupExpiredBatches(Date.now());
+  const entry = batchRegistry.get(batchId);
+  if (!entry) return;
+  entry.approvalIds = approvalIds;
 }
 
 export type ExecApprovalForwarder = {
@@ -203,7 +215,10 @@ function buildBatchRequestMessage(
   nowMs: number,
 ): ApprovalMessage {
   const count = requests.length;
-  const lines: string[] = [`🔒 Exec approval required (${count} command${count > 1 ? "s" : ""})`];
+  const lines: string[] = [
+    `🔒 Exec approval required (${count} command${count > 1 ? "s" : ""})`,
+    `Batch ID: ${batchId}`,
+  ];
   lines.push("");
 
   // List each command with a number
@@ -211,7 +226,7 @@ function buildBatchRequestMessage(
     const cmd = req.request.command;
     // Truncate long commands for readability
     const displayCmd = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
-    lines.push(`${idx + 1}. ${displayCmd}`);
+    lines.push(`${idx + 1}. ${displayCmd} (${req.id})`);
   });
 
   lines.push("");
@@ -228,6 +243,8 @@ function buildBatchRequestMessage(
   const earliestExpiry = Math.min(...requests.map((r) => r.expiresAtMs));
   const expiresIn = Math.max(0, Math.round((earliestExpiry - nowMs) / 1000));
   lines.push(`Expires in: ${expiresIn}s`);
+  lines.push(`Approve: /approve-batch ${batchId} allow-once|deny`);
+  lines.push("Or: /approve <id> allow-once|allow-always|deny");
 
   const buttons = [
     [
@@ -357,41 +374,52 @@ export function createExecApprovalForwarder(
 
     const cfg = getConfig();
     const { requests, targets } = batch;
+    const liveRequests = requests.filter((req) => pending.has(req.id));
 
-    if (requests.length === 0 || targets.length === 0) return;
+    if (liveRequests.length === 0 || targets.length === 0) return;
 
-    // Generate batch ID and register it
-    const batchId = generateBatchId();
-    const approvalIds = requests.map((r) => r.id);
-    batchRegistry.set(batchId, {
-      approvalIds,
-      sessionKey,
-      createdAtMs: nowMs(),
-    });
+    let batchId: string | null = null;
+    if (liveRequests.length > 1) {
+      // Generate batch ID and register it
+      batchId = generateBatchId();
+      const approvalIds = liveRequests.map((r) => r.id);
+      // Cleanup any expired batches before inserting
+      cleanupExpiredBatches(nowMs());
+      batchRegistry.set(batchId, {
+        approvalIds,
+        sessionKey,
+        createdAtMs: nowMs(),
+      });
 
-    // Update pending entries with batch ID
-    for (const req of requests) {
-      const entry = pending.get(req.id);
-      if (entry) entry.batchId = batchId;
+      // Update pending entries with batch ID
+      for (const req of liveRequests) {
+        const entry = pending.get(req.id);
+        if (entry) entry.batchId = batchId;
+      }
     }
 
-    log.info(`exec approvals: flushing batch ${batchId} with ${requests.length} requests`);
+    log.info(
+      `exec approvals: flushing ${
+        liveRequests.length > 1 ? `batch ${batchId}` : "single request"
+      } with ${liveRequests.length} request${liveRequests.length > 1 ? "s" : ""}`,
+    );
 
     // Send single or batch message depending on count
-    if (requests.length === 1) {
+    if (liveRequests.length === 1) {
       // Single request - use original format with all buttons
-      const message = buildRequestMessage(requests[0], nowMs());
+      const message = buildRequestMessage(liveRequests[0], nowMs());
       await deliverToTargets({
         cfg,
         targets,
         text: message.text,
         buttons: message.buttons,
         deliver,
-        shouldSend: () => pending.has(requests[0].id),
+        shouldSend: () => pending.has(liveRequests[0].id),
       });
     } else {
       // Multiple requests - use batch format
-      const message = buildBatchRequestMessage(requests, batchId, nowMs());
+      if (!batchId) return;
+      const message = buildBatchRequestMessage(liveRequests, batchId, nowMs());
       await deliverToTargets({
         cfg,
         targets,

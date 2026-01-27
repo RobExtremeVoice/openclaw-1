@@ -14,6 +14,7 @@ vi.mock("../../gateway/call.js", () => ({
 vi.mock("../../infra/exec-approval-forwarder.js", () => ({
   getBatchApprovalIds: vi.fn(),
   deleteBatch: vi.fn(),
+  updateBatchApprovalIds: vi.fn(),
 }));
 
 function buildParams(commandBody: string, cfg: ClawdbotConfig, ctxOverrides?: Partial<MsgContext>) {
@@ -153,6 +154,7 @@ describe("/approve-batch command", () => {
     expect(result.reply?.text).toContain("3 commands approved");
     expect(mockCallGateway).toHaveBeenCalledTimes(3);
     expect(approvalForwarder.deleteBatch).toHaveBeenCalledWith("batch-123");
+    expect(approvalForwarder.updateBatchApprovalIds).not.toHaveBeenCalled();
   });
 
   it("denies all commands in batch", async () => {
@@ -170,6 +172,8 @@ describe("/approve-batch command", () => {
     expect(result.shouldContinue).toBe(false);
     expect(result.reply?.text).toContain("2 commands approved");
     expect(mockCallGateway).toHaveBeenCalledTimes(2);
+    expect(approvalForwarder.deleteBatch).toHaveBeenCalledWith("batch-456");
+    expect(approvalForwarder.updateBatchApprovalIds).not.toHaveBeenCalled();
   });
 
   it("reports partial failures", async () => {
@@ -190,5 +194,7 @@ describe("/approve-batch command", () => {
     expect(result.shouldContinue).toBe(false);
     expect(result.reply?.text).toContain("2 succeeded");
     expect(result.reply?.text).toContain("1 failed");
+    expect(approvalForwarder.deleteBatch).not.toHaveBeenCalled();
+    expect(approvalForwarder.updateBatchApprovalIds).toHaveBeenCalledWith("batch-789", ["id2"]);
   });
 });

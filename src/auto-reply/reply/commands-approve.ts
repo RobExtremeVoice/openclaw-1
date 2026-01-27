@@ -1,7 +1,11 @@
 import { callGateway } from "../../gateway/call.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { logVerbose } from "../../globals.js";
-import { getBatchApprovalIds, deleteBatch } from "../../infra/exec-approval-forwarder.js";
+import {
+  getBatchApprovalIds,
+  deleteBatch,
+  updateBatchApprovalIds,
+} from "../../infra/exec-approval-forwarder.js";
 import type { CommandHandler } from "./commands-types.js";
 
 const COMMAND = "/approve";
@@ -187,8 +191,12 @@ export const handleApproveBatchCommand: CommandHandler = async (params, allowTex
     }
   }
 
-  // Clean up the batch
-  deleteBatch(parsed.batchId);
+  const failedIds = results.filter((r) => !r.success).map((r) => r.id);
+  if (failedIds.length === 0) {
+    deleteBatch(parsed.batchId);
+  } else {
+    updateBatchApprovalIds(parsed.batchId, failedIds);
+  }
 
   const succeeded = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
