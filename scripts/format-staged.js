@@ -61,7 +61,11 @@ function resolveOxfmtCommand(repoRoot) {
   const binName = process.platform === "win32" ? "oxfmt.cmd" : "oxfmt";
   const local = path.join(repoRoot, "node_modules", ".bin", binName);
   if (fs.existsSync(local)) {
-    return { command: local, args: [] };
+    // Verify it works (catch ERR_UNKNOWN_FILE_EXTENSION on Windows)
+    const result = spawnSync(local, ["--version"], { stdio: "ignore", shell: true });
+    if (result.status === 0) {
+      return { command: local, args: [] };
+    }
   }
 
   const result = spawnSync("oxfmt", ["--version"], { stdio: "ignore" });
