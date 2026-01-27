@@ -1,0 +1,25 @@
+# Clawdbot Security - Never commit these files!
+
+# Environment files with secrets
+.env
+*.env
+.env.*
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Passwords and secrets
+*password*
+*secret*
+*token*
+
+# Clawdbot data
+data/
+logs/
+*.log
+
+# Docker
+docker-compose.override.yml
