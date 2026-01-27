@@ -655,21 +655,10 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // Sanitize injected message
-    const sanitized = sanitizeIncomingMessage(p.message, {
-      stripEnvelopes: false, // Don't strip envelopes from injected content
-      blockCritical: false, // Default: warn but don't block critical injection attempts
-      logAttempts: true,
-      useBoundaries: false, // Don't wrap injected assistant messages
-    });
-    if (sanitized.blocked) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "message blocked by security policy"),
-      );
-      return;
-    }
+    // Note: No injection sanitization for chat.inject because:
+    // 1. This injects assistant content (not user input), so user boundary markers are inappropriate
+    // 2. Injection patterns detect user prompt manipulations, not assistant responses
+    // 3. This is a privileged gateway operation requiring authenticated access
 
     // Resolve transcript path
     const transcriptPath = entry?.sessionFile
