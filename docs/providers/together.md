@@ -27,7 +27,7 @@ clawdbot onboard --auth-choice together-api-key
 {
   agents: {
     defaults: {
-      model: { primary: "together/meta-llama/Llama-3.3-70B-Instruct-Turbo" }
+      model: { primary: "together/zai-org/GLM-4.7" }
     }
   }
 }
@@ -42,6 +42,8 @@ clawdbot onboard --non-interactive \
   --together-api-key "$TOGETHER_API_KEY"
 ```
 
+This will set `together/zai-org/GLM-4.7` as the default model.
+
 ## Environment note
 
 If the Gateway runs as a daemon (launchd/systemd), make sure `TOGETHER_API_KEY`
@@ -52,6 +54,7 @@ is available to that process (for example, in `~/.clawdbot/.env` or via
 
 Together AI provides access to many popular open-source models:
 
+- **GLM 4.7 Fp8** - Default model with 200K context window
 - **Llama 3.3 70B Instruct Turbo** - Fast, efficient instruction following
 - **Llama 4 Scout** - Vision model with image understanding
 - **Llama 4 Maverick** - Advanced vision and reasoning
