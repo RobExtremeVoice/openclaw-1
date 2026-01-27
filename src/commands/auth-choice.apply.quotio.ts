@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
-import { resolveClawdbotAgentDir } from "../agents/agent-paths.js";
-import type { ClawdbotConfig } from "../config/config.js";
+import { resolveMoltbotAgentDir } from "../agents/agent-paths.js";
+import type { MoltbotConfig } from "../config/config.js";
 import type { ModelDefinitionConfig } from "../config/types.models.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { applyAuthProfileConfig } from "./onboard-auth.js";
@@ -187,11 +187,11 @@ function buildModelDefinition(model: QuotioModel): ModelDefinitionConfig {
 }
 
 function applyQuotioProviderConfig(
-  config: ClawdbotConfig,
+  config: MoltbotConfig,
   baseUrl: string,
   apiKey: string,
   models: ModelDefinitionConfig[],
-): ClawdbotConfig {
+): MoltbotConfig {
   return {
     ...config,
     models: {
@@ -209,7 +209,7 @@ function applyQuotioProviderConfig(
   };
 }
 
-function applyQuotioDefaultModel(config: ClawdbotConfig, modelRef: string): ClawdbotConfig {
+function applyQuotioDefaultModel(config: MoltbotConfig, modelRef: string): MoltbotConfig {
   const models = { ...config.agents?.defaults?.models };
   models[modelRef] = models[modelRef] ?? {};
 
@@ -234,7 +234,7 @@ export async function applyAuthChoiceQuotio(
   if (params.authChoice !== "quotio") return null;
 
   let nextConfig = params.config;
-  const agentDir = params.agentDir ?? resolveClawdbotAgentDir();
+  const agentDir = params.agentDir ?? resolveMoltbotAgentDir();
 
   await params.prompter.note("Detecting Quotio...", "Auto-detection");
 
@@ -270,8 +270,10 @@ export async function applyAuthChoiceQuotio(
     await params.prompter.note(
       [
         "Could not auto-detect Quotio.",
-        "Make sure Quotio is running, or configure manually.",
-        "Tip: Set QUOTIO_BASE_URL and QUOTIO_API_KEY environment variables for auto-detection.",
+        "Quotio is a macOS menu bar app that unifies your AI subscriptions with quota tracking.",
+        "Download from: https://www.quotio.dev",
+        "",
+        "If already installed, make sure Quotio is running.",
       ].join("\n"),
       "Not detected",
     );
