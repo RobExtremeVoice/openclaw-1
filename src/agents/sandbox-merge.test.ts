@@ -131,19 +131,19 @@ describe("sandbox config merges", () => {
     const resolved = resolveSandboxCronConfig({
       globalCron: {
         visibility: "all",
-        escape: "elevated",
+        elevated: "on",
         allowMainSessionJobs: true,
         delivery: "explicit",
       },
       agentCron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
       },
     });
 
     expect(resolved).toEqual({
       visibility: "agent",
-      escape: "off",
+      elevated: "off",
       allowMainSessionJobs: true,
       delivery: "explicit",
     });

@@ -2175,6 +2175,15 @@ Defaults (if enabled):
 - optional sandboxed browser (Chromium + CDP, noVNC observer)
 - hardening knobs: `network`, `user`, `pidsLimit`, `memory`, `cpus`, `ulimits`, `seccompProfile`, `apparmorProfile`
 
+Cron policy (only applies when a session is sandboxed and the `cron` tool is allowed):
+- `cron.visibility`: `"agent"` (default) scopes cron jobs to the current agent; `"all"` allows cross-agent cron visibility.
+- `cron.elevated`: `"off"` (default) never bypasses sandbox cron restrictions; `"on"` bypasses when session elevated is on/ask/full; `"full"` bypasses only when elevated is full.
+- `cron.allowMainSessionJobs`: `false` (default) blocks main-session cron jobs and wake events from sandboxed sessions.
+- `cron.delivery`: `"last-only"` (default) allows last-route delivery only (no explicit `to`; if `channel` is set it must be `last`); `"off"` disables delivery; `"explicit"` allows explicit delivery targets.
+
+Notes:
+- This does not enable the `cron` tool inside the sandbox. Cron is denied by default in sandbox tool policy; allow it via `tools.sandbox.tools` (or per-agent `agents.list[].tools.sandbox.tools`).
+
 Warning: `scope: "shared"` means a shared container and shared workspace. No
 cross-session isolation. Use `scope: "session"` for per-session isolation.
 
@@ -2193,6 +2202,12 @@ For package installs, ensure network egress, a writable root FS, and a root user
         scope: "agent", // session | agent | shared (agent is default)
         workspaceAccess: "none", // none | ro | rw
         workspaceRoot: "~/.clawdbot/sandboxes",
+        cron: {
+          visibility: "agent", // agent | all
+          elevated: "off", // off | on | full
+          allowMainSessionJobs: false,
+          delivery: "last-only" // off | last-only | explicit
+        },
         docker: {
           image: "moltbot-sandbox:bookworm-slim",
           containerPrefix: "moltbot-sbx-",

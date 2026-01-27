@@ -161,9 +161,7 @@ export const AgentDefaultsSchema = z
         cron: z
           .object({
             visibility: z.union([z.literal("agent"), z.literal("all")]).optional(),
-            escape: z
-              .union([z.literal("off"), z.literal("elevated"), z.literal("elevated-full")])
-              .optional(),
+            elevated: z.union([z.literal("off"), z.literal("on"), z.literal("full")]).optional(),
             allowMainSessionJobs: z.boolean().optional(),
             delivery: z
               .union([z.literal("off"), z.literal("last-only"), z.literal("explicit")])

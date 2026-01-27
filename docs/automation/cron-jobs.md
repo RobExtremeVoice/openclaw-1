@@ -134,6 +134,7 @@ Delivery notes:
 - If `to` is set, cron auto-delivers the agent’s final output even if `deliver` is omitted.
 - Use `deliver: true` when you want last-route delivery without an explicit `to`.
 - Use `deliver: false` to keep output internal even if a `to` is present.
+- Sandboxed sessions may restrict delivery targets via `agents.defaults.sandbox.cron.delivery` (see [Sandboxing](/gateway/sandboxing) and [Configuration](/gateway/configuration#agentsdefaultssandbox)).
 
 Target format reminders:
 - Slack/Discord/Mattermost (plugin) targets should use explicit prefixes (e.g. `channel:<id>`, `user:<id>`) to avoid ambiguity.

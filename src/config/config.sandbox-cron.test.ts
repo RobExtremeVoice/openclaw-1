@@ -10,7 +10,7 @@ describe("sandbox cron config", () => {
           sandbox: {
             cron: {
               visibility: "agent",
-              escape: "elevated",
+              elevated: "on",
               allowMainSessionJobs: false,
               delivery: "last-only",
             },
@@ -22,7 +22,7 @@ describe("sandbox cron config", () => {
             sandbox: {
               cron: {
                 visibility: "all",
-                escape: "off",
+                elevated: "off",
                 allowMainSessionJobs: true,
                 delivery: "explicit",
               },
@@ -48,7 +48,7 @@ describe("sandbox cron config", () => {
           sandbox: {
             cron: {
               visibility: "everyone",
-              escape: "nope",
+              elevated: "nope",
               delivery: "sometimes",
             },
           },
@@ -58,7 +58,7 @@ describe("sandbox cron config", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("accepts elevated-full escape and allowMainSessionJobs", async () => {
+  it("accepts full elevated gate and allowMainSessionJobs", async () => {
     vi.resetModules();
     const { validateConfigObject } = await import("./config.js");
     const res = validateConfigObject({
@@ -67,7 +67,7 @@ describe("sandbox cron config", () => {
           sandbox: {
             cron: {
               visibility: "all",
-              escape: "elevated-full",
+              elevated: "full",
               allowMainSessionJobs: true,
               delivery: "explicit",
             },
@@ -78,7 +78,7 @@ describe("sandbox cron config", () => {
 
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.config.agents?.defaults?.sandbox?.cron?.escape).toBe("elevated-full");
+      expect(res.config.agents?.defaults?.sandbox?.cron?.elevated).toBe("full");
       expect(res.config.agents?.defaults?.sandbox?.cron?.allowMainSessionJobs).toBe(true);
     }
   });

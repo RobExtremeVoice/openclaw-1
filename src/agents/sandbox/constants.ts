@@ -39,7 +39,7 @@ export const DEFAULT_TOOL_DENY = [
 
 export const DEFAULT_SANDBOX_CRON_POLICY = {
   visibility: "agent",
-  escape: "off",
+  elevated: "off",
   allowMainSessionJobs: false,
   delivery: "last-only",
 } as const;

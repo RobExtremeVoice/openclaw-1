@@ -75,7 +75,7 @@ export type SandboxPruneSettings = {
 };
 
 export type SandboxCronVisibility = "agent" | "all";
-export type SandboxCronEscape = "off" | "elevated" | "elevated-full";
+export type SandboxCronElevated = "off" | "on" | "full";
 export type SandboxCronDelivery = "off" | "last-only" | "explicit";
 
 export type SandboxCronSettings = {
@@ -86,12 +86,12 @@ export type SandboxCronSettings = {
    */
   visibility?: SandboxCronVisibility;
   /**
-   * Escape hatch for sandboxed cron access.
-   * - "off": never escape
-   * - "elevated": allow escape when session elevated != off
-   * - "elevated-full": allow escape only when elevated=full
+   * Elevated gate for sandboxed cron restrictions.
+   * - "off": never bypass sandbox cron restrictions
+   * - "on": bypass when the session elevated level is on/ask/full
+   * - "full": bypass only when the session elevated level is full
    */
-  escape?: SandboxCronEscape;
+  elevated?: SandboxCronElevated;
   /**
    * Allow main-session cron jobs from sandboxed sessions.
    * Default: false.

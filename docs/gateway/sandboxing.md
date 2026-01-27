@@ -145,6 +145,24 @@ globally or per-agent, sandboxing doesn’t bring it back.
 `/exec` directives only apply for authorized senders and persist per session; to hard-disable
 `exec`, use tool policy deny (see [Sandbox vs Tool Policy vs Elevated](/gateway/sandbox-vs-tool-policy-vs-elevated)).
 
+## Cron policy (sandboxed sessions)
+
+If the `cron` tool is allowed in a sandboxed session, Clawdbot can still apply
+additional restrictions to cron access and delivery via:
+- `agents.defaults.sandbox.cron`
+- `agents.list[].sandbox.cron` (per-agent override)
+
+This is useful when you want sandboxed agents to schedule reminders but prevent:
+- cross-agent cron visibility (`visibility: "agent"`)
+- main-session jobs and wake events (`allowMainSessionJobs: false`)
+- explicit delivery targets (`delivery: "last-only"` or `"off"`)
+
+Note: this does not enable cron in the sandbox. If `cron` is denied by sandbox tool policy,
+allow it via `tools.sandbox.tools` (or per-agent `agents.list[].tools.sandbox.tools`).
+
+See [Configuration](/gateway/configuration#agentsdefaultssandbox) for the exact keys and defaults.
+If you see “blocked” errors, also check [Sandbox vs Tool Policy vs Elevated](/gateway/sandbox-vs-tool-policy-vs-elevated).
+
 Debugging:
 - Use `moltbot sandbox explain` to inspect effective sandbox mode, tool policy, and fix-it config keys.
 - See [Sandbox vs Tool Policy vs Elevated](/gateway/sandbox-vs-tool-policy-vs-elevated) for the “why is this blocked?” mental model.

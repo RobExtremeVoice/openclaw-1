@@ -178,6 +178,43 @@ For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevate
 
 ---
 
+### Example 4: Sandbox Cron Policy Per Agent
+
+This is useful when you want sandboxed agents to schedule cron jobs, but keep them
+scoped (and limit delivery):
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "all",
+        "cron": {
+          "visibility": "agent",
+          "elevated": "off",
+          "allowMainSessionJobs": false,
+          "delivery": "last-only"
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "admin",
+        "sandbox": {
+          "cron": {
+            "visibility": "all",
+            "elevated": "full",
+            "delivery": "explicit"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## Configuration Precedence
 
 When both global (`agents.defaults.*`) and agent-specific (`agents.list[].*`) configs exist:
@@ -189,12 +226,14 @@ agents.list[].sandbox.mode > agents.defaults.sandbox.mode
 agents.list[].sandbox.scope > agents.defaults.sandbox.scope
 agents.list[].sandbox.workspaceRoot > agents.defaults.sandbox.workspaceRoot
 agents.list[].sandbox.workspaceAccess > agents.defaults.sandbox.workspaceAccess
+agents.list[].sandbox.cron.* > agents.defaults.sandbox.cron.*
 agents.list[].sandbox.docker.* > agents.defaults.sandbox.docker.*
 agents.list[].sandbox.browser.* > agents.defaults.sandbox.browser.*
 agents.list[].sandbox.prune.* > agents.defaults.sandbox.prune.*
 ```
 
 **Notes:**
+- `agents.list[].sandbox.cron.*` overrides `agents.defaults.sandbox.cron.*` for that agent.
 - `agents.list[].sandbox.{docker,browser,prune}.*` overrides `agents.defaults.sandbox.{docker,browser,prune}.*` for that agent (ignored when sandbox scope resolves to `"shared"`).
 
 ### Tool Restrictions

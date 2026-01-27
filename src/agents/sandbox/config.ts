@@ -132,7 +132,7 @@ export function resolveSandboxCronConfig(params: {
   return {
     visibility:
       agentCron?.visibility ?? globalCron?.visibility ?? DEFAULT_SANDBOX_CRON_POLICY.visibility,
-    escape: agentCron?.escape ?? globalCron?.escape ?? DEFAULT_SANDBOX_CRON_POLICY.escape,
+    elevated: agentCron?.elevated ?? globalCron?.elevated ?? DEFAULT_SANDBOX_CRON_POLICY.elevated,
     allowMainSessionJobs:
       agentCron?.allowMainSessionJobs ??
       globalCron?.allowMainSessionJobs ??

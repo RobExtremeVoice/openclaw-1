@@ -5,7 +5,7 @@ const resolveSandboxRuntimeStatusMock = vi.fn(() => ({ sandboxed: false, agentId
 const resolveSandboxConfigForAgentMock = vi.fn(() => ({
   cron: {
     visibility: "agent",
-    escape: "off",
+    elevated: "off",
     allowMainSessionJobs: false,
     delivery: "last-only",
   },
@@ -43,7 +43,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: false,
         delivery: "last-only",
       },
@@ -285,7 +285,7 @@ describe("cron tool", () => {
     expect(call.params).toEqual({ includeDisabled: false, actorAgentId: "agent-123" });
   });
 
-  it("skips actor scoping when sandbox escape is elevated", async () => {
+  it("skips actor scoping when sandbox cron elevated gate is on", async () => {
     resolveSandboxRuntimeStatusMock.mockReturnValue({
       sandboxed: true,
       agentId: "agent-123",
@@ -293,7 +293,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "elevated",
+        elevated: "on",
         allowMainSessionJobs: false,
         delivery: "last-only",
       },
@@ -311,7 +311,7 @@ describe("cron tool", () => {
     expect(call.params).toEqual({ includeDisabled: false });
   });
 
-  it("keeps actor scoping when escape is elevated-full but elevated is on", async () => {
+  it("keeps actor scoping when sandbox cron elevated gate is full but elevated is on", async () => {
     resolveSandboxRuntimeStatusMock.mockReturnValue({
       sandboxed: true,
       agentId: "agent-123",
@@ -319,7 +319,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "elevated-full",
+        elevated: "full",
         allowMainSessionJobs: false,
         delivery: "last-only",
       },
@@ -337,7 +337,7 @@ describe("cron tool", () => {
     expect(call.params).toEqual({ includeDisabled: false, actorAgentId: "agent-123" });
   });
 
-  it("skips actor scoping when escape is elevated-full and elevated is full", async () => {
+  it("skips actor scoping when sandbox cron elevated gate is full and elevated is full", async () => {
     resolveSandboxRuntimeStatusMock.mockReturnValue({
       sandboxed: true,
       agentId: "agent-123",
@@ -345,7 +345,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "elevated-full",
+        elevated: "full",
         allowMainSessionJobs: false,
         delivery: "last-only",
       },
@@ -392,7 +392,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "last-only",
       },
@@ -424,7 +424,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "last-only",
       },
@@ -529,7 +529,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "all",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: false,
         delivery: "last-only",
       },
@@ -586,7 +586,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "off",
       },
@@ -615,7 +615,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "explicit",
       },
@@ -653,7 +653,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "last-only",
       },
@@ -690,7 +690,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "off",
       },
@@ -730,7 +730,7 @@ describe("cron tool", () => {
     resolveSandboxConfigForAgentMock.mockReturnValue({
       cron: {
         visibility: "agent",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "last-only",
       },

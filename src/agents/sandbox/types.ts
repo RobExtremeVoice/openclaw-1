@@ -50,7 +50,7 @@ export type SandboxScope = "session" | "agent" | "shared";
 
 export type SandboxCronPolicy = {
   visibility: "agent" | "all";
-  escape: "off" | "elevated" | "elevated-full";
+  elevated: "off" | "on" | "full";
   allowMainSessionJobs: boolean;
   delivery: "off" | "last-only" | "explicit";
 };

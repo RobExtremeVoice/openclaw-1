@@ -55,7 +55,7 @@ type CronSandboxAccess = {
   sessionKey?: string;
   policy: {
     visibility: "agent" | "all";
-    escape: "off" | "elevated" | "elevated-full";
+    elevated: "off" | "on" | "full";
     allowMainSessionJobs: boolean;
     delivery: "off" | "last-only" | "explicit";
   };
@@ -117,7 +117,7 @@ function resolveCronSandboxAccess(params: {
       sessionKey: undefined,
       policy: {
         visibility: "all",
-        escape: "off",
+        elevated: "off",
         allowMainSessionJobs: true,
         delivery: "explicit",
       },
@@ -138,16 +138,12 @@ function resolveCronSandboxAccess(params: {
   const elevatedOn = elevatedLevel !== "off";
   const elevatedFull = elevatedLevel === "full";
 
-  const escapeAllowed =
-    policy.escape === "elevated"
-      ? elevatedOn
-      : policy.escape === "elevated-full"
-        ? elevatedFull
-        : false;
+  const elevatedAllowed =
+    policy.elevated === "on" ? elevatedOn : policy.elevated === "full" ? elevatedFull : false;
 
   return {
     sandboxed: runtime.sandboxed,
-    restricted: runtime.sandboxed && !escapeAllowed,
+    restricted: runtime.sandboxed && !elevatedAllowed,
     agentId: normalizedAgentId,
     sessionKey: rawSessionKey,
     policy,

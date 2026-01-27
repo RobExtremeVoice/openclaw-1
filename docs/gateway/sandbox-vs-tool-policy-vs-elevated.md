@@ -90,6 +90,20 @@ Available groups:
 - `group:nodes`: `nodes`
 - `group:moltbot`: all built-in Moltbot tools (excludes provider plugins)
 
+### Cron policy inside the sandbox
+
+If the `cron` tool is allowed, sandboxed sessions can still be restricted by
+`agents.defaults.sandbox.cron` (and `agents.list[].sandbox.cron`):
+- Visibility: `agents.defaults.sandbox.cron.visibility` can scope cron jobs to the current agent.
+- Main session gating: `agents.defaults.sandbox.cron.allowMainSessionJobs: false` blocks main-session cron jobs and wake events from sandboxed sessions.
+- Delivery gating: `agents.defaults.sandbox.cron.delivery` can disable delivery or restrict it to last-route delivery.
+- Elevated gate: `agents.defaults.sandbox.cron.elevated` can use the session elevated level as an escape signal for cron restrictions.
+
+Notes:
+- Elevated remains exec-only (it does not grant extra tools), but cron policy can consult the session elevated level.
+- Fix-it keys live under `agents.defaults.sandbox.cron.*` / `agents.list[].sandbox.cron.*` (see [Configuration](/gateway/configuration#agentsdefaultssandbox)).
+- This is in addition to tool policy; if `cron` is denied by sandbox tool policy, allow it via `tools.sandbox.tools` (or per-agent `agents.list[].tools.sandbox.tools`).
+
 ## Elevated: exec-only “run on host”
 
 Elevated does **not** grant extra tools; it only affects `exec`.

@@ -361,6 +361,7 @@ Core actions:
 Notes:
 - `add` expects a full cron job object (same schema as `cron.add` RPC).
 - `update` uses `{ id, patch }`.
+- In sandboxed sessions, cron access and delivery may be further restricted by `agents.defaults.sandbox.cron` (and per-agent overrides via `agents.list[].sandbox.cron`).
 
 ### `gateway`
 Restart or apply updates to the running Gateway process (in-place).
