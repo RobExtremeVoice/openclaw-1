@@ -12,6 +12,9 @@ import type { ClawdbotConfig } from "../../../config/config.js";
 import { resolveAgentWorkspaceDir } from "../../../agents/agent-scope.js";
 import { resolveAgentIdFromSessionKey } from "../../../routing/session-key.js";
 import type { HookHandler } from "../../hooks.js";
+import { createSubsystemLogger } from "../../../logging/subsystem.js";
+
+const log = createSubsystemLogger("hooks/session-memory");
 
 /**
  * Read recent messages from session file for slug generation
@@ -64,7 +67,7 @@ const saveSessionToMemory: HookHandler = async (event) => {
   }
 
   try {
-    console.log("[session-memory] Hook triggered for /new command");
+    log.info("Hook triggered for /new command");
 
     const context = event.context || {};
     const cfg = context.cfg as ClawdbotConfig | undefined;
@@ -87,9 +90,9 @@ const saveSessionToMemory: HookHandler = async (event) => {
     const currentSessionId = sessionEntry.sessionId as string;
     const currentSessionFile = sessionEntry.sessionFile as string;
 
-    console.log("[session-memory] Current sessionId:", currentSessionId);
-    console.log("[session-memory] Current sessionFile:", currentSessionFile);
-    console.log("[session-memory] cfg present:", !!cfg);
+    log.debug(`Current sessionId: ${currentSessionId}`);
+    log.debug(`Current sessionFile: ${currentSessionFile}`);
+    log.debug(`cfg present: ${!!cfg}`);
 
     const sessionFile = currentSessionFile || undefined;
 
@@ -99,23 +102,34 @@ const saveSessionToMemory: HookHandler = async (event) => {
     if (sessionFile) {
       // Get recent conversation content
       sessionContent = await getRecentSessionContent(sessionFile);
-      console.log("[session-memory] sessionContent length:", sessionContent?.length || 0);
+      log.debug(`sessionContent length: ${sessionContent?.length || 0}`);
 
       if (sessionContent && cfg) {
-        console.log("[session-memory] Calling generateSlugViaLLM...");
+        log.info("Calling generateSlugViaLLM...");
         // Dynamically import the LLM slug generator (avoids module caching issues)
-        // When compiled, handler is at dist/hooks/bundled/session-memory/handler.js
-        // Going up ../.. puts us at dist/hooks/, so just add llm-slug-generator.js
-        const clawdbotRoot = path.resolve(
-          path.dirname(import.meta.url.replace("file://", "")),
-          "../..",
-        );
-        const slugGenPath = path.join(clawdbotRoot, "llm-slug-generator.js");
-        const { generateSlugViaLLM } = await import(slugGenPath);
+        // In test environment, we need to match the key used in vi.mock
+        // The mock key is "../../../llm-slug-generator.js"
+        // We can use a try-catch to fallback or just use a relative path that works for both
+
+        let generateSlugViaLLM;
+        try {
+          // Try importing using the relative path that matches the mock key
+          const mod = await import("../../llm-slug-generator.js");
+          generateSlugViaLLM = mod.generateSlugViaLLM;
+        } catch {
+          // Fallback for runtime if the relative import above fails (e.g. bundler issues)
+          const clawdbotRoot = path.resolve(
+            path.dirname(import.meta.url.replace("file://", "")),
+            "../..",
+          );
+          const slugGenPath = path.join(clawdbotRoot, "llm-slug-generator.js");
+          const mod = await import(slugGenPath);
+          generateSlugViaLLM = mod.generateSlugViaLLM;
+        }
 
         // Use LLM to generate a descriptive slug
         slug = await generateSlugViaLLM({ sessionContent, cfg });
-        console.log("[session-memory] Generated slug:", slug);
+        log.info(`Generated slug: ${slug}`);
       }
     }
 
@@ -123,14 +137,14 @@ const saveSessionToMemory: HookHandler = async (event) => {
     if (!slug) {
       const timeSlug = now.toISOString().split("T")[1]!.split(".")[0]!.replace(/:/g, "");
       slug = timeSlug.slice(0, 4); // HHMM
-      console.log("[session-memory] Using fallback timestamp slug:", slug);
+      log.info(`Using fallback timestamp slug: ${slug}`);
     }
 
     // Create filename with date and slug
     const filename = `${dateStr}-${slug}.md`;
     const memoryFilePath = path.join(memoryDir, filename);
-    console.log("[session-memory] Generated filename:", filename);
-    console.log("[session-memory] Full path:", memoryFilePath);
+    log.info(`Generated filename: ${filename}`);
+    log.debug(`Full path: ${memoryFilePath}`);
 
     // Format time as HH:MM:SS UTC
     const timeStr = now.toISOString().split("T")[1]!.split(".")[0];
@@ -158,16 +172,13 @@ const saveSessionToMemory: HookHandler = async (event) => {
 
     // Write to new memory file
     await fs.writeFile(memoryFilePath, entry, "utf-8");
-    console.log("[session-memory] Memory file written successfully");
+    log.info("Memory file written successfully");
 
     // Log completion (but don't send user-visible confirmation - it's internal housekeeping)
     const relPath = memoryFilePath.replace(os.homedir(), "~");
-    console.log(`[session-memory] Session context saved to ${relPath}`);
+    log.info(`Session context saved to ${relPath}`);
   } catch (err) {
-    console.error(
-      "[session-memory] Failed to save session memory:",
-      err instanceof Error ? err.message : String(err),
-    );
+    log.error(`Failed to save session memory: ${err instanceof Error ? err.message : String(err)}`);
   }
 };
 
