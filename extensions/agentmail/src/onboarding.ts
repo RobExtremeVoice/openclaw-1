@@ -136,9 +136,10 @@ export const agentmailOnboardingAdapter: ChannelOnboardingAdapter = {
     // Show help
     await prompter.note(
       [
-        "You'll need an AgentMail API token from https://agentmail.to",
+        "AgentMail is free to use at https://agentmail.to",
         "",
-        "We'll help you create an inbox after you enter your token.",
+        "Get your API token from the dashboard, then we'll help you",
+        "create an inbox.",
       ].join("\n"),
       "AgentMail Setup"
     );
@@ -207,7 +208,10 @@ export const agentmailOnboardingAdapter: ChannelOnboardingAdapter = {
           eventTypes: ["message.received"],
           clientId: `clawdbot-${emailAddress}`, // Idempotent per inbox
         });
-        await prompter.note(`Webhook registered: ${webhookUrl}`, "Webhook Created");
+        await prompter.note(
+          `Webhook registered: ${webhookUrl}`,
+          "Webhook Created"
+        );
       } catch (err) {
         // Webhook may already exist or API error - show warning but continue
         await prompter.note(
