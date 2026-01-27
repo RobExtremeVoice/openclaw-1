@@ -30,10 +30,22 @@ collect_files() {
 }
 
 compute_hash() {
+  local hash_cmd
+  local hash_args=()
+  if command -v shasum >/dev/null 2>&1; then
+    hash_cmd="shasum"
+    hash_args=("-a" "256")
+  elif command -v sha256sum >/dev/null 2>&1; then
+    hash_cmd="sha256sum"
+  else
+    echo "Error: shasum/sha256sum not found" >&2
+    exit 1
+  fi
+
   collect_files \
     | LC_ALL=C sort -z \
-    | xargs -0 shasum -a 256 \
-    | shasum -a 256 \
+    | xargs -0 "$hash_cmd" "${hash_args[@]}" \
+    | "$hash_cmd" "${hash_args[@]}" \
     | awk '{print $1}'
 }
 

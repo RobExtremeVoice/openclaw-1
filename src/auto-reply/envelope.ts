@@ -237,11 +237,11 @@ export function formatAgentEnvelope(params: AgentEnvelopeParams): string {
   const elapsed =
     resolved.includeElapsed && params.timestamp && params.previousTimestamp
       ? formatElapsedTime(
-        params.timestamp instanceof Date ? params.timestamp.getTime() : params.timestamp,
-        params.previousTimestamp instanceof Date
-          ? params.previousTimestamp.getTime()
-          : params.previousTimestamp,
-      )
+          params.timestamp instanceof Date ? params.timestamp.getTime() : params.timestamp,
+          params.previousTimestamp instanceof Date
+            ? params.previousTimestamp.getTime()
+            : params.previousTimestamp,
+        )
       : undefined;
   if (params.from?.trim()) {
     const from = params.from.trim();
