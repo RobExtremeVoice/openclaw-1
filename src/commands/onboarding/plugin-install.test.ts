@@ -16,6 +16,10 @@ vi.mock("../../plugins/loader.js", () => ({
   loadClawdbotPlugins: vi.fn(),
 }));
 
+vi.mock("../../plugins/manifest-registry.js", () => ({
+  loadPluginManifestRegistry: vi.fn(() => ({ plugins: [], diagnostics: [] })),
+}));
+
 import fs from "node:fs";
 import type { ChannelPluginCatalogEntry } from "../../channels/plugins/catalog.js";
 import type { ClawdbotConfig } from "../../config/config.js";
