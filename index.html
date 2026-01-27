@@ -37,13 +37,99 @@
       user-select: none;
     }
 
-    /* Desktop */
+    /* Desktop - Custom Bliss-style background */
     .desktop {
       width: 100%;
       height: calc(100vh - 30px);
-      background: url('https://i.imgur.com/K4SWWDY.jpeg') center center / cover no-repeat;
       position: relative;
       overflow: hidden;
+      /* Sky gradient */
+      background:
+        /* Clouds - fluffy white shapes */
+        radial-gradient(ellipse 120px 80px at 15% 25%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.8) 40%, transparent 70%),
+        radial-gradient(ellipse 80px 50px at 18% 28%, rgba(255,255,255,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse 100px 60px at 12% 22%, rgba(255,255,255,0.85) 0%, transparent 65%),
+
+        radial-gradient(ellipse 150px 90px at 45% 18%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.8) 45%, transparent 70%),
+        radial-gradient(ellipse 90px 55px at 42% 22%, rgba(255,255,255,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse 110px 65px at 50% 15%, rgba(255,255,255,0.85) 0%, transparent 65%),
+
+        radial-gradient(ellipse 130px 85px at 75% 22%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.8) 40%, transparent 70%),
+        radial-gradient(ellipse 85px 50px at 78% 25%, rgba(255,255,255,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse 95px 55px at 72% 19%, rgba(255,255,255,0.85) 0%, transparent 65%),
+
+        radial-gradient(ellipse 100px 70px at 88% 30%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.7) 45%, transparent 70%),
+        radial-gradient(ellipse 70px 45px at 92% 28%, rgba(255,255,255,0.85) 0%, transparent 60%),
+
+        radial-gradient(ellipse 90px 60px at 30% 35%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.6) 40%, transparent 70%),
+
+        /* Sky gradient - bright blue at top, lighter toward horizon */
+        linear-gradient(180deg,
+          #1e5799 0%,
+          #2989d8 20%,
+          #45a5dc 35%,
+          #7db9e8 50%,
+          #b3d9f2 65%,
+          #d4eaf7 80%,
+          #e8f4fc 100%
+        );
+    }
+
+    /* Rolling green hills */
+    .desktop::before {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 55%;
+      background:
+        /* Foreground hill - brightest green with grass texture */
+        radial-gradient(ellipse 180% 100% at 50% 150%, #4a9f38 0%, #3d8c2e 30%, transparent 60%),
+        /* Main rolling hill */
+        radial-gradient(ellipse 200% 120% at 30% 100%, #5cb347 0%, #4a9f38 40%, transparent 70%),
+        radial-gradient(ellipse 180% 100% at 80% 110%, #52a83f 0%, #4a9f38 35%, transparent 65%),
+        /* Background hills - slightly darker/bluer */
+        radial-gradient(ellipse 250% 80% at 60% 60%, #5fb84a 0%, #4da63c 50%, transparent 80%),
+        radial-gradient(ellipse 200% 70% at 20% 70%, #58b244 0%, #4a9f38 45%, transparent 75%),
+        /* Base green field */
+        linear-gradient(180deg,
+          #6bc455 0%,
+          #5cb347 15%,
+          #4fa53d 30%,
+          #459935 50%,
+          #3d8c2e 70%,
+          #358026 85%,
+          #2d7420 100%
+        );
+      z-index: 0;
+    }
+
+    /* Grass detail overlay */
+    .desktop::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 20%;
+      background:
+        repeating-linear-gradient(
+          85deg,
+          transparent 0px,
+          transparent 3px,
+          rgba(70, 140, 50, 0.1) 3px,
+          rgba(70, 140, 50, 0.1) 4px
+        ),
+        repeating-linear-gradient(
+          95deg,
+          transparent 0px,
+          transparent 4px,
+          rgba(90, 160, 60, 0.08) 4px,
+          rgba(90, 160, 60, 0.08) 5px
+        );
+      z-index: 1;
+      pointer-events: none;
     }
 
     /* Desktop Icons */
@@ -55,6 +141,7 @@
       position: absolute;
       top: 0;
       left: 0;
+      z-index: 10;
     }
 
     .desktop-icon {
@@ -102,6 +189,7 @@
       min-width: 300px;
       min-height: 200px;
       display: none;
+      z-index: 100;
     }
 
     .xp-window.active {
