@@ -765,9 +765,10 @@ const DEFAULT_OPENAI_TTS_BASE_URL = "https://api.openai.com/v1";
  * Example: OPENAI_TTS_BASE_URL=http://localhost:8880/v1
  */
 function getOpenAITtsBaseUrl(): string {
-  return (
-    process.env.OPENAI_TTS_BASE_URL?.trim() || DEFAULT_OPENAI_TTS_BASE_URL
-  ).replace(/\/+$/, "");
+  return (process.env.OPENAI_TTS_BASE_URL?.trim() || DEFAULT_OPENAI_TTS_BASE_URL).replace(
+    /\/+$/,
+    "",
+  );
 }
 
 function isCustomOpenAIEndpoint(): boolean {
@@ -1376,9 +1377,9 @@ export async function maybeApplyTtsToPayload(params: {
     visibleText === text.trim()
       ? params.payload
       : {
-        ...params.payload,
-        text: visibleText.length > 0 ? visibleText : undefined,
-      };
+          ...params.payload,
+          text: visibleText.length > 0 ? visibleText : undefined,
+        };
 
   if (autoMode === "tagged" && !directives.hasDirective) return nextPayload;
   if (autoMode === "inbound" && params.inboundAudio !== true) return nextPayload;

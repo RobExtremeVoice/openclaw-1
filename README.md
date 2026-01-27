@@ -16,7 +16,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
 </p>
 
-**Moltbot** is a *personal AI assistant* you run on your own devices.
+**Moltbot** is a _personal AI assistant_ you run on your own devices.
 It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Microsoft Teams, WebChat), plus extension channels like BlueBubbles, Matrix, Zalo, and Zalo Personal. It can speak and listen on macOS/iOS/Android, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
 
 If you want a personal, single-user assistant that feels local, fast, and always-on, this is it.
@@ -28,6 +28,7 @@ Works with npm, pnpm, or bun.
 New install? Start here: [Getting started](https://docs.molt.bot/start/getting-started)
 
 **Subscriptions (OAuth):**
+
 - **[Anthropic](https://www.anthropic.com/)** (Claude Pro/Max)
 - **[OpenAI](https://openai.com/)** (ChatGPT/Codex)
 
@@ -108,6 +109,7 @@ Moltbot connects to real messaging surfaces. Treat inbound DMs as **untrusted in
 Full security guide: [Security](https://docs.molt.bot/gateway/security)
 
 Default behavior on Telegram/WhatsApp/Signal/iMessage/Microsoft Teams/Discord/Google Chat/Slack:
+
 - **DM pairing** (`dmPolicy="pairing"` / `channels.discord.dm.policy="pairing"` / `channels.slack.dm.policy="pairing"`): unknown senders receive a short pairing code and the bot does not process their message.
 - Approve with: `moltbot pairing approve <channel> <code>` (then the sender is added to a local allowlist store).
 - Public inbound DMs require an explicit opt-in: set `dmPolicy="open"` and include `"*"` in the channel allowlist (`allowFrom` / `channels.discord.dm.allowFrom` / `channels.slack.dm.allowFrom`).
@@ -132,6 +134,7 @@ Run `moltbot doctor` to surface risky/misconfigured DM policies.
 ## Everything we built so far
 
 ### Core platform
+
 - [Gateway WS control plane](https://docs.molt.bot/gateway) with sessions, presence, config, cron, webhooks, [Control UI](https://docs.molt.bot/web), and [Canvas host](https://docs.molt.bot/platforms/mac/canvas#canvas-a2ui).
 - [CLI surface](https://docs.molt.bot/tools/agent-send): gateway, agent, send, [wizard](https://docs.molt.bot/start/wizard), and [doctor](https://docs.molt.bot/gateway/doctor).
 - [Pi agent runtime](https://docs.molt.bot/concepts/agent) in RPC mode with tool streaming and block streaming.
@@ -139,16 +142,19 @@ Run `moltbot doctor` to surface risky/misconfigured DM policies.
 - [Media pipeline](https://docs.molt.bot/nodes/images): images/audio/video, transcription hooks, size caps, temp file lifecycle. Audio details: [Audio](https://docs.molt.bot/nodes/audio).
 
 ### Channels
+
 - [Channels](https://docs.molt.bot/channels): [WhatsApp](https://docs.molt.bot/channels/whatsapp) (Baileys), [Telegram](https://docs.molt.bot/channels/telegram) (grammY), [Slack](https://docs.molt.bot/channels/slack) (Bolt), [Discord](https://docs.molt.bot/channels/discord) (discord.js), [Google Chat](https://docs.molt.bot/channels/googlechat) (Chat API), [Signal](https://docs.molt.bot/channels/signal) (signal-cli), [iMessage](https://docs.molt.bot/channels/imessage) (imsg), [BlueBubbles](https://docs.molt.bot/channels/bluebubbles) (extension), [Microsoft Teams](https://docs.molt.bot/channels/msteams) (extension), [Matrix](https://docs.molt.bot/channels/matrix) (extension), [Zalo](https://docs.molt.bot/channels/zalo) (extension), [Zalo Personal](https://docs.molt.bot/channels/zalouser) (extension), [WebChat](https://docs.molt.bot/web/webchat).
 - [Group routing](https://docs.molt.bot/concepts/group-messages): mention gating, reply tags, per-channel chunking and routing. Channel rules: [Channels](https://docs.molt.bot/channels).
 
 ### Apps + nodes
+
 - [macOS app](https://docs.molt.bot/platforms/macos): menu bar control plane, [Voice Wake](https://docs.molt.bot/nodes/voicewake)/PTT, [Talk Mode](https://docs.molt.bot/nodes/talk) overlay, [WebChat](https://docs.molt.bot/web/webchat), debug tools, [remote gateway](https://docs.molt.bot/gateway/remote) control.
 - [iOS node](https://docs.molt.bot/platforms/ios): [Canvas](https://docs.molt.bot/platforms/mac/canvas), [Voice Wake](https://docs.molt.bot/nodes/voicewake), [Talk Mode](https://docs.molt.bot/nodes/talk), camera, screen recording, Bonjour pairing.
 - [Android node](https://docs.molt.bot/platforms/android): [Canvas](https://docs.molt.bot/platforms/mac/canvas), [Talk Mode](https://docs.molt.bot/nodes/talk), camera, screen recording, optional SMS.
 - [macOS node mode](https://docs.molt.bot/nodes): system.run/notify + canvas/camera exposure.
 
 ### Tools + automation
+
 - [Browser control](https://docs.molt.bot/tools/browser): dedicated clawd Chrome/Chromium, snapshots, actions, uploads, profiles.
 - [Canvas](https://docs.molt.bot/platforms/mac/canvas): [A2UI](https://docs.molt.bot/platforms/mac/canvas#canvas-a2ui) push/reset, eval, snapshot.
 - [Nodes](https://docs.molt.bot/nodes): camera snap/clip, screen record, [location.get](https://docs.molt.bot/nodes/location-command), notifications.
@@ -156,12 +162,14 @@ Run `moltbot doctor` to surface risky/misconfigured DM policies.
 - [Skills platform](https://docs.molt.bot/tools/skills): bundled, managed, and workspace skills with install gating + UI.
 
 ### Runtime + safety
+
 - [Channel routing](https://docs.molt.bot/concepts/channel-routing), [retry policy](https://docs.molt.bot/concepts/retry), and [streaming/chunking](https://docs.molt.bot/concepts/streaming).
 - [Presence](https://docs.molt.bot/concepts/presence), [typing indicators](https://docs.molt.bot/concepts/typing-indicators), and [usage tracking](https://docs.molt.bot/concepts/usage-tracking).
 - [Models](https://docs.molt.bot/concepts/models), [model failover](https://docs.molt.bot/concepts/model-failover), and [session pruning](https://docs.molt.bot/concepts/session-pruning).
 - [Security](https://docs.molt.bot/gateway/security) and [troubleshooting](https://docs.molt.bot/channels/troubleshooting).
 
 ### Ops + packaging
+
 - [Control UI](https://docs.molt.bot/web) + [WebChat](https://docs.molt.bot/web/webchat) served directly from the Gateway.
 - [Tailscale Serve/Funnel](https://docs.molt.bot/gateway/tailscale) or [SSH tunnels](https://docs.molt.bot/gateway/remote) with token/password auth.
 - [Nix mode](https://docs.molt.bot/install/nix) for declarative config; [Docker](https://docs.molt.bot/install/docker)-based installs.
@@ -204,6 +212,7 @@ Moltbot can auto-configure Tailscale **Serve** (tailnet-only) or **Funnel** (pub
 - `funnel`: public HTTPS via `tailscale funnel` (requires shared password auth).
 
 Notes:
+
 - `gateway.bind` must stay `loopback` when Serve/Funnel is enabled (Moltbot enforces this).
 - Serve can be forced to require a password by setting `gateway.auth.mode: "password"` or `gateway.auth.allowTailscale: false`.
 - Funnel refuses to start unless `gateway.auth.mode: "password"` is set.
@@ -217,7 +226,7 @@ It’s perfectly fine to run the Gateway on a small Linux instance. Clients (mac
 
 - **Gateway host** runs the exec tool and channel connections by default.
 - **Device nodes** run device‑local actions (`system.run`, camera, screen recording, notifications) via `node.invoke`.
-In short: exec runs where the Gateway lives; device actions run where the device lives.
+  In short: exec runs where the Gateway lives; device actions run where the device lives.
 
 Details: [Remote access](https://docs.molt.bot/gateway/remote) · [Nodes](https://docs.molt.bot/nodes) · [Security](https://docs.molt.bot/gateway/security)
 
@@ -236,7 +245,7 @@ Elevated bash (host permissions) is separate from macOS TCC:
 
 Details: [Nodes](https://docs.molt.bot/nodes) · [macOS app](https://docs.molt.bot/platforms/macos) · [Gateway protocol](https://docs.molt.bot/concepts/architecture)
 
-## Agent to Agent (sessions_* tools)
+## Agent to Agent (sessions\_\* tools)
 
 - Use these to coordinate work across sessions without jumping between chat surfaces.
 - `sessions_list` — discover active sessions (agents) and their metadata.
@@ -306,8 +315,8 @@ Minimal `~/.moltbot/moltbot.json` (model + defaults):
 ```json5
 {
   agent: {
-    model: "anthropic/claude-opus-4-5"
-  }
+    model: "anthropic/claude-opus-4-5",
+  },
 }
 ```
 
@@ -336,9 +345,9 @@ Details: [Security guide](https://docs.molt.bot/gateway/security) · [Docker + s
 {
   channels: {
     telegram: {
-      botToken: "123456:ABCDEF"
-    }
-  }
+      botToken: "123456:ABCDEF",
+    },
+  },
 }
 ```
 
@@ -355,9 +364,9 @@ Details: [Security guide](https://docs.molt.bot/gateway/security) · [Docker + s
 {
   channels: {
     discord: {
-      token: "1234abcd"
-    }
-  }
+      token: "1234abcd",
+    },
+  },
 }
 ```
 
@@ -385,14 +394,15 @@ Browser control (optional):
 {
   browser: {
     enabled: true,
-    color: "#FF4500"
-  }
+    color: "#FF4500",
+  },
 }
 ```
 
 ## Docs
 
 Use these when you’re past the onboarding flow and want the deeper reference.
+
 - [Start with the docs index for navigation and “what’s where.”](https://docs.molt.bot)
 - [Read the architecture overview for the gateway + protocol model.](https://docs.molt.bot/concepts/architecture)
 - [Use the full configuration reference when you need every key and example.](https://docs.molt.bot/gateway/configuration)
