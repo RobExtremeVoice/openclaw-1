@@ -39,7 +39,7 @@ if [ ! -f "$CONFIG_FILE" ] && [ -n "$REDPILL_API_KEY" ]; then
     --mode local \
     --auth-choice redpill-api-key \
     --workspace "${CLAWDBOT_WORKSPACE_DIR:-/data/workspace}" \
-    --gateway-bind loopback \
+    --gateway-bind ${GATEWAY_BIND:-loopback} \
     $GATEWAY_AUTH_ARGS \
     --skip-daemon \
     --skip-skills \
@@ -86,6 +86,6 @@ fi
 
 # Start the gateway
 exec node dist/index.js gateway \
-  --bind loopback \
+  --bind ${GATEWAY_BIND:-loopback} \
   --port "${GATEWAY_PORT:-18789}" \
   --allow-unconfigured
