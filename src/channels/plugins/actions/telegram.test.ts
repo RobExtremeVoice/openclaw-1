@@ -118,4 +118,83 @@ describe("telegramMessageActions", () => {
 
     expect(handleTelegramAction).not.toHaveBeenCalled();
   });
+
+  it("excludes forum topic actions when not enabled", () => {
+    const cfg = { channels: { telegram: { botToken: "tok" } } } as ClawdbotConfig;
+    const actions = telegramMessageActions.listActions({ cfg });
+    expect(actions).not.toContain("thread-create");
+    expect(actions).not.toContain("thread-edit");
+    expect(actions).not.toContain("thread-close");
+    expect(actions).not.toContain("thread-reopen");
+    expect(actions).not.toContain("thread-delete");
+  });
+
+  it("includes forum topic actions when forumTopics is enabled", () => {
+    const cfg = {
+      channels: { telegram: { botToken: "tok", actions: { forumTopics: true } } },
+    } as ClawdbotConfig;
+    const actions = telegramMessageActions.listActions({ cfg });
+    expect(actions).toContain("thread-create");
+    expect(actions).toContain("thread-edit");
+    expect(actions).toContain("thread-close");
+    expect(actions).toContain("thread-reopen");
+    expect(actions).toContain("thread-delete");
+  });
+
+  it("maps thread-create action to createForumTopic", async () => {
+    handleTelegramAction.mockClear();
+    const cfg = {
+      channels: { telegram: { botToken: "tok", actions: { forumTopics: true } } },
+    } as ClawdbotConfig;
+
+    await telegramMessageActions.handleAction({
+      action: "thread-create",
+      params: {
+        target: "-1001234567890",
+        threadName: "Test Topic",
+        iconColor: 7322096,
+      },
+      cfg,
+      accountId: undefined,
+    });
+
+    expect(handleTelegramAction).toHaveBeenCalledWith(
+      {
+        action: "createForumTopic",
+        chatId: "-1001234567890",
+        name: "Test Topic",
+        iconColor: 7322096,
+        iconCustomEmojiId: undefined,
+        accountId: undefined,
+      },
+      cfg,
+    );
+  });
+
+  it("maps thread-close action to closeForumTopic", async () => {
+    handleTelegramAction.mockClear();
+    const cfg = {
+      channels: { telegram: { botToken: "tok", actions: { forumTopics: true } } },
+    } as ClawdbotConfig;
+
+    await telegramMessageActions.handleAction({
+      action: "thread-close",
+      params: {
+        target: "-1001234567890",
+        threadId: 42,
+      },
+      cfg,
+      accountId: undefined,
+    });
+
+    expect(handleTelegramAction).toHaveBeenCalledWith(
+      {
+        action: "closeForumTopic",
+        chatId: "-1001234567890",
+        messageThreadId: 42,
+        accountId: undefined,
+      },
+      cfg,
+    );
+  });
 });

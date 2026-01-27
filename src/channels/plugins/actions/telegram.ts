@@ -50,6 +50,13 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
       actions.add("sticker");
       actions.add("sticker-search");
     }
+    if (gate("forumTopics", false)) {
+      actions.add("thread-create");
+      actions.add("thread-edit");
+      actions.add("thread-close");
+      actions.add("thread-reopen");
+      actions.add("thread-delete");
+    }
     return Array.from(actions);
   },
   supportsButtons: ({ cfg }) => {
@@ -175,6 +182,112 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
           action: "searchSticker",
           query,
           limit: limit ?? undefined,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    // Forum topic management actions
+    if (action === "thread-create") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "target") ??
+        readStringParam(params, "to", { required: true });
+      const name = readStringParam(params, "threadName", { required: true });
+      const iconColor = readNumberParam(params, "iconColor", { integer: true });
+      const iconCustomEmojiId = readStringParam(params, "iconCustomEmojiId");
+      return await handleTelegramAction(
+        {
+          action: "createForumTopic",
+          chatId,
+          name,
+          iconColor: iconColor ?? undefined,
+          iconCustomEmojiId: iconCustomEmojiId ?? undefined,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "thread-edit") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "target") ??
+        readStringParam(params, "to", { required: true });
+      const messageThreadId = readNumberParam(params, "threadId", {
+        required: true,
+        integer: true,
+      });
+      const name = readStringParam(params, "threadName");
+      const iconCustomEmojiId = readStringParam(params, "iconCustomEmojiId");
+      return await handleTelegramAction(
+        {
+          action: "editForumTopic",
+          chatId,
+          messageThreadId,
+          name: name ?? undefined,
+          iconCustomEmojiId: iconCustomEmojiId ?? undefined,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "thread-close") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "target") ??
+        readStringParam(params, "to", { required: true });
+      const messageThreadId = readNumberParam(params, "threadId", {
+        required: true,
+        integer: true,
+      });
+      return await handleTelegramAction(
+        {
+          action: "closeForumTopic",
+          chatId,
+          messageThreadId,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "thread-reopen") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "target") ??
+        readStringParam(params, "to", { required: true });
+      const messageThreadId = readNumberParam(params, "threadId", {
+        required: true,
+        integer: true,
+      });
+      return await handleTelegramAction(
+        {
+          action: "reopenForumTopic",
+          chatId,
+          messageThreadId,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "thread-delete") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "target") ??
+        readStringParam(params, "to", { required: true });
+      const messageThreadId = readNumberParam(params, "threadId", {
+        required: true,
+        integer: true,
+      });
+      return await handleTelegramAction(
+        {
+          action: "deleteForumTopic",
+          chatId,
+          messageThreadId,
           accountId: accountId ?? undefined,
         },
         cfg,

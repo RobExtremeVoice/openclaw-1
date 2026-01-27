@@ -15,6 +15,11 @@ export function registerMessageThreadCommands(message: Command, helpers: Message
     )
     .option("--message-id <id>", "Message id (optional)")
     .option("--auto-archive-min <n>", "Thread auto-archive minutes")
+    .option(
+      "--icon-color <color>",
+      "Icon color (Telegram: 7322096=blue, 16766590=yellow, 13338331=violet, 9367192=green, 16749490=rose, 16478047=red)",
+    )
+    .option("--icon-custom-emoji-id <id>", "Custom emoji id for topic icon (Telegram Premium)")
     .action(async (opts) => {
       await helpers.runMessageAction("thread-create", opts);
     });
@@ -50,5 +55,60 @@ export function registerMessageThreadCommands(message: Command, helpers: Message
     .option("--reply-to <id>", "Reply-to message id")
     .action(async (opts) => {
       await helpers.runMessageAction("thread-reply", opts);
+    });
+
+  // Telegram forum topic management commands
+  helpers
+    .withMessageBase(
+      helpers.withRequiredMessageTarget(
+        thread
+          .command("edit")
+          .description("Edit a thread/topic (Telegram forums)")
+          .requiredOption("--thread-id <id>", "Thread/topic id"),
+      ),
+    )
+    .option("--thread-name <name>", "New thread name")
+    .option("--icon-custom-emoji-id <id>", "Custom emoji id for topic icon")
+    .action(async (opts) => {
+      await helpers.runMessageAction("thread-edit", opts);
+    });
+
+  helpers
+    .withMessageBase(
+      helpers.withRequiredMessageTarget(
+        thread
+          .command("close")
+          .description("Close a thread/topic (Telegram forums)")
+          .requiredOption("--thread-id <id>", "Thread/topic id"),
+      ),
+    )
+    .action(async (opts) => {
+      await helpers.runMessageAction("thread-close", opts);
+    });
+
+  helpers
+    .withMessageBase(
+      helpers.withRequiredMessageTarget(
+        thread
+          .command("reopen")
+          .description("Reopen a closed thread/topic (Telegram forums)")
+          .requiredOption("--thread-id <id>", "Thread/topic id"),
+      ),
+    )
+    .action(async (opts) => {
+      await helpers.runMessageAction("thread-reopen", opts);
+    });
+
+  helpers
+    .withMessageBase(
+      helpers.withRequiredMessageTarget(
+        thread
+          .command("delete")
+          .description("Delete a thread/topic and all its messages (Telegram forums)")
+          .requiredOption("--thread-id <id>", "Thread/topic id"),
+      ),
+    )
+    .action(async (opts) => {
+      await helpers.runMessageAction("thread-delete", opts);
     });
 }
