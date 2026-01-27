@@ -222,6 +222,14 @@ const entries: SubCliEntry[] = [
       mod.registerUpdateCli(program);
     },
   },
+  {
+    name: "recall",
+    description: "Memory manager web UI",
+    register: async (program) => {
+      const mod = await import("../recall-cli.js");
+      mod.registerRecallCli(program);
+    },
+  },
 ];
 
 function removeCommand(program: Command, command: Command) {
