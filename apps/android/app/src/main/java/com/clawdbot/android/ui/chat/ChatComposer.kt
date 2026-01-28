@@ -28,6 +28,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
@@ -75,7 +77,9 @@ fun ChatComposer(
   attachments: List<PendingImageAttachment>,
   seamColor: Color = Color(0xFF3B82F6),
   talkEnabled: Boolean = false,
+  onOpenCamera: () -> Unit = {},
   onPickImages: () -> Unit,
+  onPickFiles: () -> Unit = {},
   onRemoveAttachment: (id: String) -> Unit,
   onSetThinkingLevel: (level: String) -> Unit,
   onSelectSession: (sessionKey: String) -> Unit,
@@ -143,20 +147,63 @@ fun ChatComposer(
           DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
+            modifier = Modifier.background(Color(0xFF1E1E2E)), // Darker shade
           ) {
+            // Attachment buttons row: Camera | Photos | Files
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              AttachmentButton(
+                icon = Icons.Default.CameraAlt,
+                label = "Camera",
+                onClick = {
+                  showMenu = false
+                  onOpenCamera()
+                },
+                modifier = Modifier.weight(1f),
+              )
+              AttachmentButton(
+                icon = Icons.Default.Image,
+                label = "Photos",
+                onClick = {
+                  showMenu = false
+                  onPickImages()
+                },
+                modifier = Modifier.weight(1f),
+              )
+              AttachmentButton(
+                icon = Icons.Default.AttachFile,
+                label = "Files",
+                onClick = {
+                  showMenu = false
+                  onPickFiles()
+                },
+                modifier = Modifier.weight(1f),
+              )
+            }
+            
+            HorizontalDivider(
+              modifier = Modifier.padding(vertical = 8.dp),
+              color = Color.White.copy(alpha = 0.1f),
+            )
+            
             // Session selector
             DropdownMenuItem(
-              text = { Text("Session: $currentSessionLabel") },
+              text = { Text("Session", color = Color.White) },
               onClick = { 
                 showMenu = false
                 showSessionMenu = true 
               },
-              leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+              leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White.copy(alpha = 0.7f)) },
+              trailingIcon = { Text(currentSessionLabel, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall) },
             )
             
             // Thinking level
             DropdownMenuItem(
-              text = { Text("Thinking: ${thinkingLabel(thinkingLevel)}") },
+              text = { Text("Thinking", color = Color.White) },
               onClick = { 
                 showMenu = false
                 showThinkingMenu = true 
@@ -164,28 +211,22 @@ fun ChatComposer(
               leadingIcon = { 
                 Text("🧠", style = MaterialTheme.typography.bodyLarge) 
               },
+              trailingIcon = { Text(thinkingLabel(thinkingLevel), color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall) },
             )
             
-            HorizontalDivider()
-            
-            // Attach file
-            DropdownMenuItem(
-              text = { Text("Attach image") },
-              onClick = { 
-                showMenu = false
-                onPickImages() 
-              },
-              leadingIcon = { Icon(Icons.Default.AttachFile, contentDescription = null) },
+            HorizontalDivider(
+              modifier = Modifier.padding(vertical = 8.dp),
+              color = Color.White.copy(alpha = 0.1f),
             )
             
             // Refresh
             DropdownMenuItem(
-              text = { Text("Refresh") },
+              text = { Text("Refresh", color = Color.White) },
               onClick = { 
                 showMenu = false
                 onRefresh() 
               },
-              leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+              leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White.copy(alpha = 0.7f)) },
             )
           }
         }
@@ -291,6 +332,40 @@ fun ChatComposer(
 
     // Connection status pill (compact)
     ConnectionPill(sessionLabel = currentSessionLabel, healthOk = healthOk)
+  }
+}
+
+@Composable
+private fun AttachmentButton(
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  label: String,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    onClick = onClick,
+    modifier = modifier.height(80.dp),
+    shape = RoundedCornerShape(12.dp),
+    color = Color(0xFF2A2A3E),
+  ) {
+    Column(
+      modifier = Modifier.padding(12.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+    ) {
+      Icon(
+        icon,
+        contentDescription = label,
+        tint = Color.White.copy(alpha = 0.8f),
+        modifier = Modifier.size(24.dp),
+      )
+      Spacer(Modifier.height(6.dp))
+      Text(
+        label,
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White.copy(alpha = 0.8f),
+      )
+    }
   }
 }
 
