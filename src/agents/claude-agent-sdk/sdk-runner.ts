@@ -28,14 +28,17 @@ import type {
   SdkRunnerResult,
   SdkUsageStats,
   SdkCompletedToolCall,
+  SdkProviderEnv,
 } from "./types.js";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import type { CcSdkModelTiers } from "../../config/types.agents.js";
 import {
-  isMessagingTool,
   isMessagingToolSendAction,
   type MessagingToolSend,
 } from "../pi-embedded-messaging.js";
 import { extractMessagingToolSend } from "../pi-embedded-subscribe.tools.js";
+import { buildSystemPromptAdditionsFromParams } from "./system-prompt.js";
+import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 // Session transcript recording is done in sdk-agent-runtime.ts, which receives
 // completedToolCalls from the result and passes them to appendSdkToolCallsToSessionTranscript.
 
@@ -140,6 +143,32 @@ function normalizeUsageObject(obj: Record<string, unknown>): SdkUsageStats | und
 const DEFAULT_MAX_EXTRACTED_CHARS = 120_000;
 const DEFAULT_MCP_SERVER_NAME = "moltbot";
 const DEFAULT_MAX_TURNS = 50;
+
+// ---------------------------------------------------------------------------
+// Model tier environment helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build environment variables for model tier configuration.
+ *
+ * The Claude Code SDK uses these environment variables to select models
+ * for different task complexity tiers.
+ */
+function buildModelTierEnv(modelTiers?: CcSdkModelTiers): SdkProviderEnv {
+  const env: SdkProviderEnv = {};
+
+  if (modelTiers?.haiku) {
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = modelTiers.haiku;
+  }
+  if (modelTiers?.sonnet) {
+    env.ANTHROPIC_DEFAULT_SONNET_MODEL = modelTiers.sonnet;
+  }
+  if (modelTiers?.opus) {
+    env.ANTHROPIC_DEFAULT_OPUS_MODEL = modelTiers.opus;
+  }
+
+  return env;
+}
 
 // ---------------------------------------------------------------------------
 // Event classification helpers
@@ -315,6 +344,32 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
   emitEvent("sdk", { type: "sdk_runner_start", runId: params.runId });
 
   // -------------------------------------------------------------------------
+  // Step 0: Run before_agent_start hooks
+  // -------------------------------------------------------------------------
+
+  const hookRunner = getGlobalHookRunner();
+  let effectivePrompt = params.prompt;
+
+  if (hookRunner?.hasHooks("before_agent_start")) {
+    try {
+      const hookResult = await hookRunner.runBeforeAgentStart(
+        { prompt: params.prompt, messages: [] },
+        {
+          agentId: params.agentId ?? params.sessionKey?.split(":")[0] ?? "main",
+          sessionKey: params.sessionKey,
+          workspaceDir: params.workspaceDir,
+        },
+      );
+      if (hookResult?.prependContext) {
+        effectivePrompt = `${hookResult.prependContext}\n\n${params.prompt}`;
+        log.debug(`hooks: prepended context to prompt (${hookResult.prependContext.length} chars)`);
+      }
+    } catch (hookErr) {
+      log.warn(`before_agent_start hook failed: ${String(hookErr)}`);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Step 1: Load the Claude Agent SDK
   // -------------------------------------------------------------------------
 
@@ -452,6 +507,7 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
     sdkOptions.permissionMode = params.permissionMode;
   }
 
+<<<<<<< Updated upstream
   // Native session resume (preferred) or history injection fallback.
   // When claudeSessionId is provided, use the SDK's native resume feature
   // instead of injecting history into the system prompt.
@@ -468,20 +524,45 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
   const historySuffix = useNativeSessionResume
     ? "" // Skip history injection when using native resume
     : buildHistorySystemPromptSuffix(params.conversationHistory);
+=======
+  // System prompt (with Moltbot-specific additions and conversation history suffix).
+  const systemPromptAdditions = buildSystemPromptAdditionsFromParams({
+    agentId: params.agentId,
+    sessionKey: params.sessionKey,
+    workspaceDir: params.workspaceDir,
+    timezone: params.timezone,
+    messageChannel: params.messageChannel,
+    channelHints: params.channelHints,
+    skills: params.skills,
+  });
+  const historySuffix = buildHistorySystemPromptSuffix(params.conversationHistory);
+>>>>>>> Stashed changes
   const baseSystemPrompt = params.systemPrompt ?? params.extraSystemPrompt;
-  if (baseSystemPrompt || historySuffix) {
-    sdkOptions.systemPrompt = (baseSystemPrompt ?? "") + historySuffix;
+  const combinedSystemPrompt = [systemPromptAdditions, baseSystemPrompt, historySuffix]
+    .filter(Boolean)
+    .join("\n\n");
+  if (combinedSystemPrompt) {
+    sdkOptions.systemPrompt = combinedSystemPrompt;
   }
 
-  // Provider env overrides (z.AI, custom endpoints, etc.).
+  // Provider env overrides (z.AI, custom endpoints, etc.) and model tier config.
+  const envOverrides: Record<string, string> = {};
+
+  // Add provider env vars.
   if (params.providerConfig?.env) {
-    const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(params.providerConfig.env)) {
-      if (value !== undefined) env[key] = value;
+      if (value !== undefined) envOverrides[key] = value;
     }
-    if (Object.keys(env).length > 0) {
-      sdkOptions.env = env;
-    }
+  }
+
+  // Add model tier env vars.
+  const modelTierEnv = buildModelTierEnv(params.modelTiers);
+  for (const [key, value] of Object.entries(modelTierEnv)) {
+    if (value !== undefined) envOverrides[key] = value;
+  }
+
+  if (Object.keys(envOverrides).length > 0) {
+    sdkOptions.env = envOverrides;
   }
 
   // Model override from provider config.
@@ -510,8 +591,8 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
   // -------------------------------------------------------------------------
 
   const prompt = buildSdkPrompt({
-    prompt: params.prompt,
-    systemPrompt: baseSystemPrompt,
+    prompt: effectivePrompt,
+    systemPrompt: combinedSystemPrompt,
   });
 
   // -------------------------------------------------------------------------
@@ -929,6 +1010,26 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
     aborted,
     truncated,
   });
+
+  // Run agent_end hooks (fire-and-forget).
+  if (hookRunner?.hasHooks("agent_end")) {
+    hookRunner
+      .runAgentEnd(
+        {
+          messages: [],
+          success: !aborted,
+          durationMs: Date.now() - startedAt,
+        },
+        {
+          agentId: params.agentId ?? params.sessionKey?.split(":")[0] ?? "main",
+          sessionKey: params.sessionKey,
+          workspaceDir: params.workspaceDir,
+        },
+      )
+      .catch((err) => {
+        log.warn(`agent_end hook failed: ${err}`);
+      });
+  }
 
   return {
     payloads: [{ text: finalText }],
