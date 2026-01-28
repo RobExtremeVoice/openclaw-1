@@ -1,7 +1,6 @@
 import type { AgentMail } from "agentmail";
 
-import { resolveCredentials } from "./accounts.js";
-import { getAgentMailClient } from "./client.js";
+import { getAgentMailClient, getResolvedCredentials, NOT_CONFIGURED_ERROR } from "./client.js";
 import { getAgentMailRuntime } from "./runtime.js";
 import { checkSenderAllowed, labelMessageAllowed } from "./filtering.js";
 import { extractMessageBody, fetchFormattedThread } from "./thread.js";
@@ -54,9 +53,9 @@ export async function monitorAgentMailProvider(
   };
 
   const accountId = opts.accountId ?? "default";
-  const { apiKey, inboxId } = resolveCredentials(cfg);
+  const { apiKey, inboxId } = getResolvedCredentials();
   if (!apiKey || !inboxId) {
-    logger.warn("AgentMail not configured (missing token or email address)");
+    logger.warn(NOT_CONFIGURED_ERROR);
     return;
   }
 

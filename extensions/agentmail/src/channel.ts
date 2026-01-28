@@ -8,8 +8,8 @@ import {
   type ChannelPlugin,
 } from "clawdbot/plugin-sdk";
 
-import { resolveAgentMailAccount, resolveCredentials } from "./accounts.js";
-import { getAgentMailClient } from "./client.js";
+import { resolveAgentMailAccount } from "./accounts.js";
+import { getAgentMailClient, getResolvedCredentials, NOT_CONFIGURED_ERROR } from "./client.js";
 import { AgentMailConfigSchema } from "./config-schema.js";
 import { agentmailOnboardingAdapter } from "./onboarding.js";
 import { agentmailOutbound } from "./outbound.js";
@@ -70,13 +70,9 @@ export const agentmailPlugin: ChannelPlugin<ResolvedAgentMailAccount> = {
       emailAddress: account.inboxId,
     }),
     resolveAllowFrom: ({ cfg }) =>
-      ((cfg as CoreConfig).channels?.agentmail?.allowFrom ?? []).map((entry) =>
-        String(entry)
-      ),
+      ((cfg as CoreConfig).channels?.agentmail?.allowFrom ?? []).map(String),
     formatAllowFrom: ({ allowFrom }) =>
-      allowFrom
-        .map((entry) => String(entry).toLowerCase().trim())
-        .filter(Boolean),
+      allowFrom.map((e) => String(e).toLowerCase().trim()).filter(Boolean),
   },
 
   security: {
@@ -98,12 +94,7 @@ export const agentmailPlugin: ChannelPlugin<ResolvedAgentMailAccount> = {
   messaging: {
     normalizeTarget: (raw) => raw.trim() || undefined,
     targetResolver: {
-      looksLikeId: (raw) => {
-        const trimmed = raw.trim();
-        if (!trimmed) return false;
-        // Check if it looks like an email
-        return trimmed.includes("@") && trimmed.includes(".");
-      },
+      looksLikeId: (raw) => /\S+@\S+\.\S+/.test(raw.trim()),
       hint: "<email@example.com>",
     },
   },
@@ -164,28 +155,15 @@ export const agentmailPlugin: ChannelPlugin<ResolvedAgentMailAccount> = {
       probe: s.probe,
       lastProbeAt: s.lastProbeAt ?? null,
     }),
-    probeAccount: async ({ cfg }) => {
+    probeAccount: async () => {
       try {
-        const { apiKey, inboxId } = resolveCredentials(cfg as CoreConfig);
-        if (!apiKey || !inboxId)
-          return {
-            ok: false,
-            error: "Missing token or email address",
-            elapsedMs: 0,
-          };
+        const { apiKey, inboxId } = getResolvedCredentials();
+        if (!apiKey || !inboxId) return { ok: false, error: NOT_CONFIGURED_ERROR, elapsedMs: 0 };
         const start = Date.now();
         const inbox = await getAgentMailClient(apiKey).inboxes.get(inboxId);
-        return {
-          ok: true,
-          elapsedMs: Date.now() - start,
-          meta: { inboxId: inbox.inboxId },
-        };
+        return { ok: true, elapsedMs: Date.now() - start, meta: { inboxId: inbox.inboxId } };
       } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-          elapsedMs: 0,
-        };
+        return { ok: false, error: err instanceof Error ? err.message : String(err), elapsedMs: 0 };
       }
     },
     buildAccountSnapshot: ({ account: a, runtime: r, probe }) => ({

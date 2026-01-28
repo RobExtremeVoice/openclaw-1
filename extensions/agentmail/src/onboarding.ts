@@ -1,11 +1,8 @@
 import { AgentMailClient } from "agentmail";
-import type {
-  ChannelOnboardingAdapter,
-  MoltbotConfig,
-} from "clawdbot/plugin-sdk";
+import type { ChannelOnboardingAdapter, MoltbotConfig } from "clawdbot/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "clawdbot/plugin-sdk";
 
-import { resolveAgentMailAccount, resolveCredentials } from "./accounts.js";
+import { resolveAgentMailAccount } from "./accounts.js";
 import type { AgentMailConfig, CoreConfig } from "./utils.js";
 
 const channel = "agentmail" as const;
@@ -55,14 +52,13 @@ export const agentmailOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
 
   getStatus: async ({ cfg }) => {
-    const { apiKey, inboxId } = resolveCredentials(cfg as CoreConfig);
-    const configured = Boolean(apiKey && inboxId);
+    const account = resolveAgentMailAccount({ cfg: cfg as CoreConfig });
     return {
       channel,
-      configured,
-      statusLines: [`AgentMail: ${configured ? `configured (${inboxId})` : "needs token"}`],
-      selectionHint: configured ? "configured" : "not configured",
-      quickstartScore: configured ? 1 : 5,
+      configured: account.configured,
+      statusLines: [`AgentMail: ${account.configured ? `configured (${account.inboxId})` : "needs token"}`],
+      selectionHint: account.configured ? "configured" : "not configured",
+      quickstartScore: account.configured ? 1 : 5,
     };
   },
 
@@ -73,9 +69,6 @@ export const agentmailOnboardingAdapter: ChannelOnboardingAdapter = {
 
     let next = cfg as MoltbotConfig;
     const account = resolveAgentMailAccount({ cfg: next as CoreConfig, accountId });
-    const { apiKey, inboxId } = resolveCredentials(next as CoreConfig);
-    const configured = Boolean(apiKey && inboxId);
-
     const canUseEnv = accountId === DEFAULT_ACCOUNT_ID && Boolean(process.env.AGENTMAIL_TOKEN?.trim());
 
     // If env var token is available and not already configured, offer to use it
@@ -92,9 +85,9 @@ export const agentmailOnboardingAdapter: ChannelOnboardingAdapter = {
     }
 
     // If already configured, ask to keep
-    if (configured) {
+    if (account.configured) {
       const keep = await prompter.confirm({
-        message: `AgentMail already configured (${inboxId}). Keep current settings?`,
+        message: `AgentMail already configured (${account.inboxId}). Keep current settings?`,
         initialValue: true,
       });
       if (keep) return { cfg: next };

@@ -1,4 +1,5 @@
 import type { AgentMail } from "agentmail";
+import type { MoltbotConfig } from "clawdbot/plugin-sdk";
 import type { z } from "zod";
 
 import type { AgentMailConfigSchema } from "./config-schema.js";
@@ -6,16 +7,9 @@ import type { AgentMailConfigSchema } from "./config-schema.js";
 /** AgentMail channel configuration. */
 export type AgentMailConfig = z.infer<typeof AgentMailConfigSchema>;
 
-/** Core config shape with AgentMail channel. */
-export type CoreConfig = {
-  channels?: {
-    agentmail?: AgentMailConfig;
-  };
-  session?: {
-    store?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
+/** Core config with AgentMail channel typed. */
+export type CoreConfig = MoltbotConfig & {
+  channels?: { agentmail?: AgentMailConfig };
 };
 
 /** Resolved AgentMail account with runtime state. */

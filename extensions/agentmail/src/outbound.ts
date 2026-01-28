@@ -4,7 +4,7 @@ import type { ChannelOutboundAdapter } from "clawdbot/plugin-sdk";
 import { getClientAndInbox } from "./client.js";
 import { getAgentMailRuntime } from "./runtime.js";
 
-/** Sends a reply to an email message via AgentMail. */
+/** Sends a reply-all to an email message via AgentMail. */
 export async function sendAgentMailReply(params: {
   client: AgentMailClient;
   inboxId: string;
@@ -12,24 +12,23 @@ export async function sendAgentMailReply(params: {
   text: string;
   html?: string;
 }): Promise<{ messageId: string; threadId: string }> {
-  const { client, inboxId, messageId, text, html } = params;
-  return client.inboxes.messages.reply(inboxId, messageId, { text, html });
+  return params.client.inboxes.messages.replyAll(params.inboxId, params.messageId, {
+    text: params.text,
+    html: params.html,
+  });
 }
 
-/** Sends a message (reply or new) and returns standardized result. */
+/** Sends a message (reply-all or new) and returns standardized result. */
 async function sendMessage(params: {
   to: string;
   text: string;
   html?: string;
   replyToId?: string;
 }): Promise<{ channel: "agentmail"; messageId: string; threadId: string }> {
-  const { to, text, html, replyToId } = params;
   const { client, inboxId } = getClientAndInbox();
-
-  const result = replyToId
-    ? await client.inboxes.messages.reply(inboxId, replyToId, { text, html })
-    : await client.inboxes.messages.send(inboxId, { to: [to], text, html });
-
+  const result = params.replyToId
+    ? await client.inboxes.messages.replyAll(inboxId, params.replyToId, { text: params.text, html: params.html })
+    : await client.inboxes.messages.send(inboxId, { to: [params.to], text: params.text, html: params.html });
   return { channel: "agentmail", ...result };
 }
 

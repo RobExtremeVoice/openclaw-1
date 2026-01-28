@@ -1,10 +1,9 @@
 import type { AgentMailClient, AgentMail } from "agentmail";
 
 import { formatAttachments } from "./attachment.js";
-import { formatUtcDate } from "./utils.js";
+import { formatUtcDate, type Message } from "./utils.js";
 
 type Thread = AgentMail.threads.Thread;
-type Message = AgentMail.messages.Message;
 
 /**
  * Extracts the body text from a message, preferring extractedText.
