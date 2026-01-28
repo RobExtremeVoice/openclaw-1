@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
@@ -192,50 +191,6 @@ export async function runAgentTurnWithFallback(params: {
                     stream: "assistant",
                     data: { text: cliText },
                   });
-                }
-                // Write CLI result to transcript for subagent announce flow
-                if (cliText && params.sessionKey && params.followupRun.run.sessionId) {
-                  try {
-                    const agentId = resolveAgentIdFromSessionKey(params.sessionKey);
-                    const transcriptPath = resolveSessionTranscriptPath(
-                      params.followupRun.run.sessionId,
-                      agentId,
-                    );
-                    // Ensure directory exists
-                    fs.mkdirSync(path.dirname(transcriptPath), { recursive: true });
-                    // Create session header if file doesn't exist
-                    if (!fs.existsSync(transcriptPath)) {
-                      const header = {
-                        type: "session",
-                        version: 1,
-                        id: params.followupRun.run.sessionId,
-                        timestamp: new Date().toISOString(),
-                        cwd: process.cwd(),
-                      };
-                      fs.writeFileSync(transcriptPath, JSON.stringify(header) + "\n", "utf-8");
-                    }
-                    // Append assistant message
-                    const messageEntry = {
-                      type: "message",
-                      id: crypto.randomUUID().slice(0, 8),
-                      timestamp: new Date().toISOString(),
-                      message: {
-                        role: "assistant",
-                        content: [{ type: "text", text: cliText }],
-                        timestamp: Date.now(),
-                        stopReason: "cli",
-                        usage: result.meta?.agentMeta?.usage ?? {
-                          input: 0,
-                          output: 0,
-                          totalTokens: 0,
-                        },
-                      },
-                    };
-                    fs.appendFileSync(transcriptPath, JSON.stringify(messageEntry) + "\n", "utf-8");
-                  } catch (err) {
-                    // Best effort - don't fail the run if transcript write fails
-                    logVerbose(`CLI transcript write failed: ${String(err)}`);
-                  }
                 }
                 emitAgentEvent({
                   runId,
