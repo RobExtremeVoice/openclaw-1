@@ -56,4 +56,6 @@ export type ModelsConfig = {
   mode?: "merge" | "replace";
   providers?: Record<string, ModelProviderConfig>;
   bedrockDiscovery?: BedrockDiscoveryConfig;
+  /** HTTP proxy URL for all LLM API calls (e.g., "http://user:pass@proxy:8080"). */
+  proxy?: string;
 };

@@ -7,6 +7,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import os from "node:os";
 
 import type { ClawdbotConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
@@ -70,6 +71,24 @@ const FEISHU_RESTART_POLICY = {
   factor: 1.8,
   jitter: 0.25,
 };
+
+/**
+ * Get primary local IPv4 address
+ */
+function getLocalIPv4(): string {
+  const nets = os.networkInterfaces();
+  const prefer = ["en0", "eth0", "wlan0"];
+  for (const name of prefer) {
+    const list = nets[name];
+    const entry = list?.find((n) => n.family === "IPv4" && !n.internal);
+    if (entry?.address) return entry.address;
+  }
+  for (const list of Object.values(nets)) {
+    const entry = list?.find((n) => n.family === "IPv4" && !n.internal);
+    if (entry?.address) return entry.address;
+  }
+  return "unknown";
+}
 
 /**
  * Process a Feishu message event
@@ -458,11 +477,42 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
 
   // Verify credentials by getting bot info
   log(`feishu: verifying bot credentials...`);
+  let botName = "unknown";
+  let botOpenId = "unknown";
   try {
     const botInfo = await client.getBotInfo();
-    log(`feishu: connected as "${botInfo.app_name}" (${botInfo.open_id})`);
+    botName = botInfo.app_name ?? "unknown";
+    botOpenId = botInfo.open_id ?? "unknown";
+    log(`feishu: connected as "${botName}" (${botOpenId})`);
   } catch (err) {
     throw new Error(`Feishu authentication failed: ${formatErrorMessage(err)}`);
+  }
+
+  // Send startup message if startupChatId is configured
+  const startupChatId = account.config.startupChatId?.trim();
+  if (startupChatId) {
+    const localIp = getLocalIPv4();
+    const hostname = os.hostname();
+    const version = process.env.CLAWDBOT_VERSION ?? process.env.npm_package_version ?? "unknown";
+    const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+
+    const startupMessage = [
+      `🤖 飞书机器人启动通知`,
+      ``,
+      `机器人: ${botName}`,
+      `Bot ID: ${botOpenId}`,
+      `主机名: ${hostname}`,
+      `本地IP: ${localIp}`,
+      `版本: ${version}`,
+      `启动时间: ${timestamp}`,
+    ].join("\n");
+
+    try {
+      await client.sendTextMessage(startupChatId, startupMessage);
+      log(`feishu: sent startup message to chat ${startupChatId}`);
+    } catch (err) {
+      log(`feishu: failed to send startup message: ${formatErrorMessage(err)}`);
+    }
   }
 
   // Default to websocket mode (recommended, no public URL required)

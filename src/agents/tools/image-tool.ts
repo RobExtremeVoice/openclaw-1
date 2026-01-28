@@ -13,6 +13,7 @@ import { Type } from "@sinclair/typebox";
 
 import type { ClawdbotConfig } from "../../config/config.js";
 import { resolveUserPath } from "../../utils.js";
+import { setupLlmProxy } from "../llm-proxy.js";
 import { loadWebMedia } from "../../web/media.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "../auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
@@ -219,6 +220,9 @@ async function runImagePrompt(params: {
   model: string;
   attempts: Array<{ provider: string; model: string; error: string }>;
 }> {
+  // Set up LLM proxy if configured (must be done before any fetch calls)
+  setupLlmProxy(params.cfg);
+
   const effectiveCfg: ClawdbotConfig | undefined = params.cfg
     ? {
         ...params.cfg,

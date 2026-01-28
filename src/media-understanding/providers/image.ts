@@ -3,6 +3,7 @@ import { complete } from "@mariozechner/pi-ai";
 import { discoverAuthStorage, discoverModels } from "@mariozechner/pi-coding-agent";
 
 import { getApiKeyForModel, requireApiKey } from "../../agents/model-auth.js";
+import { setupLlmProxy } from "../../agents/llm-proxy.js";
 import { ensureClawdbotModelsJson } from "../../agents/models-config.js";
 import { minimaxUnderstandImage } from "../../agents/minimax-vlm.js";
 import { coerceImageAssistantText } from "../../agents/tools/image-tool.helpers.js";
@@ -11,6 +12,9 @@ import type { ImageDescriptionRequest, ImageDescriptionResult } from "../types.j
 export async function describeImageWithModel(
   params: ImageDescriptionRequest,
 ): Promise<ImageDescriptionResult> {
+  // Set up LLM proxy if configured (must be done before any fetch calls)
+  setupLlmProxy(params.cfg);
+
   await ensureClawdbotModelsJson(params.cfg, params.agentDir);
   const authStorage = discoverAuthStorage(params.agentDir);
   const modelRegistry = discoverModels(authStorage, params.agentDir);
