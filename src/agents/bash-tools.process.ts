@@ -98,6 +98,7 @@ export function createProcessTool(
             name: deriveSessionName(s.command),
             tail: s.tail,
             truncated: s.truncated,
+            spawnedBySession: s.sessionKey ?? undefined,
           }));
         const finished = listFinishedSessions()
           .filter((s) => isInScope(s))
@@ -114,6 +115,7 @@ export function createProcessTool(
             truncated: s.truncated,
             exitCode: s.exitCode ?? undefined,
             exitSignal: s.exitSignal ?? undefined,
+            spawnedBySession: s.sessionKey ?? undefined,
           }));
         const lines = [...running, ...finished]
           .sort((a, b) => b.startedAt - a.startedAt)

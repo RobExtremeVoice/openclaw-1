@@ -55,6 +55,7 @@ export interface FinishedSession {
   id: string;
   command: string;
   scopeKey?: string;
+  sessionKey?: string;
   startedAt: number;
   endedAt: number;
   cwd?: string;
@@ -162,6 +163,7 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
     id: session.id,
     command: session.command,
     scopeKey: session.scopeKey,
+    sessionKey: session.sessionKey,
     startedAt: session.startedAt,
     endedAt: Date.now(),
     cwd: session.cwd,
