@@ -85,8 +85,27 @@ export function isHardeningEnabled(cfg: MoltbotConfig): boolean {
 }
 
 /**
+ * Custom error class for security hardening initialization failures.
+ * Thrown when MOLTBOT_HARDENING_ENABLED=1 but modules fail to initialize (fail-safe).
+ */
+export class HardeningInitError extends Error {
+  constructor(
+    message: string,
+    public readonly failedModules: string[],
+  ) {
+    super(message);
+    this.name = "HardeningInitError";
+  }
+}
+
+/**
  * Initialize all security hardening modules.
  * Should be called very early in gateway startup, before any I/O.
+ *
+ * FAIL-SAFE BEHAVIOR: When hardening is explicitly enabled (MOLTBOT_HARDENING_ENABLED=1
+ * or config.security.hardening.enabled=true), any initialization failure will throw
+ * a HardeningInitError. The system must not start in an insecure state when security
+ * is explicitly requested.
  */
 export function initHardening(cfg: MoltbotConfig): {
   active: boolean;
@@ -106,9 +125,20 @@ export function initHardening(cfg: MoltbotConfig): {
   }
 
   const config = resolveHardeningConfig(cfg);
+  const failedModules: string[] = [];
+  const moduleErrors: Record<string, string> = {};
 
   // 1. Initialize audit logger first (all other modules depend on it).
-  initHardeningLogger();
+  try {
+    initHardeningLogger();
+  } catch (err) {
+    // Logger failure is critical - we can't even log what went wrong
+    throw new HardeningInitError(
+      `[hardening] FATAL: Audit logger failed to initialize: ${String(err)}. ` +
+        `Refusing to start with MOLTBOT_HARDENING_ENABLED=1 in insecure state.`,
+      ["hardening-logger"],
+    );
+  }
 
   logSecurityEvent("hardening_init", {
     module: "hardening",
@@ -127,6 +157,8 @@ export function initHardening(cfg: MoltbotConfig): {
       initSingleUserEnforcer({ authorizedUserHash: userHash });
       singleUserActive = true;
     } catch (err) {
+      failedModules.push("single-user-enforcer");
+      moduleErrors["single-user-enforcer"] = String(err);
       logSecurityEvent("hardening_error", {
         module: "single-user-enforcer",
         error: String(err),
@@ -149,6 +181,8 @@ export function initHardening(cfg: MoltbotConfig): {
     });
     networkActive = true;
   } catch (err) {
+    failedModules.push("network-monitor");
+    moduleErrors["network-monitor"] = String(err);
     logSecurityEvent("hardening_error", {
       module: "network-monitor",
       error: String(err),
@@ -166,10 +200,29 @@ export function initHardening(cfg: MoltbotConfig): {
     });
     fsActive = true;
   } catch (err) {
+    failedModules.push("fs-monitor");
+    moduleErrors["fs-monitor"] = String(err);
     logSecurityEvent("hardening_error", {
       module: "fs-monitor",
       error: String(err),
     });
+  }
+
+  // FAIL-SAFE: If any module failed to initialize when hardening is enabled, refuse to start
+  if (failedModules.length > 0) {
+    logSecurityEvent("hardening_error", {
+      module: "hardening",
+      message: "FATAL: Security hardening initialization failed",
+      failedModules,
+      errors: moduleErrors,
+    });
+    closeHardeningLogger();
+    throw new HardeningInitError(
+      `[hardening] FATAL: Failed to initialize security modules: ${failedModules.join(", ")}. ` +
+        `Refusing to start with MOLTBOT_HARDENING_ENABLED=1 in insecure state. ` +
+        `Errors: ${JSON.stringify(moduleErrors)}`,
+      failedModules,
+    );
   }
 
   logSecurityEvent("hardening_init", {

@@ -31,7 +31,12 @@ import {
   isFsMonitorActive,
   isSensitivePath,
 } from "./fs-monitor.js";
-import { initHardening, isHardeningEnabled, teardownHardening } from "./hardening.js";
+import {
+  HardeningInitError,
+  initHardening,
+  isHardeningEnabled,
+  teardownHardening,
+} from "./hardening.js";
 
 // ---------------------------------------------------------------------------
 // Hardening Logger
@@ -545,6 +550,109 @@ describe("hardening integration", () => {
 
   it("initializes without single-user when no hash is provided", () => {
     process.env.MOLTBOT_HARDENING_ENABLED = "1";
+
+    const result = initHardening({});
+    expect(result.active).toBe(true);
+    expect(result.singleUser).toBe(false);
+    expect(result.networkMonitor).toBe(true);
+    expect(result.fsMonitor).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fail-Safe Behavior Tests
+// ---------------------------------------------------------------------------
+
+describe("hardening fail-safe behavior", () => {
+  beforeEach(() => {
+    __resetSingleUserEnforcerForTest();
+    __resetNetworkMonitorForTest();
+    __resetFsMonitorForTest();
+    __resetHardeningLoggerForTest();
+    delete process.env.MOLTBOT_HARDENING_ENABLED;
+    delete process.env.CLAWDBOT_HARDENING_ENABLED;
+    delete process.env.MOLTBOT_AUTHORIZED_USER_HASH;
+    delete process.env.CLAWDBOT_AUTHORIZED_USER_HASH;
+  });
+
+  afterEach(() => {
+    teardownHardening();
+    delete process.env.MOLTBOT_HARDENING_ENABLED;
+    delete process.env.CLAWDBOT_HARDENING_ENABLED;
+    delete process.env.MOLTBOT_AUTHORIZED_USER_HASH;
+    delete process.env.CLAWDBOT_AUTHORIZED_USER_HASH;
+  });
+
+  it("throws HardeningInitError when single-user enforcer fails with invalid hash", () => {
+    process.env.MOLTBOT_HARDENING_ENABLED = "1";
+    process.env.MOLTBOT_AUTHORIZED_USER_HASH = "invalid-not-a-valid-sha256-hash";
+
+    expect(() => initHardening({})).toThrow(HardeningInitError);
+
+    try {
+      initHardening({});
+    } catch (err) {
+      expect(err).toBeInstanceOf(HardeningInitError);
+      const hardeningErr = err as HardeningInitError;
+      expect(hardeningErr.failedModules).toContain("single-user-enforcer");
+      expect(hardeningErr.message).toContain("MOLTBOT_HARDENING_ENABLED=1");
+      expect(hardeningErr.message).toContain("insecure state");
+    }
+  });
+
+  it("does not throw when hardening is disabled even with invalid config", () => {
+    // Hardening disabled - should return inactive without throwing
+    process.env.MOLTBOT_AUTHORIZED_USER_HASH = "invalid-hash";
+
+    const result = initHardening({});
+    expect(result.active).toBe(false);
+  });
+
+  it("HardeningInitError has correct name and properties", () => {
+    process.env.MOLTBOT_HARDENING_ENABLED = "1";
+    process.env.MOLTBOT_AUTHORIZED_USER_HASH = "bad";
+
+    try {
+      initHardening({});
+      expect.fail("Should have thrown HardeningInitError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(HardeningInitError);
+      const hardeningErr = err as HardeningInitError;
+      expect(hardeningErr.name).toBe("HardeningInitError");
+      expect(Array.isArray(hardeningErr.failedModules)).toBe(true);
+      expect(hardeningErr.failedModules.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("error message includes all failed module names", () => {
+    process.env.MOLTBOT_HARDENING_ENABLED = "1";
+    process.env.MOLTBOT_AUTHORIZED_USER_HASH = "not-valid";
+
+    try {
+      initHardening({});
+      expect.fail("Should have thrown");
+    } catch (err) {
+      const hardeningErr = err as HardeningInitError;
+      expect(hardeningErr.message).toContain("single-user-enforcer");
+    }
+  });
+
+  it("succeeds when all modules initialize correctly", () => {
+    const validHash = crypto.createHash("sha256").update("+1234567890").digest("hex");
+    process.env.MOLTBOT_HARDENING_ENABLED = "1";
+    process.env.MOLTBOT_AUTHORIZED_USER_HASH = validHash;
+
+    // Should not throw
+    const result = initHardening({});
+    expect(result.active).toBe(true);
+    expect(result.singleUser).toBe(true);
+    expect(result.networkMonitor).toBe(true);
+    expect(result.fsMonitor).toBe(true);
+  });
+
+  it("succeeds without single-user if no hash is provided (not a failure)", () => {
+    process.env.MOLTBOT_HARDENING_ENABLED = "1";
+    // No hash provided - single-user is simply not enabled, not a failure
 
     const result = initHardening({});
     expect(result.active).toBe(true);
