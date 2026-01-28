@@ -1,5 +1,6 @@
 import type { ResolvedRingCentralAccount } from "./accounts.js";
 import { getRingCentralPlatform } from "./auth.js";
+import { toRingCentralMarkdown } from "./markdown.js";
 import type {
   RingCentralChat,
   RingCentralPost,
@@ -20,7 +21,7 @@ export async function sendRingCentralMessage(params: {
   const platform = await getRingCentralPlatform(account);
 
   const body: Record<string, unknown> = {};
-  if (text) body.text = text;
+  if (text) body.text = toRingCentralMarkdown(text);
   if (attachments && attachments.length > 0) {
     body.attachments = attachments;
   }
@@ -41,7 +42,7 @@ export async function updateRingCentralMessage(params: {
 
   const response = await platform.patch(
     `${TM_API_BASE}/chats/${chatId}/posts/${postId}`,
-    { text },
+    { text: toRingCentralMarkdown(text) },
   );
   const result = (await response.json()) as RingCentralPost;
   return { postId: result.id };
