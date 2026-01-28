@@ -150,8 +150,8 @@ function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
   if (provider === "querit") {
     return {
       error: "missing_querit_api_key",
-      message: `web_search (querit) needs an API key. Run \`${formatCliCommand("clawdbot configure --section web")}\` to store it, or set QUERIT_API_KEY in the Gateway environment.`,
-      docs: "https://docs.clawd.bot/tools/web",
+      message: `web_search (querit) needs an API key. Run \`${formatCliCommand("moltbot configure --section web")}\` to store it, or set QUERIT_API_KEY in the Gateway environment.`,
+      docs: "https://docs.molt.bot/tools/web",
     };
   }
   return {
