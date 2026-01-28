@@ -10,7 +10,7 @@ import { ensureMoltbotCliOnPath } from "../infra/path-env.js";
 import { assertSupportedRuntime } from "../infra/runtime-guard.js";
 import { formatUncaughtError } from "../infra/errors.js";
 import { installUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
-import { formatStateDirConflictMessage, StateDirConflictError } from "../infra/state-migrations.js";
+import { formatStateDirConflictMessage } from "../infra/state-migrations.js";
 import { detectStateDirConflict } from "../config/paths.js";
 import { enableConsoleCapture } from "../logging.js";
 import { getPrimaryCommand, hasHelpOrVersion } from "./argv.js";
