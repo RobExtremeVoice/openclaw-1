@@ -628,7 +628,12 @@ export function listSessionsFromStore(params: {
         if (lastMsg) lastMessagePreview = lastMsg;
       }
     }
-    return { ...rest, derivedTitle, lastMessagePreview } satisfies GatewaySessionRow;
+    return {
+      ...rest,
+      derivedTitle,
+      lastMessagePreview,
+      spawnedBy: entry?.spawnedBy,
+    } satisfies GatewaySessionRow;
   });
 
   return {

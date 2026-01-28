@@ -31,11 +31,32 @@ Make exec events (Codex, Claude, etc.) visible in Crabwalk UI as distinct "EXEC"
   - Build passes
 
 ### Now
-- [ ] E2E validation with Crabwalk
+- [ ] Test & deploy Crabwalk graph layout fixes
 
 ### Next
 - [ ] Push to GitHub (failed earlier due to token permissions)
 - [ ] Add test coverage for top-level runId
+
+### Crabwalk Graph Layout Fixes (Bead 3) — 2026-01-28
+**Problems Fixed:**
+1. Subagents spawned from top "lobster" node → Now connect to parent session
+2. Exec nodes appeared unattached → Connect to their session via sessionKey
+3. Subagents missing timestamps → Now display relative time ("2m ago")
+4. Session identification → Subagent sessions now styled distinctly with cyan glow
+
+**Changes Made:**
+
+**Gateway (`/home/clawdbot/dev/clawdbot-exec-events`):**
+- `src/gateway/session-utils.types.ts`: Added `spawnedBy?: string` and `createdAt?: number` to `GatewaySessionRow`
+- `src/gateway/session-utils.ts`: Include `spawnedBy` in session list response
+
+**Crabwalk (`/home/clawdbot/apps/crabwalk`):**
+- `src/integrations/clawdbot/protocol.ts`: Added `spawnedBy?: string` to `SessionInfo` and `MonitorSession`
+- `src/integrations/clawdbot/parser.ts`: Pass through `spawnedBy` in `sessionInfoToMonitor`
+- `src/components/monitor/ActionGraph.tsx`: Use `spawnedBy` to connect subagent sessions to parent (not crab origin)
+- `src/components/monitor/SessionNode.tsx`: Added timestamp display, subagent visual styling with cyan glow
+
+**Builds Verified:** Both Gateway and Crabwalk compile successfully
 
 ## Open Questions (RESOLVED)
 - ✅ CONFIRMED: Exec events ARE being emitted (Line 406-408, server.impl.ts)
