@@ -57,7 +57,7 @@ function scheduleNextSync(): void {
   if (!state.running || state.intervalMs <= 0) return;
 
   state.timeoutId = setTimeout(() => {
-    runSyncLoop();
+    void runSyncLoop();
   }, state.intervalMs);
 }
 
@@ -233,7 +233,7 @@ export function startWorkspaceSyncManager(cfg: MoltbotConfig, logger: SyncManage
   // Run initial sync after a short delay (let gateway fully start)
   // Then schedule subsequent syncs via setTimeout chain
   state.timeoutId = setTimeout(() => {
-    runSyncLoop();
+    void runSyncLoop();
   }, 5000);
 }
 
