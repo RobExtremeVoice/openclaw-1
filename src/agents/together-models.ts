@@ -18,6 +18,20 @@ export const TOGETHER_MODEL_CATALOG: ModelDefinitionConfig[] = [
     },
   },
   {
+    id: "moonshotai/Kimi-K2.5",
+    name: "Kimi K2.5",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: {
+      input: 0.5,
+      output: 2.8,
+      cacheRead: 0.5,
+      cacheWrite: 2.8,
+    },
+    contextWindow: 262144,
+    maxTokens: 32768,
+  },
+  {
     id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     name: "Llama 3.3 70B Instruct Turbo",
     reasoning: false,
