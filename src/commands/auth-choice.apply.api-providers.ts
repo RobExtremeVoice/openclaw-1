@@ -13,6 +13,7 @@ import {
 } from "./google-gemini-model-default.js";
 import {
   applyAuthProfileConfig,
+  applyAzureConfig,
   applyKimiCodeConfig,
   applyKimiCodeProviderConfig,
   applyMoonshotConfig,
@@ -28,12 +29,14 @@ import {
   applyVercelAiGatewayConfig,
   applyVercelAiGatewayProviderConfig,
   applyZaiConfig,
+  AZURE_DEFAULT_MODEL_REF,
   KIMI_CODE_MODEL_REF,
   MOONSHOT_DEFAULT_MODEL_REF,
   OPENROUTER_DEFAULT_MODEL_REF,
   SYNTHETIC_DEFAULT_MODEL_REF,
   VENICE_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
+  setAzureApiKey,
   setGeminiApiKey,
   setKimiCodeApiKey,
   setMoonshotApiKey,
@@ -317,6 +320,38 @@ export async function applyAuthChoiceApiProviders(
       });
       nextConfig = applied.config;
       agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
+    }
+    return { config: nextConfig, agentModelOverride };
+  }
+
+  if (authChoice === "azure-api-key") {
+    const azureConfig = await applyAzureConfig({
+      prompter: params.prompter,
+      agentDir: params.agentDir,
+    });
+    nextConfig = { ...nextConfig, ...azureConfig };
+
+    if (params.setDefaultModel) {
+      nextConfig = {
+        ...nextConfig,
+        agents: {
+          ...nextConfig.agents,
+          defaults: {
+            ...nextConfig.agents?.defaults,
+            model: {
+              ...nextConfig.agents?.defaults?.model,
+              primary: AZURE_DEFAULT_MODEL_REF,
+            },
+          },
+        },
+      };
+      await params.prompter.note(
+        `Default model set to ${AZURE_DEFAULT_MODEL_REF}`,
+        "Model configured",
+      );
+    } else {
+      agentModelOverride = AZURE_DEFAULT_MODEL_REF;
+      await noteAgentModel(AZURE_DEFAULT_MODEL_REF);
     }
     return { config: nextConfig, agentModelOverride };
   }

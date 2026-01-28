@@ -5,7 +5,13 @@ import {
   resolveCopilotApiToken,
 } from "../providers/github-copilot-token.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
-import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
+import {
+  resolveAwsSdkEnvVarName,
+  resolveEnvApiKey,
+  resolveAzureEndpoint,
+  resolveAzureApiVersion,
+  resolveAzureDeployment,
+} from "./model-auth.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
   buildSyntheticModelDefinition,
@@ -359,6 +365,63 @@ async function buildOllamaProvider(): Promise<ProviderConfig> {
   };
 }
 
+export async function resolveImplicitAzureProvider(params: {
+  agentDir: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<ProviderConfig | null> {
+  const env = params.env ?? process.env;
+
+  const endpoint = resolveAzureEndpoint(env);
+  const deployment = resolveAzureDeployment(env);
+  const apiVersion = resolveAzureApiVersion(env);
+  const authStore = ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });
+  const apiKey =
+    resolveEnvApiKeyVarName("azure") ??
+    resolveApiKeyFromProfiles({ provider: "azure", store: authStore });
+
+  if (!endpoint || !deployment || !apiKey) {
+    return null;
+  }
+
+  // Construct Azure-compatible baseUrl
+  // Note: OpenAI SDK will append /chat/completions to this URL, resulting in:
+  // {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}/chat/completions
+  // Our URL fix middleware (azure-url-fix.ts) intercepts fetch calls and corrects this to:
+  // {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}
+  const baseUrl = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+
+  // Create model definition for the Azure deployment
+  const models: ModelDefinitionConfig[] = [
+    {
+      id: deployment,
+      name: `Azure ${deployment}`,
+      reasoning: deployment.toLowerCase().includes("o1") || deployment.toLowerCase().includes("o3"),
+      input: deployment.toLowerCase().includes("vision") ? ["text", "image"] : ["text"],
+      cost: {
+        input: 10,
+        output: 30,
+        cacheRead: 2.5,
+        cacheWrite: 12.5,
+      },
+      contextWindow: 200000,
+      maxTokens: 16384,
+      compat: {
+        maxTokensField: "max_completion_tokens",
+      },
+    },
+  ];
+
+  return {
+    baseUrl,
+    apiKey,
+    api: "openai-completions",
+    headers: {
+      "api-key": apiKey,
+    },
+    models,
+  };
+}
+
 export async function resolveImplicitProviders(params: {
   agentDir: string;
 }): Promise<ModelsConfig["providers"]> {
@@ -416,6 +479,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
   if (ollamaKey) {
     providers.ollama = { ...(await buildOllamaProvider()), apiKey: ollamaKey };
+  }
+
+  // Azure provider - auto-discover from environment variables
+  // Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) on Azure
+  const azureProvider = await resolveImplicitAzureProvider(params);
+  if (azureProvider) {
+    providers.azure = azureProvider;
   }
 
   return providers;

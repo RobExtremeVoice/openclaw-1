@@ -229,6 +229,18 @@ export async function resolveApiKeyForProvider(params: {
 export type EnvApiKeyResult = { apiKey: string; source: string };
 export type ModelAuthMode = "api-key" | "oauth" | "token" | "mixed" | "aws-sdk" | "unknown";
 
+export function resolveAzureEndpoint(env = process.env): string | undefined {
+  return env.AZURE_ENDPOINT?.trim() || undefined;
+}
+
+export function resolveAzureApiVersion(env = process.env): string {
+  return env.AZURE_API_VERSION?.trim() || "2024-08-01-preview";
+}
+
+export function resolveAzureDeployment(env = process.env): string | undefined {
+  return env.AZURE_DEPLOYMENT?.trim() || undefined;
+}
+
 export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   const normalized = normalizeProviderId(provider);
   const applied = new Set(getShellEnvAppliedKeys());
@@ -271,6 +283,7 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
 
   const envMap: Record<string, string> = {
     openai: "OPENAI_API_KEY",
+    azure: "AZURE_API_KEY",
     google: "GEMINI_API_KEY",
     groq: "GROQ_API_KEY",
     deepgram: "DEEPGRAM_API_KEY",

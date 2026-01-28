@@ -85,6 +85,7 @@ import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 import { detectAndLoadPromptImages } from "./images.js";
+import { installAzureUrlFix, isAzureUrlFixInstalled } from "../../azure-url-fix.js";
 
 export function injectHistoryImagesIntoMessages(
   messages: AgentMessage[],
@@ -133,6 +134,11 @@ export function injectHistoryImagesIntoMessages(
 export async function runEmbeddedAttempt(
   params: EmbeddedRunAttemptParams,
 ): Promise<EmbeddedRunAttemptResult> {
+  // Install Azure URL fix once per process
+  if (!isAzureUrlFixInstalled()) {
+    installAzureUrlFix();
+  }
+
   const resolvedWorkspace = resolveUserPath(params.workspaceDir);
   const prevCwd = process.cwd();
   const runAbortController = new AbortController();

@@ -72,6 +72,7 @@ export function resolveTranscriptPolicy(params: {
   const modelId = params.modelId ?? "";
   const isGoogle = isGoogleModelApi(params.modelApi);
   const isAnthropic = isAnthropicApi(params.modelApi, provider);
+  const isAzure = provider === "azure";
   const isOpenAi = isOpenAiProvider(provider) || (!provider && isOpenAiApi(params.modelApi));
   const isMistral = isMistralModel({ provider, modelId });
   const isOpenRouterGemini =
@@ -85,7 +86,7 @@ export function resolveTranscriptPolicy(params: {
 
   const needsNonImageSanitize = isGoogle || isAnthropic || isMistral || isOpenRouterGemini;
 
-  const sanitizeToolCallIds = isGoogle || isMistral;
+  const sanitizeToolCallIds = isGoogle || isMistral || isAzure;
   const toolCallIdMode: ToolCallIdMode | undefined = isMistral
     ? "strict9"
     : sanitizeToolCallIds
@@ -98,12 +99,17 @@ export function resolveTranscriptPolicy(params: {
   const normalizeAntigravityThinkingBlocks = isAntigravityClaudeModel;
 
   return {
-    sanitizeMode: isOpenAi ? "images-only" : needsNonImageSanitize ? "full" : "images-only",
-    sanitizeToolCallIds: !isOpenAi && sanitizeToolCallIds,
+    sanitizeMode:
+      isOpenAi && !isAzure
+        ? "images-only"
+        : needsNonImageSanitize || isAzure
+          ? "full"
+          : "images-only",
+    sanitizeToolCallIds: (isAzure || !isOpenAi) && sanitizeToolCallIds,
     toolCallIdMode,
     repairToolUseResultPairing: !isOpenAi && repairToolUseResultPairing,
     preserveSignatures: isAntigravityClaudeModel,
-    sanitizeThoughtSignatures: isOpenAi ? undefined : sanitizeThoughtSignatures,
+    sanitizeThoughtSignatures: isOpenAi && !isAzure ? undefined : sanitizeThoughtSignatures,
     normalizeAntigravityThinkingBlocks,
     applyGoogleTurnOrdering: !isOpenAi && isGoogle,
     validateGeminiTurns: !isOpenAi && isGoogle,

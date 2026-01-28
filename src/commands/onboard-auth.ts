@@ -33,8 +33,15 @@ export {
   applyOpencodeZenProviderConfig,
 } from "./onboard-auth.config-opencode.js";
 export {
+  applyAzureConfig,
+  applyAzureProviderConfig,
+  AZURE_DEFAULT_MODEL_ID,
+  AZURE_DEFAULT_MODEL_REF,
+} from "./onboard-auth.config-azure.js";
+export {
   OPENROUTER_DEFAULT_MODEL_REF,
   setAnthropicApiKey,
+  setAzureApiKey,
   setGeminiApiKey,
   setKimiCodeApiKey,
   setMinimaxApiKey,

@@ -11,6 +11,7 @@ export type AuthChoice =
   | "chutes"
   | "openai-codex"
   | "openai-api-key"
+  | "azure-api-key"
   | "openrouter-api-key"
   | "ai-gateway-api-key"
   | "moonshot-api-key"
