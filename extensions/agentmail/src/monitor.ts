@@ -188,7 +188,7 @@ export async function monitorAgentMailProvider(
         timestamp,
         previousTimestamp,
         envelope: envelopeOptions,
-        body: `${fullBody}\n[email message_id: ${message.messageId} thread: ${message.threadId}]`,
+        body: `${fullBody}\n[email message_id: ${message.messageId} thread: ${message.threadId}]\n[Note: Your response will be sent automatically as an email reply. Do not use reply_to_message or send_message tools to respond to this email.]`,
       });
 
       // Build inbound context
