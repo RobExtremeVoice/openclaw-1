@@ -23,9 +23,115 @@ import { buildHistorySystemPromptSuffix } from "./sdk-history.js";
 import { isSdkTerminalToolEventType } from "./sdk-event-checks.js";
 import { buildMoltbotSdkHooks } from "./sdk-hooks.js";
 import { normalizeToolName } from "../tool-policy.js";
-import type { SdkRunnerParams, SdkRunnerResult } from "./types.js";
+import type {
+  SdkRunnerParams,
+  SdkRunnerResult,
+  SdkUsageStats,
+  SdkCompletedToolCall,
+} from "./types.js";
+import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import {
+  isMessagingTool,
+  isMessagingToolSendAction,
+  type MessagingToolSend,
+} from "../pi-embedded-messaging.js";
+import { extractMessagingToolSend } from "../pi-embedded-subscribe.tools.js";
+// Session transcript recording is done in sdk-agent-runtime.ts, which receives
+// completedToolCalls from the result and passes them to appendSdkToolCallsToSessionTranscript.
 
 const log = createSubsystemLogger("agents/claude-agent-sdk/sdk-runner");
+
+// ---------------------------------------------------------------------------
+// Thinking budget mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Map thinking levels to SDK budget tokens.
+ * These values are tuned to match Claude's expected thinking depths.
+ */
+const THINKING_BUDGET_MAP: Record<ThinkLevel, number> = {
+  off: 0,
+  minimal: 2_000,
+  low: 5_000,
+  medium: 10_000,
+  high: 20_000,
+  xhigh: 40_000,
+};
+
+function getThinkingBudget(level?: ThinkLevel): number | undefined {
+  if (!level || level === "off") return undefined;
+  return THINKING_BUDGET_MAP[level];
+}
+
+/**
+ * Extract usage statistics from an SDK event.
+ * Usage can appear in result events or as a separate usage event.
+ */
+function extractUsageFromEvent(event: unknown): SdkUsageStats | undefined {
+  if (!isRecord(event)) return undefined;
+
+  // Check for usage in the event itself
+  const usageObj = event.usage as Record<string, unknown> | undefined;
+  if (!usageObj || typeof usageObj !== "object") {
+    // Also check for usage nested in data
+    const data = event.data as Record<string, unknown> | undefined;
+    const dataUsage = data?.usage as Record<string, unknown> | undefined;
+    if (!dataUsage || typeof dataUsage !== "object") return undefined;
+    return normalizeUsageObject(dataUsage);
+  }
+
+  return normalizeUsageObject(usageObj);
+}
+
+function normalizeUsageObject(obj: Record<string, unknown>): SdkUsageStats | undefined {
+  const inputTokens =
+    typeof obj.input_tokens === "number"
+      ? obj.input_tokens
+      : typeof obj.inputTokens === "number"
+        ? obj.inputTokens
+        : undefined;
+  const outputTokens =
+    typeof obj.output_tokens === "number"
+      ? obj.output_tokens
+      : typeof obj.outputTokens === "number"
+        ? obj.outputTokens
+        : undefined;
+  const cacheReadInputTokens =
+    typeof obj.cache_read_input_tokens === "number"
+      ? obj.cache_read_input_tokens
+      : typeof obj.cacheReadInputTokens === "number"
+        ? obj.cacheReadInputTokens
+        : undefined;
+  const cacheCreationInputTokens =
+    typeof obj.cache_creation_input_tokens === "number"
+      ? obj.cache_creation_input_tokens
+      : typeof obj.cacheCreationInputTokens === "number"
+        ? obj.cacheCreationInputTokens
+        : undefined;
+
+  if (
+    inputTokens === undefined &&
+    outputTokens === undefined &&
+    cacheReadInputTokens === undefined &&
+    cacheCreationInputTokens === undefined
+  ) {
+    return undefined;
+  }
+
+  const totalTokens =
+    (inputTokens ?? 0) +
+    (outputTokens ?? 0) +
+    (cacheReadInputTokens ?? 0) +
+    (cacheCreationInputTokens ?? 0);
+
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadInputTokens,
+    cacheCreationInputTokens,
+    totalTokens: totalTokens > 0 ? totalTokens : undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -260,6 +366,15 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
         name: mcpServerName,
         tools,
         abortSignal: params.abortSignal,
+        // Forward tool updates through the agent event stream.
+        onToolUpdate: (updateParams) => {
+          emitEvent("tool", {
+            phase: "update",
+            name: updateParams.toolName,
+            toolCallId: updateParams.toolCallId,
+            update: updateParams.update,
+          });
+        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -337,8 +452,22 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
     sdkOptions.permissionMode = params.permissionMode;
   }
 
-  // System prompt (with optional conversation history suffix).
-  const historySuffix = buildHistorySystemPromptSuffix(params.conversationHistory);
+  // Native session resume (preferred) or history injection fallback.
+  // When claudeSessionId is provided, use the SDK's native resume feature
+  // instead of injecting history into the system prompt.
+  const useNativeSessionResume = Boolean(params.claudeSessionId);
+  if (useNativeSessionResume) {
+    sdkOptions.resume = params.claudeSessionId;
+    if (params.forkSession) {
+      sdkOptions.forkSession = true;
+    }
+    log.debug(`Using native session resume with ID: ${params.claudeSessionId}`);
+  }
+
+  // System prompt (with optional conversation history suffix for non-native resume).
+  const historySuffix = useNativeSessionResume
+    ? "" // Skip history injection when using native resume
+    : buildHistorySystemPromptSuffix(params.conversationHistory);
   const baseSystemPrompt = params.systemPrompt ?? params.extraSystemPrompt;
   if (baseSystemPrompt || historySuffix) {
     sdkOptions.systemPrompt = (baseSystemPrompt ?? "") + historySuffix;
@@ -369,6 +498,13 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
     }) as unknown as Record<string, unknown>;
   }
 
+  // Thinking budget (extended thinking support).
+  const thinkingBudget = getThinkingBudget(params.thinkingLevel);
+  if (thinkingBudget !== undefined) {
+    sdkOptions.budgetTokens = thinkingBudget;
+    log.debug(`Set thinking budget to ${thinkingBudget} tokens for level: ${params.thinkingLevel}`);
+  }
+
   // -------------------------------------------------------------------------
   // Step 4: Build the prompt
   // -------------------------------------------------------------------------
@@ -387,9 +523,19 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
   let truncated = false;
   let resultText: string | undefined;
   let aborted = false;
+  let usage: SdkUsageStats | undefined;
+  let extractedSessionId: string | undefined;
   const chunks: string[] = [];
   let assistantSoFar = "";
   let didAssistantMessageStart = false;
+
+  // Messaging tool tracking state.
+  const messagingToolSentTexts: string[] = [];
+  const messagingToolSentTargets: MessagingToolSend[] = [];
+  // Map of pending tool calls: toolCallId -> { name, args }
+  const pendingToolCalls = new Map<string, { name: string; args: Record<string, unknown> }>();
+  // Completed tool calls for session transcript recording.
+  const completedToolCalls: SdkCompletedToolCall[] = [];
 
   // Set up timeout if configured.
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -441,7 +587,7 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
 
       const { kind } = classifyEvent(event);
 
-      // Emit tool results via callback.
+      // Emit tool results via callback and track messaging tools.
       if (!hooksEnabled && kind === "tool") {
         const record = isRecord(event) ? (event as Record<string, unknown>) : undefined;
         const type = record && typeof record.type === "string" ? record.type : undefined;
@@ -474,6 +620,47 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
             : record && typeof record.isError === "boolean"
               ? record.isError
               : Boolean(record?.error);
+
+        // Track tool calls for session transcript and messaging deduplication.
+        if (phase === "start" && toolCallId && record) {
+          // Extract args from the event (tool_use events typically have input field).
+          const args =
+            (record.input as Record<string, unknown>) ??
+            (record.arguments as Record<string, unknown>) ??
+            {};
+          // Track all tool calls, not just messaging tools.
+          pendingToolCalls.set(toolCallId, { name: normalizedName.name, args });
+        }
+
+        // On completion, record tool call and check for messaging tool send.
+        if (phase === "result" && toolCallId) {
+          const pending = pendingToolCalls.get(toolCallId);
+          if (pending) {
+            // Record completed tool call for session transcript.
+            completedToolCalls.push({
+              toolCallId,
+              toolName: pending.name,
+              args: pending.args,
+              result: toolText,
+              isError,
+            });
+
+            // Check for messaging tool send (only on success).
+            if (!isError && isMessagingToolSendAction(pending.name, pending.args)) {
+              const sendTarget = extractMessagingToolSend(pending.name, pending.args);
+              if (sendTarget) {
+                messagingToolSentTargets.push(sendTarget);
+              }
+              // Extract text from args for deduplication.
+              const textArg = pending.args.text ?? pending.args.message ?? pending.args.content;
+              if (typeof textArg === "string" && textArg.trim()) {
+                messagingToolSentTexts.push(textArg.trim());
+              }
+            }
+          }
+          pendingToolCalls.delete(toolCallId);
+        }
+
         emitEvent("tool", {
           phase,
           name: normalizedName.name,
@@ -510,12 +697,35 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
         if (typeof result === "string") {
           resultText = result;
         }
+        // Extract usage from result event.
+        const resultUsage = extractUsageFromEvent(event);
+        if (resultUsage) {
+          usage = resultUsage;
+        }
         // Also check for error results.
         const subtype = event.subtype;
         if (subtype === "error" && typeof event.error === "string") {
           log.warn(`SDK returned error result: ${event.error}`);
         }
         break;
+      }
+
+      // Check for usage events (some SDK versions emit these separately).
+      if (isRecord(event) && (event.type === "usage" || event.type === "message_stop")) {
+        const eventUsage = extractUsageFromEvent(event);
+        if (eventUsage) {
+          usage = eventUsage;
+        }
+      }
+
+      // Extract session ID from SDK events.
+      // Session ID appears in system init messages, assistant messages, and result events.
+      if (!extractedSessionId && isRecord(event)) {
+        const sessionId = event.session_id;
+        if (typeof sessionId === "string" && sessionId) {
+          extractedSessionId = sessionId;
+          log.debug(`Extracted CCSDK session ID: ${sessionId}`);
+        }
       }
 
       // Extract text from assistant messages.
@@ -678,6 +888,7 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
         extractedChars: 0,
         truncated: false,
         aborted,
+        usage,
         error: aborted ? undefined : { kind: "no_output", message: "No text output" },
         bridge: bridgeResult
           ? {
@@ -728,6 +939,7 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
       extractedChars,
       truncated,
       aborted,
+      usage,
       bridge: bridgeResult
         ? {
             toolCount: bridgeResult.toolCount,
@@ -736,6 +948,12 @@ export async function runSdkAgent(params: SdkRunnerParams): Promise<SdkRunnerRes
           }
         : undefined,
     },
+    didSendViaMessagingTool: messagingToolSentTargets.length > 0,
+    messagingToolSentTexts: messagingToolSentTexts.length > 0 ? messagingToolSentTexts : undefined,
+    messagingToolSentTargets:
+      messagingToolSentTargets.length > 0 ? messagingToolSentTargets : undefined,
+    completedToolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
+    claudeSessionId: extractedSessionId,
   };
 }
 

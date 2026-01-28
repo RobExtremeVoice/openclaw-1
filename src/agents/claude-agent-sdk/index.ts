@@ -25,6 +25,10 @@ export { readSessionHistory, loadSessionHistoryForSdk } from "./sdk-session-hist
 export {
   appendSdkTextTurnToSessionTranscript,
   appendSdkTurnPairToSessionTranscript,
+  appendSdkToolCallsToSessionTranscript,
+  appendSdkToolUseToSessionTranscript,
+  appendSdkToolResultToSessionTranscript,
+  type SdkToolCallRecord,
 } from "./sdk-session-transcript.js";
 
 // Hooks
@@ -44,6 +48,7 @@ export {
   wrapToolHandler,
   type BridgeOptions,
   type BridgeResult,
+  type OnToolUpdateCallback,
 } from "./tool-bridge.js";
 export type {
   McpCallToolResult,
@@ -56,6 +61,7 @@ export type {
   SdkRunnerQueryOptions,
 } from "./tool-bridge.types.js";
 export type {
+  SdkCompletedToolCall,
   SdkConversationTurn,
   SdkDoneEvent,
   SdkErrorEvent,
@@ -70,4 +76,5 @@ export type {
   SdkTextEvent,
   SdkToolResultEvent,
   SdkToolUseEvent,
+  SdkUsageStats,
 } from "./types.js";

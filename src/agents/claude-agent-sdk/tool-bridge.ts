@@ -134,12 +134,14 @@ export function convertToolResult(result: AgentToolResult<unknown>): McpCallTool
  * - Moltbot: `execute(toolCallId, params, signal?, onUpdate?)`
  * - MCP:    `handler(args) → Promise<CallToolResult>`
  *
- * Notable: MCP handlers have no abort signal or streaming update callback.
- * We pass the shared `abortSignal` (if provided) and skip `onUpdate`.
+ * Notable: MCP handlers have no native streaming update callback.
+ * We pass the shared `abortSignal` (if provided) and create an `onUpdate`
+ * that forwards to the provided callback.
  */
 export function wrapToolHandler(
   tool: AnyAgentTool,
   abortSignal?: AbortSignal,
+  onToolUpdate?: OnToolUpdateCallback,
 ): (args: Record<string, unknown>) => Promise<McpCallToolResult> {
   const normalizedName = normalizeToolName(tool.name);
 
@@ -151,13 +153,19 @@ export function wrapToolHandler(
     // model's response.
     const toolCallId = `mcp-bridge-${normalizedName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    // Create an onUpdate callback that forwards to the bridge callback.
+    const onUpdate = onToolUpdate
+      ? (update: unknown) => {
+          void Promise.resolve(
+            onToolUpdate({ toolCallId, toolName: normalizedName, update }),
+          ).catch(() => {
+            // Don't let async callback errors break tool execution.
+          });
+        }
+      : undefined;
+
     try {
-      const result = await tool.execute(
-        toolCallId,
-        args,
-        abortSignal, // 3rd arg: AbortSignal (undefined if not provided)
-        undefined, // 4th arg: onUpdate — not supported in MCP tool protocol
-      );
+      const result = await tool.execute(toolCallId, args, abortSignal, onUpdate);
       return convertToolResult(result);
     } catch (err) {
       // Propagate AbortError so the SDK runner can handle cancellation.
@@ -234,6 +242,13 @@ export function buildMcpAllowedTools(serverName: string, tools: AnyAgentTool[]):
 // Main bridge: Moltbot tools → MCP server config
 // ---------------------------------------------------------------------------
 
+/** Callback for tool execution updates (streaming progress). */
+export type OnToolUpdateCallback = (params: {
+  toolCallId: string;
+  toolName: string;
+  update: unknown;
+}) => void | Promise<void>;
+
 export type BridgeOptions = {
   /** MCP server name (used in mcp__{name}__{tool} naming). */
   name: string;
@@ -241,6 +256,8 @@ export type BridgeOptions = {
   tools: AnyAgentTool[];
   /** Optional shared abort signal for all tool executions. */
   abortSignal?: AbortSignal;
+  /** Optional callback for tool execution updates (streaming progress). */
+  onToolUpdate?: OnToolUpdateCallback;
 };
 
 export type BridgeResult = {
@@ -286,7 +303,7 @@ export async function bridgeMoltbotToolsToMcpServer(options: BridgeOptions): Pro
 
     try {
       const jsonSchema = extractJsonSchema(tool);
-      const handler = wrapToolHandler(tool, options.abortSignal);
+      const handler = wrapToolHandler(tool, options.abortSignal, options.onToolUpdate);
 
       server.tool(toolName, tool.description ?? `Moltbot tool: ${toolName}`, jsonSchema, handler);
 
@@ -341,7 +358,7 @@ export function bridgeMoltbotToolsSync(
 
     try {
       const jsonSchema = extractJsonSchema(tool);
-      const handler = wrapToolHandler(tool, options.abortSignal);
+      const handler = wrapToolHandler(tool, options.abortSignal, options.onToolUpdate);
       server.tool(toolName, tool.description ?? `Moltbot tool: ${toolName}`, jsonSchema, handler);
       registered.push(toolName);
     } catch (err) {

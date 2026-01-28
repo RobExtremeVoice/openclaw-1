@@ -71,8 +71,16 @@ export type SdkRunnerQueryOptions = {
   maxTurns?: number;
   /** Model to use. */
   model?: string;
+  /** Thinking budget in tokens for extended thinking. */
+  budgetTokens?: number;
   /** Additional directories the agent can access. */
   additionalDirectories?: string[];
+  /** Session ID to resume (loads conversation history from the session). */
+  resume?: string;
+  /** When resuming, fork to a new session ID instead of continuing. */
+  forkSession?: boolean;
+  /** Continue the most recent conversation (mutually exclusive with resume). */
+  continue?: boolean;
   /** Where to load Claude Code settings from ("project", etc.). */
   settingSources?: string[];
   /** Include partial message events in the SDK stream. */

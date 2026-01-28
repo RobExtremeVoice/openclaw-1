@@ -91,3 +91,135 @@ export function appendSdkTurnPairToSessionTranscript(params: {
     });
   }
 }
+
+/**
+ * A tracked tool call for session transcript recording.
+ */
+export type SdkToolCallRecord = {
+  /** Tool call ID from the model. */
+  toolCallId: string;
+  /** Normalized tool name. */
+  toolName: string;
+  /** Tool input arguments. */
+  args: Record<string, unknown>;
+  /** Tool result (if completed). */
+  result?: unknown;
+  /** Whether the tool execution resulted in an error. */
+  isError?: boolean;
+};
+
+/**
+ * Append a tool use block to the session transcript.
+ *
+ * Records tool calls in a structured format matching the pi-agent session format.
+ */
+export function appendSdkToolUseToSessionTranscript(params: {
+  sessionFile: string;
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  timestamp?: number;
+}): void {
+  try {
+    appendJsonlLine({
+      filePath: params.sessionFile,
+      value: {
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: params.toolCallId,
+              name: params.toolName,
+              input: params.args,
+            },
+          ],
+          timestamp: params.timestamp ?? Date.now(),
+        },
+      },
+    });
+  } catch (err) {
+    log.debug(`Failed to append tool use to transcript: ${String(err)}`);
+  }
+}
+
+/**
+ * Append a tool result block to the session transcript.
+ *
+ * Records tool results in a structured format matching the pi-agent session format.
+ */
+export function appendSdkToolResultToSessionTranscript(params: {
+  sessionFile: string;
+  toolCallId: string;
+  result: unknown;
+  isError?: boolean;
+  timestamp?: number;
+}): void {
+  try {
+    // Serialize result to text if it's an object.
+    let resultContent: string;
+    if (typeof params.result === "string") {
+      resultContent = params.result;
+    } else if (params.result !== undefined) {
+      try {
+        resultContent = JSON.stringify(params.result);
+      } catch {
+        resultContent = String(params.result);
+      }
+    } else {
+      resultContent = "(no output)";
+    }
+
+    appendJsonlLine({
+      filePath: params.sessionFile,
+      value: {
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: params.toolCallId,
+              content: resultContent,
+              is_error: params.isError,
+            },
+          ],
+          timestamp: params.timestamp ?? Date.now(),
+        },
+      },
+    });
+  } catch (err) {
+    log.debug(`Failed to append tool result to transcript: ${String(err)}`);
+  }
+}
+
+/**
+ * Append multiple tool calls from a single run to the session transcript.
+ *
+ * This records completed tool calls with both the tool_use and tool_result
+ * blocks for full transcript parity with pi-agent format.
+ */
+export function appendSdkToolCallsToSessionTranscript(params: {
+  sessionFile: string;
+  toolCalls: SdkToolCallRecord[];
+  timestamp?: number;
+}): void {
+  const ts = params.timestamp ?? Date.now();
+  for (const call of params.toolCalls) {
+    appendSdkToolUseToSessionTranscript({
+      sessionFile: params.sessionFile,
+      toolCallId: call.toolCallId,
+      toolName: call.toolName,
+      args: call.args,
+      timestamp: ts,
+    });
+    if (call.result !== undefined) {
+      appendSdkToolResultToSessionTranscript({
+        sessionFile: params.sessionFile,
+        toolCallId: call.toolCallId,
+        result: call.result,
+        isError: call.isError,
+        timestamp: ts,
+      });
+    }
+  }
+}

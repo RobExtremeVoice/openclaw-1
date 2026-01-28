@@ -12,7 +12,10 @@ import { runSdkAgent } from "./sdk-runner.js";
 import { resolveProviderConfig } from "./provider-config.js";
 import { isSdkAvailable } from "./sdk-loader.js";
 import { loadSessionHistoryForSdk } from "./sdk-session-history.js";
-import { appendSdkTurnPairToSessionTranscript } from "./sdk-session-transcript.js";
+import {
+  appendSdkTurnPairToSessionTranscript,
+  appendSdkToolCallsToSessionTranscript,
+} from "./sdk-session-transcript.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { SdkConversationTurn, SdkRunnerResult } from "./types.js";
 
@@ -39,6 +42,17 @@ export type CcSdkAgentRuntimeContext = {
  * Convert an SdkRunnerResult into an AgentRuntimeResult.
  */
 function adaptSdkResult(result: SdkRunnerResult, sessionId: string): AgentRuntimeResult {
+  // Map SDK usage stats to the Pi-embedded format.
+  const usage = result.meta.usage
+    ? {
+        input: result.meta.usage.inputTokens,
+        output: result.meta.usage.outputTokens,
+        cacheRead: result.meta.usage.cacheReadInputTokens,
+        cacheWrite: result.meta.usage.cacheCreationInputTokens,
+        total: result.meta.usage.totalTokens,
+      }
+    : undefined;
+
   return {
     payloads: result.payloads.map((p) => ({
       text: p.text,
@@ -51,12 +65,16 @@ function adaptSdkResult(result: SdkRunnerResult, sessionId: string): AgentRuntim
         sessionId,
         provider: result.meta.provider ?? "sdk",
         model: result.meta.model ?? "default",
+        usage,
       },
       // SDK runner errors are rendered as text payloads with isError=true.
       // Avoid mapping to Pi-specific error kinds (context/compaction) because
       // downstream recovery logic would treat them incorrectly.
       error: undefined,
     },
+    didSendViaMessagingTool: result.didSendViaMessagingTool,
+    messagingToolSentTexts: result.messagingToolSentTexts,
+    messagingToolSentTargets: result.messagingToolSentTargets,
   };
 }
 
@@ -120,6 +138,7 @@ export function createCcSdkAgentRuntime(context?: CcSdkAgentRuntimeContext): Age
         hooksEnabled: context?.ccsdkConfig?.hooksEnabled,
         sdkOptions: context?.ccsdkConfig?.options,
         modelTiers: context?.ccsdkConfig?.models,
+        thinkingLevel: params.thinkLevel,
         conversationHistory,
         tools: context?.tools,
 
@@ -137,9 +156,17 @@ export function createCcSdkAgentRuntime(context?: CcSdkAgentRuntimeContext): Age
         onAgentEvent: params.onAgentEvent,
       });
 
-      // Persist a minimal user/assistant turn pair so SDK main-agent mode has multi-turn continuity.
-      // This intentionally records only text, not tool call structures.
+      // Persist session transcript for multi-turn continuity.
       if (params.sessionFile) {
+        // Record tool calls with structured format (matching pi-agent).
+        if (sdkResult.completedToolCalls && sdkResult.completedToolCalls.length > 0) {
+          appendSdkToolCallsToSessionTranscript({
+            sessionFile: params.sessionFile,
+            toolCalls: sdkResult.completedToolCalls,
+          });
+        }
+
+        // Record user/assistant text turn pair.
         appendSdkTurnPairToSessionTranscript({
           sessionFile: params.sessionFile,
           prompt: params.prompt,

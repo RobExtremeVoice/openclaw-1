@@ -5,6 +5,8 @@
 import type { MoltbotConfig } from "../../config/config.js";
 import type { CcSdkModelTiers } from "../../config/types.agents.js";
 import type { AnyAgentTool } from "../tools/common.js";
+import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import type { MessagingToolSend } from "../pi-embedded-messaging.js";
 
 /** Provider environment variables for SDK authentication and model config. */
 export type SdkProviderEnv = {
@@ -91,6 +93,9 @@ export type SdkRunnerParams = {
   /** 3-tier model configuration (haiku/sonnet/opus). */
   modelTiers?: CcSdkModelTiers;
 
+  /** Thinking level for extended thinking (maps to SDK budgetTokens). */
+  thinkingLevel?: ThinkLevel;
+
   /**
    * Pre-built Moltbot tools to expose to the agent.
    * These should already be policy-filtered.
@@ -110,6 +115,21 @@ export type SdkRunnerParams = {
 
   /** Max agent turns before the SDK stops. */
   maxTurns?: number;
+
+  // --- Native session resume parameters ---
+
+  /**
+   * CCSDK session ID to resume. When provided, the SDK will load
+   * conversation history from the specified session instead of
+   * injecting history into the system prompt.
+   */
+  claudeSessionId?: string;
+
+  /**
+   * When resuming, fork to a new session ID instead of continuing
+   * the previous session. Use with claudeSessionId.
+   */
+  forkSession?: boolean;
 
   /**
    * MCP server name for the bridged Moltbot tools.
@@ -221,6 +241,15 @@ export type SdkRunnerErrorKind =
   | "timeout"
   | "no_output";
 
+/** Usage statistics from the SDK execution. */
+export type SdkUsageStats = {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  totalTokens?: number;
+};
+
 /** Metadata from an SDK runner execution. */
 export type SdkRunnerMeta = {
   durationMs: number;
@@ -230,6 +259,8 @@ export type SdkRunnerMeta = {
   extractedChars: number;
   truncated: boolean;
   aborted?: boolean;
+  /** Token usage statistics. */
+  usage?: SdkUsageStats;
   error?: {
     kind: SdkRunnerErrorKind;
     message: string;
@@ -242,6 +273,20 @@ export type SdkRunnerMeta = {
   };
 };
 
+/** A completed tool call record for session transcript parity. */
+export type SdkCompletedToolCall = {
+  /** Tool call ID from the model. */
+  toolCallId: string;
+  /** Normalized tool name. */
+  toolName: string;
+  /** Tool input arguments. */
+  args: Record<string, unknown>;
+  /** Tool result text (if completed). */
+  result?: string;
+  /** Whether the tool execution resulted in an error. */
+  isError?: boolean;
+};
+
 /** Result from SDK runner execution. */
 export type SdkRunnerResult = {
   /** Extracted text payloads from the agent run. */
@@ -251,4 +296,17 @@ export type SdkRunnerResult = {
   }>;
   /** Run metadata. */
   meta: SdkRunnerMeta;
+  /** True if a messaging tool successfully sent a message during the run. */
+  didSendViaMessagingTool?: boolean;
+  /** Texts successfully sent via messaging tools during the run. */
+  messagingToolSentTexts?: string[];
+  /** Messaging tool targets that successfully sent a message during the run. */
+  messagingToolSentTargets?: MessagingToolSend[];
+  /** Completed tool calls for session transcript recording. */
+  completedToolCalls?: SdkCompletedToolCall[];
+  /**
+   * CCSDK session ID for the current run. Can be used to resume
+   * the session in a future run via the claudeSessionId parameter.
+   */
+  claudeSessionId?: string;
 };
