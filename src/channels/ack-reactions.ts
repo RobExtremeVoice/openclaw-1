@@ -44,6 +44,7 @@ export function shouldAckReactionForWhatsApp(params: {
   if (params.sessionMode === "never") return false;
   if (params.sessionMode === "always") return true;
   if (params.sessionMode === "mentions") {
+    // Strict mention-only: explicit session override should not bypass via activation
     return shouldAckReaction({
       scope: "group-mentions",
       isDirect: params.isDirect,
@@ -52,7 +53,7 @@ export function shouldAckReactionForWhatsApp(params: {
       requireMention: true,
       canDetectMention: true,
       effectiveWasMentioned: params.wasMentioned,
-      shouldBypassMention: params.groupActivated,
+      // Note: intentionally not passing shouldBypassMention here
     });
   }
 

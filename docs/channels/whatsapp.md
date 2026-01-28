@@ -244,10 +244,12 @@ The global and per-account configurations can be overridden for specific session
 - `ackReaction`: `"always" | "mentions" | "never"`
   - `"always"`: Enables reactions (overrides global off/never).
   - `"never"`: Disables reactions (overrides global on/always/mentions).
-  - `"mentions"`: Enforces mention-only reactions.
+  - `"mentions"`: Enforces **strict** mention-only reactions (requires actual @mention, ignores group activation state).
   - Useful for disabling reactions in specific DMs (`"never"`) or forcing them in specific groups.
 
 > **Note:** Setting `"mentions"` on a DM session effectively disables reactions for that DM, since direct messages don't have @mentions. Use `"always"` or `"never"` for DMs.
+>
+> **Note:** Unlike the global `group: "mentions"` setting which respects group activation state, the session-level `"mentions"` override is strict and always requires an actual @mention.
 
 **Per-account override:**
 ```json

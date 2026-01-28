@@ -281,6 +281,20 @@ describe("shouldAckReactionForWhatsApp", () => {
         sessionMode: "mentions", // Session override ON (if mentioned)
       }),
     ).toBe(true);
+
+    // Session: MENTIONS is strict - does NOT bypass via groupActivated
+    expect(
+      shouldAckReactionForWhatsApp({
+        emoji: "👀",
+        isDirect: false,
+        isGroup: true,
+        directEnabled: true,
+        groupMode: "always",
+        wasMentioned: false, // Not mentioned
+        groupActivated: true, // But group is activated
+        sessionMode: "mentions", // Explicit mentions = strict, no bypass
+      }),
+    ).toBe(false);
   });
 });
 
