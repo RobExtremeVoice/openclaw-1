@@ -45,7 +45,7 @@ Status: beta.
 - Gateway: prevent crashes on transient network errors, suppress AbortError/unhandled rejections, sanitize error responses, clean session locks on exit, and harden reverse proxy handling for unauthenticated proxied connects. (#2980, #2451, #2483, #1795)
 - Config: auto-migrate legacy state/config paths; honor state dir overrides.
 - Packaging: include missing dist/shared and dist/link-understanding outputs in npm tarball installs.
-- Telegram: avoid silent empty replies, improve polling/network recovery, handle video notes, keep DM thread sessions, ignore non-forum message_thread_id, centralize API error logging, include AccountId in native command context. (#3796, #3013, #2905, #2731, #2492, #2942)
+- Telegram: fix "file is too big" error handling for large forwarded files; avoid silent empty replies, improve polling/network recovery, handle video notes, keep DM thread sessions, ignore non-forum message_thread_id, centralize API error logging, include AccountId in native command context. (#4232, #3796, #3013, #2905, #2731, #2492, #2942)
 - Telegram: preserve reasoning tags inside code blocks. (#3952) Thanks @vinaygit18.
 - Discord: restore username resolution, resolve outbound usernames to IDs, honor threadId replies, guard forum thread access. (#3131, #2649)
 - BlueBubbles: coalesce URL link previews, improve reaction handling, preserve reply-tag GUIDs. (#1981, #1641)
