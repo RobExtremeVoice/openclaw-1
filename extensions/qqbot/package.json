@@ -13,6 +13,11 @@
       "docsPath": "/docs/channels/qqbot",
       "blurb": "Connect to QQ via official QQ Bot API",
       "order": 50
+    },
+    "install": {
+      "npmSpec": "qqbot",
+      "localPath": "./extensions/qqbot",
+      "defaultChoice": "local"
     }
   },
   "moltbot": {
@@ -24,6 +29,11 @@
       "docsPath": "/docs/channels/qqbot",
       "blurb": "Connect to QQ via official QQ Bot API",
       "order": 50
+    },
+    "install": {
+      "npmSpec": "qqbot",
+      "localPath": "./extensions/qqbot",
+      "defaultChoice": "local"
     }
   },
   "scripts": {
