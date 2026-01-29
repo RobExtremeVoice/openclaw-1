@@ -634,7 +634,10 @@ export const registerTelegramHandlers = ({
         media = await resolveMedia(ctx, mediaMaxBytes, opts.token, opts.proxyFetch);
       } catch (mediaErr) {
         const errMsg = String(mediaErr);
-        if (errMsg.includes("exceeds") && errMsg.includes("MB limit")) {
+        if (
+          (errMsg.includes("exceeds") && errMsg.includes("MB limit")) ||
+          errMsg.includes("file is too big")
+        ) {
           const limitMb = Math.round(mediaMaxBytes / (1024 * 1024));
           await withTelegramApiErrorLogging({
             operation: "sendMessage",
