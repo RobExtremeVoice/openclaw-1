@@ -196,6 +196,7 @@ export const DiscordGuildChannelSchema = z
     users: z.array(z.union([z.string(), z.number()])).optional(),
     systemPrompt: z.string().optional(),
     autoThread: z.boolean().optional(),
+    model: z.string().optional(),
   })
   .strict();
 
@@ -208,6 +209,7 @@ export const DiscordGuildSchema = z
     reactionNotifications: z.enum(["off", "own", "all", "allowlist"]).optional(),
     users: z.array(z.union([z.string(), z.number()])).optional(),
     channels: z.record(z.string(), DiscordGuildChannelSchema.optional()).optional(),
+    model: z.string().optional(),
   })
   .strict();
 

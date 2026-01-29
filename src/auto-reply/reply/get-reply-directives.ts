@@ -106,6 +106,8 @@ export async function resolveReplyDirectives(params: {
   typing: TypingController;
   opts?: GetReplyOptions;
   skillFilter?: string[];
+  /** Channel-level model override (fallback when no session override). */
+  channelModelOverride?: string;
 }): Promise<ReplyDirectiveResult> {
   const {
     ctx,
@@ -386,6 +388,7 @@ export async function resolveReplyDirectives(params: {
     provider,
     model,
     hasModelDirective: directives.hasModelDirective,
+    channelModelOverride: params.channelModelOverride ?? opts?.channelModelOverride,
   });
   provider = modelState.provider;
   model = modelState.model;

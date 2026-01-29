@@ -231,6 +231,8 @@ export async function createModelSelectionState(params: {
   provider: string;
   model: string;
   hasModelDirective: boolean;
+  /** Channel-level model override (used as fallback when no session override). */
+  channelModelOverride?: string;
 }): Promise<ModelSelectionState> {
   const {
     cfg,
@@ -242,6 +244,7 @@ export async function createModelSelectionState(params: {
     storePath,
     defaultProvider,
     defaultModel,
+    channelModelOverride,
   } = params;
 
   let provider = params.provider;
@@ -309,6 +312,20 @@ export async function createModelSelectionState(params: {
     if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
       provider = candidateProvider;
       model = storedOverride.model;
+    }
+  } else if (channelModelOverride?.trim()) {
+    // Apply channel-level model override as fallback when no session override exists.
+    const channelRef = resolveModelRefFromString({
+      raw: channelModelOverride.trim(),
+      defaultProvider,
+      aliasIndex: { byAlias: new Map(), byKey: new Map() },
+    });
+    if (channelRef) {
+      const key = modelKey(channelRef.ref.provider, channelRef.ref.model);
+      if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
+        provider = channelRef.ref.provider;
+        model = channelRef.ref.model;
+      }
     }
   }
 

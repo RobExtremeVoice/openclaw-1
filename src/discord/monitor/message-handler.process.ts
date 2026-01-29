@@ -368,6 +368,9 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     }).onReplyStart,
   });
 
+  // Resolve channel-level model override: channel config takes precedence over guild config.
+  const channelModelOverride = channelConfig?.model ?? guildInfo?.model;
+
   const { queuedFinal, counts } = await dispatchInboundMessage({
     ctx: ctxPayload,
     cfg,
@@ -382,6 +385,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
       onModelSelected: (ctx) => {
         prefixContext.onModelSelected(ctx);
       },
+      channelModelOverride,
     },
   });
   markDispatchIdle();
