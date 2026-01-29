@@ -1,5 +1,5 @@
 ---
-summary: "Sign in to GitHub Copilot from Moltbot using the device flow"
+summary: "Sign in to GitHub Copilot from Moltbot using the official SDK"
 read_when:
   - You want to use GitHub Copilot as a model provider
   - You need the `moltbot models auth login-github-copilot` flow
@@ -9,36 +9,30 @@ read_when:
 ## What is GitHub Copilot?
 
 GitHub Copilot is GitHub's AI coding assistant. It provides access to Copilot
-models for your GitHub account and plan. Moltbot can use Copilot as a model
-provider in two different ways.
+models for your GitHub account and plan. Moltbot uses the official
+`@github/copilot-sdk` to integrate with Copilot.
 
-## Two ways to use Copilot in Moltbot
+## Prerequisites
 
-### 1) Built-in GitHub Copilot provider (`github-copilot`)
+The official SDK requires the **Copilot CLI** to be installed and authenticated:
 
-Use the native device-login flow to obtain a GitHub token, then exchange it for
-Copilot API tokens when Moltbot runs. This is the **default** and simplest path
-because it does not require VS Code.
+```bash
+# Install Copilot CLI (if not already installed)
+npm install -g @github/copilot-cli
 
-### 2) Copilot Proxy plugin (`copilot-proxy`)
-
-Use the **Copilot Proxy** VS Code extension as a local bridge. Moltbot talks to
-the proxy’s `/v1` endpoint and uses the model list you configure there. Choose
-this when you already run Copilot Proxy in VS Code or need to route through it.
-You must enable the plugin and keep the VS Code extension running.
-
-Use GitHub Copilot as a model provider (`github-copilot`). The login command runs
-the GitHub device flow, saves an auth profile, and updates your config to use that
-profile.
+# Authenticate with GitHub
+copilot auth login
+```
 
 ## CLI setup
+
+After authenticating with the Copilot CLI, verify your auth in Moltbot:
 
 ```bash
 moltbot models auth login-github-copilot
 ```
 
-You'll be prompted to visit a URL and enter a one-time code. Keep the terminal
-open until it completes.
+This checks your Copilot CLI authentication status and creates an auth profile.
 
 ### Optional flags
 
@@ -63,8 +57,7 @@ moltbot models set github-copilot/gpt-4o
 
 ## Notes
 
-- Requires an interactive TTY; run it directly in a terminal.
-- Copilot model availability depends on your plan; if a model is rejected, try
-  another ID (for example `github-copilot/gpt-4.1`).
-- The login stores a GitHub token in the auth profile store and exchanges it for a
-  Copilot API token when Moltbot runs.
+- Requires the Copilot CLI (`copilot`) to be installed and in your PATH.
+- Run `copilot auth login` first to authenticate with GitHub.
+- Model availability depends on your Copilot subscription plan.
+- The official SDK manages token exchange internally.

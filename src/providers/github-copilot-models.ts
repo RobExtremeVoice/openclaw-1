@@ -1,12 +1,11 @@
 import type { ModelDefinitionConfig } from "../config/types.js";
+import { listCopilotModels, type CopilotModelInfo } from "./github-copilot-sdk.js";
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_TOKENS = 8192;
 
-// Copilot model ids vary by plan/org and can change.
-// We keep this list intentionally broad; if a model isn't available Copilot will
-// return an error and users can remove it from their config.
-const DEFAULT_MODEL_IDS = [
+// Fallback model ids if SDK model discovery fails
+const FALLBACK_MODEL_IDS = [
   "gpt-4o",
   "gpt-4.1",
   "gpt-4.1-mini",
@@ -16,8 +15,45 @@ const DEFAULT_MODEL_IDS = [
   "o3-mini",
 ] as const;
 
-export function getDefaultCopilotModelIds(): string[] {
-  return [...DEFAULT_MODEL_IDS];
+/**
+ * Get available model IDs from the Copilot SDK.
+ * Falls back to hardcoded list if SDK discovery fails.
+ */
+export async function getDefaultCopilotModelIds(): Promise<string[]> {
+  try {
+    const models = await listCopilotModels();
+    if (models.length > 0) {
+      return models.map((m) => m.id);
+    }
+  } catch {
+    // Fall through to fallback list
+  }
+  return [...FALLBACK_MODEL_IDS];
+}
+
+/**
+ * Get available model IDs synchronously (fallback list only).
+ * Use getDefaultCopilotModelIds() for SDK-based discovery.
+ */
+export function getDefaultCopilotModelIdsSync(): string[] {
+  return [...FALLBACK_MODEL_IDS];
+}
+
+/**
+ * Build a model definition from SDK model info.
+ */
+export function buildCopilotModelDefinitionFromSdk(model: CopilotModelInfo): ModelDefinitionConfig {
+  return {
+    id: model.id,
+    name: model.name,
+    // The SDK manages API routing internally
+    api: "openai-responses",
+    reasoning: false,
+    input: model.capabilities?.supports?.vision ? ["text", "image"] : ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: model.capabilities?.limits?.max_context_window_tokens ?? DEFAULT_CONTEXT_WINDOW,
+    maxTokens: model.capabilities?.limits?.max_prompt_tokens ?? DEFAULT_MAX_TOKENS,
+  };
 }
 
 export function buildCopilotModelDefinition(modelId: string): ModelDefinitionConfig {
