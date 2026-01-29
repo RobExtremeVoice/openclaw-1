@@ -387,8 +387,17 @@ async function processMessageWithPipeline(params: {
 
   const spaceId = space.name ?? "";
   if (!spaceId) return;
-  const spaceType = (space.type ?? "").toUpperCase();
-  const isGroup = spaceType !== "DM";
+
+  // Normalize to modern 'spaceType' format
+  let spaceType = (space.spaceType ?? "").toUpperCase();
+
+  // @deprecated fallback: map legacy 'type' to modern values
+  if (!spaceType && space.type) {
+    const legacyType = space.type.toUpperCase();
+    spaceType = legacyType === "DM" ? "DIRECT_MESSAGE" : "SPACE";
+  }
+
+  const isGroup = spaceType !== "DIRECT_MESSAGE";
   const sender = message.sender ?? event.user;
   const senderId = sender?.name ?? "";
   const senderName = sender?.displayName ?? "";
