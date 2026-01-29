@@ -21,6 +21,45 @@ Last updated: 2026-01-22
 
 ## Components and flows
 
+```mermaid
+graph TD
+    subgraph Channels
+        WA[WhatsApp/Baileys]
+        TG[Telegram/grammY]
+        SL[Slack]
+        DC[Discord]
+        SIG[Signal]
+        IM[iMessage]
+        WC[WebChat]
+    end
+
+    subgraph Clients
+        CLI[CLI]
+        MAC[macOS App]
+        WEB[Web UI]
+        AUTO[Automations]
+    end
+
+    subgraph Nodes
+        MACOS_N[macOS Node]
+        IOS_N[iOS Node]
+        AND_N[Android Node]
+        HEAD_N[Headless Node]
+    end
+
+    GW[Gateway\nWebSocket Server\n127.0.0.1:18789]
+
+    WA & TG & SL & DC & SIG & IM & WC --> GW
+    CLI & MAC & WEB & AUTO -->|WS: role=operator| GW
+    MACOS_N & IOS_N & AND_N & HEAD_N -->|WS: role=node| GW
+
+    GW --> AGENT[Agent Runtime\npi-agent-core]
+    AGENT --> TOOLS[Tools\nbrowser, exec, canvas,\nmessage, cron, nodes]
+
+    CANVAS[Canvas Host\n:18793]
+    GW -.-> CANVAS
+```
+
 ### Gateway (daemon)
 - Maintains provider connections.
 - Exposes a typed WS API (requests, responses, server‑push events).

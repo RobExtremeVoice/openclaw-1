@@ -13,6 +13,25 @@ Moltbot handles failures in two stages:
 
 This doc explains the runtime rules and the data that backs them.
 
+```mermaid
+flowchart TD
+    REQ[Agent Run Request] --> PROF[Select Auth Profile\nSession-pinned or round-robin]
+    PROF --> CALL[API Call to Provider]
+    CALL --> OK{Success?}
+    OK -->|Yes| DONE[Run Completes]
+    OK -->|No| ERR{Error Type?}
+    ERR -->|Rate limit / Auth| CD[Cooldown Profile\nExponential: 1m → 5m → 25m → 1hr]
+    ERR -->|Billing / Credits| DIS[Disable Profile\n5hr → 24hr backoff]
+    ERR -->|Format / Invalid| CD
+    CD --> NEXT{More Profiles\nfor Provider?}
+    DIS --> NEXT
+    NEXT -->|Yes| PROF
+    NEXT -->|No| FB{Model Fallbacks\nConfigured?}
+    FB -->|Yes| SWITCH[Switch to Next Model\nin fallbacks list]
+    FB -->|No| FAIL[Run Fails]
+    SWITCH --> PROF
+```
+
 ## Auth storage (keys + OAuth)
 
 Moltbot uses **auth profiles** for both API keys and OAuth tokens.

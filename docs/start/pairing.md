@@ -14,6 +14,29 @@ It is used in two places:
 1) **DM pairing** (who is allowed to talk to the bot)
 2) **Node pairing** (which devices/nodes are allowed to join the gateway network)
 
+```mermaid
+sequenceDiagram
+    participant S as Sender / Device
+    participant GW as Gateway
+    participant O as Owner (CLI)
+
+    Note over S,GW: DM Pairing Flow
+    S->>GW: Send DM message
+    GW->>GW: Unknown sender → generate 8-char code
+    GW->>S: Reply with pairing code (expires 1hr)
+    O->>GW: moltbot pairing list <channel>
+    O->>GW: moltbot pairing approve <channel> <code>
+    GW->>GW: Add sender to allowlist
+    S->>GW: Next message → processed normally
+
+    Note over S,GW: Node Device Pairing Flow
+    S->>GW: WS connect (role: node, device identity)
+    GW->>GW: New device → create pairing request
+    O->>GW: moltbot devices approve <requestId>
+    GW->>S: Device token issued
+    S->>GW: Future connects use device token
+```
+
 Security context: [Security](/gateway/security)
 
 ## 1) DM pairing (inbound chat access)

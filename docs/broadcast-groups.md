@@ -17,6 +17,25 @@ Broadcast Groups enable multiple agents to process and respond to the same messa
 
 Current scope: **WhatsApp only** (web channel).
 
+```mermaid
+flowchart TD
+    MSG[Incoming Message] --> ALLOW{Channel Allowlist\n+ Group Activation?}
+    ALLOW -->|Blocked| DROP[Ignored]
+    ALLOW -->|Allowed| BC{Peer in\nBroadcast Config?}
+    BC -->|No| NORMAL[Normal Routing\nSingle agent via bindings]
+    BC -->|Yes| AGENTS[Get Agent List\nfor this peer]
+    AGENTS --> STRAT{Strategy?}
+    STRAT -->|parallel| PAR[Run All Agents\nSimultaneously]
+    STRAT -->|sequential| SEQ[Run Agents\nIn Order]
+    PAR --> ISO1[Agent A\nIsolated Session]
+    PAR --> ISO2[Agent B\nIsolated Session]
+    PAR --> ISO3[Agent C\nIsolated Session]
+    SEQ --> ISO1
+    ISO1 --> |done| ISO2
+    ISO2 --> |done| ISO3
+    ISO1 & ISO2 & ISO3 --> DELIVER[Deliver Replies\nto Same Chat]
+```
+
 Broadcast groups are evaluated after channel allowlists and group activation rules. In WhatsApp groups, this means broadcasts happen when Moltbot would normally reply (for example: on mention, depending on your group settings).
 
 ## Use Cases

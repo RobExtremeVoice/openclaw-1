@@ -321,6 +321,24 @@ High-level flow:
 This design keeps the agent on a stable, deterministic interface while letting
 you swap local/remote browsers and profiles.
 
+```mermaid
+flowchart TD
+    AGENT[Agent Tool Call\nbrowser action] --> TARGET{Target?}
+    TARGET -->|sandbox| SB[Sandbox Browser\nDocker container]
+    TARGET -->|host| LOCAL{Local Browser\nRunning?}
+    TARGET -->|node| NODE[Node Host\nProxy to remote browser]
+    LOCAL -->|No| START[Launch Chromium\nvia CDP on loopback]
+    LOCAL -->|Yes| CDP[Connect via CDP]
+    START --> CDP
+    CDP --> PW{Playwright\nAvailable?}
+    PW -->|Yes| ACTIONS[Full Actions\nclick/type/snapshot/PDF]
+    PW -->|No| BASIC[Basic Only\nARIA snapshot + screenshot]
+    ACTIONS --> RESULT[Return to Agent\nsnapshot / screenshot / action result]
+    BASIC --> RESULT
+    NODE --> RESULT
+    SB --> RESULT
+```
+
 ## CLI quick reference
 
 All commands accept `--browser-profile <name>` to target a specific profile.

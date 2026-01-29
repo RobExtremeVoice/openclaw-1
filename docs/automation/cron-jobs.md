@@ -15,6 +15,27 @@ the right time, and can optionally deliver output back to a chat.
 If you want *“run this every morning”* or *“poke the agent in 20 minutes”*,
 cron is the mechanism.
 
+```mermaid
+flowchart TD
+    subgraph MainSession [Main Session Job]
+        MS1[Schedule Triggers] --> MS2[Enqueue System Event]
+        MS2 --> MS3{Wake Mode?}
+        MS3 -->|next-heartbeat| MS4[Wait for Next Heartbeat]
+        MS3 -->|now| MS5[Immediate Heartbeat]
+        MS4 --> MS6[Run in Main Session Context]
+        MS5 --> MS6
+    end
+
+    subgraph IsolatedSession [Isolated Session Job]
+        IS1[Schedule Triggers] --> IS2[Create Fresh Session\ncron:jobId]
+        IS2 --> IS3[Run Dedicated Agent Turn]
+        IS3 --> IS4[Post Summary to Main]
+        IS4 --> IS5{Deliver?}
+        IS5 -->|Yes| IS6[Send to Channel Target]
+        IS5 -->|No| IS7[Internal Only]
+    end
+```
+
 ## TL;DR
 - Cron runs **inside the Gateway** (not inside the model).
 - Jobs persist under `~/.clawdbot/cron/` so restarts don’t lose schedules.

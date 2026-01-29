@@ -9,6 +9,35 @@ read_when:
 
 Gateway can expose a small HTTP webhook endpoint for external triggers.
 
+```mermaid
+sequenceDiagram
+    participant EXT as External System
+    participant WH as Gateway /hooks
+    participant AUTH as Auth Check
+    participant GW as Gateway Core
+
+    EXT->>WH: POST /hooks/wake or /hooks/agent
+    WH->>AUTH: Verify token (Bearer / header / query)
+    alt Token valid
+        AUTH->>WH: OK
+        alt /hooks/wake
+            WH->>GW: Enqueue system event
+            GW->>GW: Trigger heartbeat (if mode=now)
+            WH-->>EXT: 200 OK
+        else /hooks/agent
+            WH->>GW: Start isolated agent run
+            GW->>GW: Post summary to main session
+            GW->>GW: Deliver to channel (if configured)
+            WH-->>EXT: 202 Accepted
+        else /hooks/<name> (mapped)
+            WH->>GW: Resolve mapping → wake or agent
+            WH-->>EXT: 200/202
+        end
+    else Token invalid
+        AUTH-->>EXT: 401 Unauthorized
+    end
+```
+
 ## Enable
 
 ```json5

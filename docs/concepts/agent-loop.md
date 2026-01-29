@@ -13,6 +13,22 @@ In Moltbot, a loop is a single, serialized run per session that emits lifecycle 
 as the model thinks, calls tools, and streams output. This doc explains how that authentic loop is
 wired end-to-end.
 
+```mermaid
+stateDiagram-v2
+    [*] --> Intake: Inbound message / RPC
+    Intake --> ContextAssembly: Resolve session + workspace
+    ContextAssembly --> PromptBuild: Load skills, bootstrap files
+    PromptBuild --> ModelInference: System prompt + history
+    ModelInference --> ToolExecution: Tool calls returned
+    ToolExecution --> ModelInference: Tool results fed back
+    ModelInference --> Streaming: Assistant text deltas
+    Streaming --> Persistence: Final reply assembled
+    Persistence --> [*]: Session updated + reply delivered
+
+    ModelInference --> Compaction: Context limit hit
+    Compaction --> ModelInference: Retry with compacted context
+```
+
 ## Entry points
 - Gateway RPC: `agent` and `agent.wait`.
 - CLI: `agent` command.
@@ -79,6 +95,41 @@ These run inside the agent loop or gateway pipeline:
 - **`gateway_start` / `gateway_stop`**: gateway lifecycle events.
 
 See [Plugins](/plugin#plugin-hooks) for the hook API and registration details.
+
+```mermaid
+sequenceDiagram
+    participant GW as Gateway
+    participant HOOK as Plugin Hooks
+    participant AGENT as Agent Runtime
+    participant MODEL as Model API
+    participant TOOL as Tool Execution
+
+    GW->>HOOK: gateway_start
+    Note over GW: Gateway initializes
+
+    GW->>HOOK: message_received
+    GW->>HOOK: session_start
+    GW->>HOOK: before_agent_start
+    GW->>AGENT: Start agent run
+    AGENT->>MODEL: Send prompt + context
+
+    loop Tool Loop
+        MODEL->>AGENT: Tool call request
+        AGENT->>HOOK: before_tool_call
+        AGENT->>TOOL: Execute tool
+        TOOL->>AGENT: Tool result
+        AGENT->>HOOK: after_tool_call
+        AGENT->>HOOK: tool_result_persist
+        AGENT->>MODEL: Feed result back
+    end
+
+    MODEL->>AGENT: Final assistant reply
+    AGENT->>HOOK: agent_end
+    GW->>HOOK: message_sending
+    Note over GW: Deliver reply
+    GW->>HOOK: message_sent
+    GW->>HOOK: session_end
+```
 
 ## Streaming + partial replies
 - Assistant deltas are streamed from pi-agent-core and emitted as `assistant` events.

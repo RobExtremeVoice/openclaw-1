@@ -20,6 +20,30 @@ Inbound message
   -> outbound replies (channel limits + chunking)
 ```
 
+```mermaid
+flowchart TD
+    A[Inbound Message] --> B{Dedupe Cache}
+    B -->|Duplicate| DROP[Drop]
+    B -->|New| C{Debounce Window}
+    C -->|Batched| D[Combined Message]
+    C -->|Single| D
+    D --> E[Routing / Bindings]
+    E --> F[Session Key Resolution]
+    F --> G{Run Active?}
+    G -->|No| H[Start Agent Run]
+    G -->|Yes| I{Queue Mode}
+    I -->|steer| J[Inject into Current Run]
+    I -->|followup| K[Queue for Next Turn]
+    I -->|collect| L[Coalesce into Single Followup]
+    H --> M[Streaming + Tools]
+    J --> M
+    K --> M
+    L --> M
+    M --> N[Outbound Reply]
+    N --> O[Channel Chunking + Limits]
+    O --> P[Delivered]
+```
+
 Key knobs live in configuration:
 - `messages.*` for prefixes, queueing, and group behavior.
 - `agents.defaults.*` for block streaming and chunking defaults.

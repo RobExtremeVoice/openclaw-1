@@ -9,6 +9,20 @@ Last updated: 2025-12-09
 
 ## What it is
 - The always-on process that owns the single Baileys/Telegram connection and the control/event plane.
+
+```mermaid
+stateDiagram-v2
+    [*] --> NotInstalled
+    NotInstalled --> Installing: moltbot gateway install
+    Installing --> Installed: LaunchAgent / systemd unit created
+    Installed --> Running: Service starts
+    Running --> Running: Config hot-reload\nSIGUSR1 in-process restart
+    Running --> Stopped: moltbot gateway stop\nSIGTERM
+    Stopped --> Running: moltbot gateway restart\nService supervisor
+    Running --> Error: Fatal error
+    Error --> Running: Supervisor auto-restart\nRestartSec=5
+```
+
 - Replaces the legacy `gateway` command. CLI entry point: `moltbot gateway`.
 - Runs until stopped; exits non-zero on fatal errors so the supervisor restarts it.
 
@@ -22,6 +36,15 @@ moltbot gateway --force
 # dev loop (auto-reload on TS changes):
 pnpm gateway:watch
 ```
+```mermaid
+flowchart LR
+    WATCH[File Watcher\n~/.clawdbot/moltbot.json] --> DEBOUNCE[Debounce]
+    DEBOUNCE --> ANALYZE{Analyze Changes}
+    ANALYZE -->|Safe changes\nthresholds, toggles| HOT[Hot Apply\nNo restart needed]
+    ANALYZE -->|Critical changes\nport, auth, channels| RESTART[In-Process Restart\nSIGUSR1]
+    ANALYZE -->|reload.mode=off| IGNORE[Ignored]
+```
+
 - Config hot reload watches `~/.clawdbot/moltbot.json` (or `CLAWDBOT_CONFIG_PATH`).
   - Default mode: `gateway.reload.mode="hybrid"` (hot-apply safe changes, restart on critical).
   - Hot reload uses in-process restart via **SIGUSR1** when needed.

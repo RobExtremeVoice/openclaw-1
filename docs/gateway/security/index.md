@@ -35,6 +35,34 @@ Moltbot is both a product and an experiment: you’re wiring frontier-model beha
 
 Start with the smallest access that still works, then widen it as you gain confidence.
 
+```mermaid
+graph TD
+    subgraph Layer1 [Layer 1: Inbound Access Control]
+        DM[DM Policy\npairing / allowlist / open / disabled]
+        GP[Group Policy\nallowlist + mention gating]
+        AL[Allowlists\nper-channel sender lists]
+    end
+
+    subgraph Layer2 [Layer 2: Tool & Execution Scope]
+        TP[Tool Policy\nallow / deny lists]
+        SB[Sandboxing\nDocker isolation]
+        EL[Elevated Mode\nhost exec gating]
+        BR[Browser Control\nprofile isolation]
+    end
+
+    subgraph Layer3 [Layer 3: Model & Prompt]
+        MI[Model Choice\ninstruction-hardened models]
+        SP[System Prompt\nsafety rules + persona]
+        PI[Prompt Injection\nresistance varies by model]
+    end
+
+    INBOUND[Inbound Message] --> Layer1
+    Layer1 -->|Authorized| Layer2
+    Layer1 -->|Blocked| REJECT[Rejected]
+    Layer2 -->|Scoped| Layer3
+    Layer3 --> AGENT[Agent Executes]
+```
+
 ### What the audit checks (high level)
 
 - **Inbound access** (DM policies, group policies, allowlists): can strangers trigger the bot?

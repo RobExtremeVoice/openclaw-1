@@ -9,6 +9,25 @@ read_when:
 
 Use the installer unless you have a reason not to. It sets up the CLI and runs onboarding.
 
+```mermaid
+flowchart TD
+    START[Install Moltbot] --> OS{Operating System?}
+    OS -->|macOS| MAC[macOS]
+    OS -->|Linux| LINUX[Linux]
+    OS -->|Windows| WIN[Windows WSL2]
+    MAC --> METHOD{Install Method?}
+    LINUX --> METHOD
+    WIN --> WSL[Install WSL2 First] --> METHOD
+    METHOD -->|Installer Script| CURL["curl -fsSL https://molt.bot/install.sh | bash"]
+    METHOD -->|npm Global| NPM[npm install -g moltbot@latest]
+    METHOD -->|From Source| GIT[git clone + pnpm install + pnpm build]
+    METHOD -->|Docker| DOCKER[Docker container]
+    METHOD -->|Nix| NIX[Nix flake]
+    CURL --> ONBOARD[moltbot onboard --install-daemon]
+    NPM --> ONBOARD
+    GIT --> ONBOARD
+```
+
 ## Quick install (recommended)
 
 ```bash

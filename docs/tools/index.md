@@ -11,6 +11,55 @@ Moltbot exposes **first-class agent tools** for browser, canvas, nodes, and cron
 These replace the old `moltbot-*` skills: the tools are typed, no shelling,
 and the agent should rely on them directly.
 
+```mermaid
+graph LR
+    subgraph Runtime [group:runtime]
+        EXEC[exec]
+        BASH[bash]
+        PROC[process]
+    end
+
+    subgraph FS [group:fs]
+        READ[read]
+        WRITE[write]
+        EDIT[edit]
+        PATCH[apply_patch]
+    end
+
+    subgraph Sessions [group:sessions]
+        SL[sessions_list]
+        SH[sessions_history]
+        SS[sessions_send]
+        SP[sessions_spawn]
+        SST[session_status]
+    end
+
+    subgraph Web [group:web]
+        WS[web_search]
+        WF[web_fetch]
+    end
+
+    subgraph UI [group:ui]
+        BROWSER[browser]
+        CANVAS[canvas]
+    end
+
+    subgraph Automation [group:automation]
+        CRON[cron]
+        GATEWAY[gateway]
+    end
+
+    subgraph Messaging [group:messaging]
+        MSG[message]
+    end
+
+    subgraph Other
+        NODES[nodes]
+        IMAGE[image]
+        AGENTS_LIST[agents_list]
+    end
+```
+
 ## Disabling tools
 
 You can globally allow/deny tools via `tools.allow` / `tools.deny` in `moltbot.json`

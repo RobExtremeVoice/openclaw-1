@@ -9,6 +9,19 @@ read_when:
 
 Goal: go from **zero** → **first working chat** (with sane defaults) as quickly as possible.
 
+```mermaid
+flowchart TD
+    A[Install Moltbot\nnpm install -g moltbot] --> B[Run Onboarding Wizard\nmoltbot onboard --install-daemon]
+    B --> C[Model Auth\nOAuth or API Key]
+    C --> D[Gateway Settings\nport, bind, token]
+    D --> E[Channel Setup\nWhatsApp / Telegram / etc.]
+    E --> F[Pairing Defaults\nSecure DM access]
+    F --> G[Workspace Bootstrap\nAGENTS.md, SOUL.md, etc.]
+    G --> H[Install Daemon\nlaunchd / systemd]
+    H --> I[Gateway Running\nAlways-on service]
+    I --> J[Send First Message\nmoltbot agent --message 'Hello']
+```
+
 Fastest chat: open the Control UI (no channel setup needed). Run `moltbot dashboard`
 and chat in the browser, or open `http://127.0.0.1:18789/` on the gateway host.
 Docs: [Dashboard](/web/dashboard) and [Control UI](/web/control-ui).

@@ -18,6 +18,31 @@ handshake time.
 - WebSocket, text frames with JSON payloads.
 - First frame **must** be a `connect` request.
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as Gateway
+
+    G->>C: event: connect.challenge {nonce, ts}
+    C->>G: req: connect {protocol, client, role, scopes, auth, device}
+    alt Valid credentials + device
+        G->>C: res: hello-ok {protocol, snapshot, policy}
+        Note over G,C: Includes presence + health snapshot
+        opt New device
+            G->>C: hello-ok.auth {deviceToken, role, scopes}
+        end
+    else Invalid
+        G->>C: res: error
+        G--xC: Socket closed
+    end
+
+    loop Normal operation
+        C->>G: req {method, params}
+        G->>C: res {ok, payload}
+        G->>C: event {presence, tick, agent, ...}
+    end
+```
+
 ## Handshake (connect)
 
 Gateway → Client (pre-connect challenge):
