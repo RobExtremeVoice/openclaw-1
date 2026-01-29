@@ -86,6 +86,42 @@ current limits and pricing.
 environment. For a gateway install, put it in `~/.clawdbot/.env` (or your
 service environment). See [Env vars](/help/faq#how-does-moltbot-load-environment-variables).
 
+### Custom Brave Search endpoint
+
+If you're running a self-hosted Brave Search instance or using a proxy, set `tools.web.search.baseUrl` to your custom endpoint:
+
+```json5
+{
+  tools: {
+    web: {
+      search: {
+        baseUrl: "https://your-brave-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+The path `/res/v1/web/search` will be automatically appended to the base URL.
+
+### Auth header style
+
+Brave's official API uses `X-Subscription-Token` for authentication. Some proxies expect `Authorization: Bearer` instead. Set `authStyle` to switch:
+
+```json5
+{
+  tools: {
+    web: {
+      search: {
+        baseUrl: "https://your-proxy.example.com",
+        authStyle: "bearer"  // Uses "Authorization: Bearer <key>"
+        // authStyle: "x-subscription-token"  // Default: uses "X-Subscription-Token: <key>"
+      }
+    }
+  }
+}
+```
+
 ## Using Perplexity (direct or via OpenRouter)
 
 Perplexity Sonar models have built-in web search capabilities and return AI-synthesized
@@ -158,6 +194,8 @@ Search the web using your configured provider.
       search: {
         enabled: true,
         apiKey: "BRAVE_API_KEY_HERE", // optional if BRAVE_API_KEY is set
+        baseUrl: "https://api.search.brave.com", // optional: custom Brave Search base URL
+        authStyle: "x-subscription-token", // optional: "x-subscription-token" (default) or "bearer" (for proxies)
         maxResults: 5,
         timeoutSeconds: 30,
         cacheTtlMinutes: 15
