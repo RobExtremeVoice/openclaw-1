@@ -27,6 +27,27 @@ describe("splitMediaFromOutput", () => {
     expect(result.text).toBe("");
   });
 
+  it("normalizes Windows file URLs", () => {
+    const result = splitMediaFromOutput("MEDIA:file:///C:/Users/pete/My%20File.png");
+    const expected =
+      process.platform === "win32" ? "C:\\Users\\pete\\My File.png" : "C:/Users/pete/My File.png";
+    expect(result.mediaUrls).toEqual([expected]);
+    expect(result.text).toBe("");
+  });
+
+  it("accepts Windows drive letter paths", () => {
+    const result = splitMediaFromOutput("MEDIA:C:/Users/pete/My File.png");
+    expect(result.mediaUrls).toEqual(["C:/Users/pete/My File.png"]);
+    expect(result.text).toBe("");
+  });
+
+  it("accepts Windows drive letter paths with backslashes", () => {
+    const filePath = "C:\\Users\\pete\\My File.png";
+    const result = splitMediaFromOutput(`MEDIA:${filePath}`);
+    expect(result.mediaUrls).toEqual([filePath]);
+    expect(result.text).toBe("");
+  });
+
   it("keeps audio_as_voice detection stable across calls", () => {
     const input = "Hello [[audio_as_voice]]";
     const first = splitMediaFromOutput(input);

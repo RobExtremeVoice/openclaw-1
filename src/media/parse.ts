@@ -1,5 +1,7 @@
 // Shared helpers for parsing MEDIA tokens from command/stdout text.
 
+import { fileURLToPath } from "node:url";
+
 import { parseFenceSpans } from "../markdown/fences.js";
 import { parseAudioTag } from "./audio-tags.js";
 
@@ -7,7 +9,15 @@ import { parseAudioTag } from "./audio-tags.js";
 export const MEDIA_TOKEN_RE = /\bMEDIA:\s*`?([^\n]+)`?/gi;
 
 export function normalizeMediaSource(src: string) {
-  return src.startsWith("file://") ? src.replace("file://", "") : src;
+  if (!src.startsWith("file://")) return src;
+  try {
+    const filePath = fileURLToPath(src);
+    // Normalize drive-letter paths that appear as `/C:/...` on non-Windows platforms.
+    return filePath.replace(/^\/([a-zA-Z]:[\\/])/, "$1");
+  } catch {
+    // Best-effort fallback for malformed file URLs.
+    return src.replace("file://", "");
+  }
 }
 
 function cleanCandidate(raw: string) {
@@ -19,6 +29,8 @@ function isValidMedia(candidate: string, opts?: { allowSpaces?: boolean }) {
   if (candidate.length > 4096) return false;
   if (!opts?.allowSpaces && /\s/.test(candidate)) return false;
   if (/^https?:\/\//i.test(candidate)) return true;
+  if (/^[a-zA-Z]:[\\/]/.test(candidate)) return true;
+  if (candidate.startsWith("\\\\")) return true;
   if (candidate.startsWith("/")) return true;
   if (candidate.startsWith("./")) return true;
   if (candidate.startsWith("../")) return true;
@@ -118,6 +130,7 @@ export function splitMediaFromOutput(raw: string): {
         trimmedPayload.startsWith("./") ||
         trimmedPayload.startsWith("../") ||
         trimmedPayload.startsWith("~") ||
+        /^[a-zA-Z]:[\\/]/.test(trimmedPayload) ||
         trimmedPayload.startsWith("file://");
       if (
         !unwrapped &&
