@@ -78,6 +78,8 @@ export type FeishuAccountConfig = {
   mediaMaxMb?: number;
   /** Control reply threading when reply tags are present (off|first|all). */
   replyToMode?: ReplyToMode;
+  /** Start a new session for every inbound message (no history). */
+  sessionPerMessage?: boolean;
   dm?: FeishuDmConfig;
   groups?: Record<string, FeishuGroupConfig>;
   /** Heartbeat visibility settings for this channel. */

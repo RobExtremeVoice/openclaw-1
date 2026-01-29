@@ -32,6 +32,12 @@ type FeishuSender = {
   };
 };
 
+type FeishuMention = {
+  id?: { open_id?: string; user_id?: string; union_id?: string };
+  key?: string;
+  name?: string;
+};
+
 type FeishuMessage = {
   chat_id?: string;
   chat_type?: string;
@@ -41,11 +47,13 @@ type FeishuMessage = {
   create_time?: string;
   root_id?: string;
   parent_id?: string;
+  mentions?: FeishuMention[];
 };
 
 type FeishuMessageEvent = {
   message?: FeishuMessage;
   sender?: FeishuSender;
+  mentions?: FeishuMention[];
 };
 
 type FeishuCoreRuntime = ReturnType<typeof getFeishuRuntime>;
@@ -91,18 +99,27 @@ function resolveSenderInfo(
   return null;
 }
 
-function parseMessageText(params: {
+type ParsedMessageContent = {
+  text: string;
+  hasAnyMention: boolean;
+};
+
+function parseMessageContent(params: {
   content: string;
   runtime: FeishuRuntimeEnv;
   accountId: string;
-}): string | null {
+}): ParsedMessageContent | null {
   const trimmed = params.content.trim();
   if (!trimmed) return null;
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (!parsed || typeof parsed !== "object") return null;
     const text = (parsed as { text?: unknown }).text;
-    return typeof text === "string" ? text : null;
+    if (typeof text !== "string") return null;
+    const mentions = (parsed as { mentions?: unknown }).mentions;
+    const hasMentions = Array.isArray(mentions) && mentions.length > 0;
+    const hasInlineMention = /<at\b/i.test(text);
+    return { text, hasAnyMention: hasMentions || hasInlineMention };
   } catch (err) {
     params.runtime.error?.(
       `[${params.accountId}] Feishu message content parse failed: ${String(err)}`,
@@ -111,8 +128,22 @@ function parseMessageText(params: {
   }
 }
 
-function resolveMentionState(text: string): { hasAnyMention: boolean; wasMentioned: boolean } {
-  const hasAnyMention = /<at\b/i.test(text);
+function hasMentionEntries(entries: FeishuMention[] | undefined): boolean {
+  return Array.isArray(entries) && entries.length > 0;
+}
+
+function resolvePerMessageSessionKey(baseKey: string, message: FeishuMessage): string {
+  const messageId = message.message_id?.trim();
+  const messageTime = message.create_time?.trim();
+  const suffix = messageId || messageTime || String(Date.now());
+  return `${baseKey}:msg:${suffix}`.toLowerCase();
+}
+
+function resolveMentionState(params: {
+  text: string;
+  hasAnyMention?: boolean;
+}): { hasAnyMention: boolean; wasMentioned: boolean } {
+  const hasAnyMention = params.hasAnyMention ?? /<at\b/i.test(params.text);
   return { hasAnyMention, wasMentioned: hasAnyMention };
 }
 
@@ -214,12 +245,13 @@ async function handleFeishuMessage(params: {
     return;
   }
   if (typeof message.content !== "string") return;
-  const rawBody = parseMessageText({
+  const parsedContent = parseMessageContent({
     content: message.content,
     runtime,
     accountId: account.accountId,
   });
-  if (rawBody === null) return;
+  if (parsedContent === null) return;
+  const rawBody = parsedContent.text;
   const chatType = resolveChatType(message.chat_type);
   const isGroup = chatType !== "direct";
 
@@ -284,7 +316,12 @@ async function handleFeishuMessage(params: {
   let effectiveWasMentioned: boolean | undefined;
   if (isGroup) {
     const requireMention = groupEntry?.requireMention ?? account.config.requireMention ?? true;
-    const mentionState = resolveMentionState(rawBody);
+    const hasMentions = [
+      parsedContent.hasAnyMention,
+      hasMentionEntries(message.mentions),
+      hasMentionEntries(event.mentions),
+    ].some(Boolean);
+    const mentionState = resolveMentionState({ text: rawBody, hasAnyMention: hasMentions });
     const allowTextCommands = core.channel.commands.shouldHandleTextCommands({
       cfg: config,
       surface: "feishu",
@@ -364,6 +401,9 @@ async function handleFeishuMessage(params: {
     },
   });
 
+  const sessionKey = account.config.sessionPerMessage
+    ? resolvePerMessageSessionKey(route.sessionKey, message)
+    : route.sessionKey;
   const fromLabel = isGroup ? `chat:${chatId}` : `user:${senderId}`;
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
     agentId: route.agentId,
@@ -371,7 +411,7 @@ async function handleFeishuMessage(params: {
   const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(config);
   const previousTimestamp = core.channel.session.readSessionUpdatedAt({
     storePath,
-    sessionKey: route.sessionKey,
+    sessionKey,
   });
   const timestampMs = Number(message.create_time);
   const timestamp = Number.isFinite(timestampMs) ? timestampMs : undefined;
@@ -392,7 +432,7 @@ async function handleFeishuMessage(params: {
     CommandBody: rawBody,
     From: `feishu:${senderId}`,
     To: `feishu:${chatId}`,
-    SessionKey: route.sessionKey,
+    SessionKey: sessionKey,
     AccountId: route.accountId,
     ChatType: isGroup ? "channel" : "direct",
     ConversationLabel: fromLabel,
@@ -414,7 +454,7 @@ async function handleFeishuMessage(params: {
   void core.channel.session
     .recordSessionMetaFromInbound({
       storePath,
-      sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+      sessionKey: ctxPayload.SessionKey ?? sessionKey,
       ctx: ctxPayload,
     })
     .catch((err) => {

@@ -57,3 +57,4 @@ Multi-account example:
 - `channels.feishu.dm.allowFrom`: allowlist for DMs when policy is `allowlist` or `open`.
 - `channels.feishu.groupPolicy`: `open`, `allowlist`, or `disabled`.
 - `channels.feishu.groups`: per-chat overrides keyed by `chat_id` (supports `requireMention`, `tools`, `users`).
+- `channels.feishu.sessionPerMessage`: start a new session for each inbound message (no history).

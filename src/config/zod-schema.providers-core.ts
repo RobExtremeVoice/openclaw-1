@@ -333,6 +333,7 @@ export const FeishuAccountSchema = z
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     mediaMaxMb: z.number().positive().optional(),
     replyToMode: ReplyToModeSchema.optional(),
+    sessionPerMessage: z.boolean().optional(),
     dm: FeishuDmSchema.optional(),
     groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
