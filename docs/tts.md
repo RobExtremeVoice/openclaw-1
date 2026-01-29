@@ -8,13 +8,14 @@ read_when:
 
 # Text-to-speech (TTS)
 
-Moltbot can convert outbound replies into audio using ElevenLabs, OpenAI, or Edge TTS.
+Moltbot can convert outbound replies into audio using ElevenLabs, OpenAI, Telnyx, or Edge TTS.
 It works anywhere Moltbot can send audio; Telegram gets a round voice-note bubble.
 
 ## Supported services
 
 - **ElevenLabs** (primary or fallback provider)
 - **OpenAI** (primary or fallback provider; also used for summaries)
+- **Telnyx** (primary or fallback provider; great quality, cheaper than ElevenLabs)
 - **Edge TTS** (primary or fallback provider; uses `node-edge-tts`, default when no API keys)
 
 ### Edge TTS notes
@@ -31,9 +32,10 @@ does not publish limits, so assume similar or lower limits. citeturn0searc
 
 ## Optional keys
 
-If you want OpenAI or ElevenLabs:
+If you want OpenAI, ElevenLabs, or Telnyx:
 - `ELEVENLABS_API_KEY` (or `XI_API_KEY`)
 - `OPENAI_API_KEY`
+- `TELNYX_API_KEY`
 
 Edge TTS does **not** require an API key. If no API keys are found, Moltbot defaults
 to Edge TTS (unless disabled via `messages.tts.edge.enabled=false`).
@@ -202,9 +204,9 @@ Then run:
   - `tagged` only sends audio when the reply includes `[[tts]]` tags.
 - `enabled`: legacy toggle (doctor migrates this to `auto`).
 - `mode`: `"final"` (default) or `"all"` (includes tool/block replies).
-- `provider`: `"elevenlabs"`, `"openai"`, or `"edge"` (fallback is automatic).
+- `provider`: `"elevenlabs"`, `"openai"`, `"telnyx"`, or `"edge"` (fallback is automatic).
 - If `provider` is **unset**, Moltbot prefers `openai` (if key), then `elevenlabs` (if key),
-  otherwise `edge`.
+  then `telnyx` (if key), otherwise `edge`.
 - `summaryModel`: optional cheap model for auto-summary; defaults to `agents.defaults.model.primary`.
   - Accepts `provider/model` or a configured model alias.
 - `modelOverrides`: allow the model to emit TTS directives (on by default).
@@ -250,7 +252,7 @@ Here you go.
 ```
 
 Available directive keys (when enabled):
-- `provider` (`openai` | `elevenlabs` | `edge`)
+- `provider` (`openai` | `elevenlabs` | `telnyx` | `edge`)
 - `voice` (OpenAI voice) or `voiceId` (ElevenLabs)
 - `model` (OpenAI TTS model or ElevenLabs model id)
 - `stability`, `similarityBoost`, `style`, `speed`, `useSpeakerBoost`
