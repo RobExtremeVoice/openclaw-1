@@ -403,7 +403,7 @@ export type ToolsConfig = {
       allowAcrossProviders?: boolean;
       /** Cross-context marker configuration. */
       marker?: {
-        /** Enable origin markers for cross-context sends (default: true). */
+        /** Enable origin markers for cross-context sends (default: false). */
         enabled?: boolean;
         /** Text prefix template, supports {channel}. */
         prefix?: string;
