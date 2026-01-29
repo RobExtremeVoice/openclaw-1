@@ -7,26 +7,27 @@ import type {
 } from "../gateway/server-methods/types.js";
 import { registerInternalHook } from "../hooks/internal-hooks.js";
 import { resolveUserPath } from "../utils.js";
-import type {
-  MoltbotPluginApi,
-  MoltbotPluginChannelRegistration,
-  MoltbotPluginCliRegistrar,
-  MoltbotPluginCommandDefinition,
-  MoltbotPluginHttpHandler,
-  MoltbotPluginHttpRouteHandler,
-  MoltbotPluginHookOptions,
-  ProviderPlugin,
-  MoltbotPluginService,
-  MoltbotPluginToolContext,
-  MoltbotPluginToolFactory,
-  PluginConfigUiHint,
-  PluginDiagnostic,
-  PluginLogger,
-  PluginOrigin,
-  PluginKind,
-  PluginHookName,
-  PluginHookHandlerMap,
-  PluginHookRegistration as TypedPluginHookRegistration,
+import {
+  TYPED_HOOK_NAMES,
+  type MoltbotPluginApi,
+  type MoltbotPluginChannelRegistration,
+  type MoltbotPluginCliRegistrar,
+  type MoltbotPluginCommandDefinition,
+  type MoltbotPluginHttpHandler,
+  type MoltbotPluginHttpRouteHandler,
+  type MoltbotPluginHookOptions,
+  type ProviderPlugin,
+  type MoltbotPluginService,
+  type MoltbotPluginToolContext,
+  type MoltbotPluginToolFactory,
+  type PluginConfigUiHint,
+  type PluginDiagnostic,
+  type PluginLogger,
+  type PluginOrigin,
+  type PluginKind,
+  type PluginHookName,
+  type PluginHookHandlerMap,
+  type PluginHookRegistration as TypedPluginHookRegistration,
 } from "./types.js";
 import { registerPluginCommand } from "./commands.js";
 import type { PluginRuntime } from "./runtime/types.js";
@@ -251,6 +252,22 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       events: normalizedEvents,
       source: record.source,
     });
+
+    // Bridge to typed hooks: if any event matches a PluginHookName, also register
+    // in typedHooks so the hook runner can find it. This allows plugins to use
+    // either api.registerHook() or api.on() for typed hooks like message_received.
+    for (const event of normalizedEvents) {
+      if (TYPED_HOOK_NAMES.has(event as PluginHookName)) {
+        registry.typedHooks.push({
+          pluginId: record.id,
+          hookName: event as PluginHookName,
+          handler: handler as unknown as PluginHookHandlerMap[PluginHookName],
+          priority: opts?.priority,
+          source: record.source,
+        } as TypedPluginHookRegistration);
+        record.hookCount += 1;
+      }
+    }
 
     const hookSystemEnabled = config?.hooks?.internal?.enabled === true;
     if (!hookSystemEnabled || opts?.register === false) {

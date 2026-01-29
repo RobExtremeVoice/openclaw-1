@@ -81,6 +81,7 @@ export type MoltbotPluginHookOptions = {
   name?: string;
   description?: string;
   register?: boolean;
+  priority?: number;
 };
 
 export type ProviderAuthKind = "oauth" | "api_key" | "token" | "device_code" | "custom";
@@ -301,6 +302,23 @@ export type PluginHookName =
   | "session_end"
   | "gateway_start"
   | "gateway_stop";
+
+export const TYPED_HOOK_NAMES: Set<PluginHookName> = new Set<PluginHookName>([
+  "before_agent_start",
+  "agent_end",
+  "before_compaction",
+  "after_compaction",
+  "message_received",
+  "message_sending",
+  "message_sent",
+  "before_tool_call",
+  "after_tool_call",
+  "tool_result_persist",
+  "session_start",
+  "session_end",
+  "gateway_start",
+  "gateway_stop",
+]);
 
 // Agent context shared across agent hooks
 export type PluginHookAgentContext = {
