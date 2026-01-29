@@ -8,10 +8,37 @@ import android.provider.MediaStore
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,9 +48,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.clawdbot.android.MainViewModel
 import com.clawdbot.android.chat.OutgoingAttachment
 import java.io.ByteArrayOutputStream
@@ -126,14 +160,20 @@ fun ChatSheetContent(viewModel: MainViewModel) {
     }
   }
 
-  Column(
-    modifier =
-      Modifier
+  var drawerOpen by remember { mutableStateOf(false) }
+  val sessionOptions = resolveSessionChoices(sessionKey, sessions, mainSessionKey = mainSessionKey)
+  val drawerWidth = 280.dp
+  val density = LocalDensity.current
+
+  Box(modifier = Modifier.fillMaxSize()) {
+    // Main content
+    Column(
+      modifier = Modifier
         .fillMaxSize()
         .padding(horizontal = 12.dp, vertical = 12.dp),
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    ChatMessageListCard(
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      ChatMessageListCard(
       messages = messages,
       pendingRunCount = pendingRunCount,
       pendingToolCalls = pendingToolCalls,
@@ -183,6 +223,136 @@ fun ChatSheetContent(viewModel: MainViewModel) {
         attachments.clear()
       },
     )
+    }
+
+    // Hamburger button (floating, only when drawer is closed)
+    if (!drawerOpen) {
+      Surface(
+        onClick = { drawerOpen = true },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+          .padding(4.dp)
+          .size(44.dp)
+          .align(Alignment.TopStart),
+      ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+          Icon(
+            Icons.Default.Menu,
+            contentDescription = "Sessions",
+            modifier = Modifier.size(26.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+    }
+
+    // Drawer overlay
+    if (drawerOpen) {
+      // Scrim (darkened background)
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.5f))
+          .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = { drawerOpen = false }
+          )
+      )
+    }
+
+    // Sliding drawer
+    val drawerOffset by animateDpAsState(
+      targetValue = if (drawerOpen) 0.dp else (-drawerWidth),
+      animationSpec = tween(durationMillis = 250),
+      label = "drawerOffset"
+    )
+    
+    Surface(
+      modifier = Modifier
+        .fillMaxHeight()
+        .width(drawerWidth)
+        .offset { IntOffset(with(density) { drawerOffset.roundToPx() }, 0) },
+      color = Color(0xFF1A1A1A),
+      shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(vertical = 16.dp),
+      ) {
+        // Header with hamburger to close
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Surface(
+            onClick = { drawerOpen = false },
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.1f),
+            modifier = Modifier.size(44.dp),
+          ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+              Icon(
+                Icons.Default.Menu,
+                contentDescription = "Close",
+                modifier = Modifier.size(26.dp),
+                tint = Color.White.copy(alpha = 0.8f),
+              )
+            }
+          }
+          Spacer(Modifier.width(12.dp))
+          Text(
+            "Sessions",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+          )
+        }
+        
+        Spacer(Modifier.height(8.dp))
+        
+        // Sessions list
+        LazyColumn(
+          modifier = Modifier.fillMaxSize(),
+          verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+          items(sessionOptions, key = { it.key }) { entry ->
+            val isSelected = entry.key == sessionKey
+            Surface(
+              onClick = {
+                viewModel.switchChatSession(entry.key)
+                drawerOpen = false
+              },
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+              shape = RoundedCornerShape(12.dp),
+              color = if (isSelected) Color.White.copy(alpha = 0.1f) else Color.Transparent,
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Text(
+                  entry.displayName ?: entry.key,
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                  modifier = Modifier.weight(1f),
+                )
+                if (isSelected) {
+                  Text("✓", color = Color.White.copy(alpha = 0.6f))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
