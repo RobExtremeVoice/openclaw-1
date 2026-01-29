@@ -20,13 +20,15 @@ import {
 } from "./extract.js";
 import { downloadInboundMedia } from "./media.js";
 import { createWebSendApi } from "./send-api.js";
-import type { WebInboundMessage, WebListenerCloseReason } from "./types.js";
+import type { WebInboundMessage, WebInboundReaction, WebListenerCloseReason } from "./types.js";
 
 export async function monitorWebInbox(options: {
   verbose: boolean;
   accountId: string;
   authDir: string;
   onMessage: (msg: WebInboundMessage) => Promise<void>;
+  /** Called when a reaction is received on a message. */
+  onReaction?: (reaction: WebInboundReaction) => void;
   mediaMaxMb?: number;
   /** Send read receipts for incoming messages (default true). */
   sendReadReceipts?: boolean;
@@ -313,6 +315,112 @@ export async function monitorWebInbox(options: {
   };
   sock.ev.on("messages.upsert", handleMessagesUpsert);
 
+  // Baileys emits messages.reaction when someone reacts to a message.
+  const handleMessagesReaction = async (
+    reactions: Array<{
+      key: proto.IMessageKey;
+      reaction: { text?: string; key?: proto.IMessageKey };
+    }>,
+  ) => {
+    if (!options.onReaction) return;
+    try {
+      for (const entry of reactions) {
+        try {
+          const targetKey = entry.key;
+          const reactionKey = entry.reaction?.key;
+          const messageId = targetKey?.id;
+          if (!messageId) continue;
+
+          const chatJid = targetKey.remoteJid;
+          if (!chatJid) continue;
+          if (chatJid.endsWith("@status") || chatJid.endsWith("@broadcast")) continue;
+
+          const emoji = entry.reaction?.text ?? "";
+          const isRemoval = !emoji;
+
+          const group = isJidGroup(chatJid) === true;
+          // Determine who sent the reaction:
+          // - fromMe=true → we reacted (use selfJid)
+          // - Otherwise: use reaction.key metadata, fallback to chatJid for DMs
+          let senderJid: string | undefined;
+          if (reactionKey?.fromMe) {
+            senderJid = selfJid ?? undefined;
+          } else {
+            // Prefer explicit sender info from reaction.key, fall back to chatJid for DMs
+            senderJid =
+              reactionKey?.participant ?? reactionKey?.remoteJid ?? (group ? undefined : chatJid);
+          }
+          const senderE164 = senderJid ? await resolveInboundJid(senderJid) : null;
+
+          // Gate reactions by the same access controls as messages (skip for our own reactions)
+          const isOwnReaction = Boolean(reactionKey?.fromMe);
+          if (!isOwnReaction) {
+            const from = group ? chatJid : await resolveInboundJid(chatJid);
+            if (!from) continue;
+            // No-op sendMessage: reactions shouldn't trigger pairing replies
+            const access = await checkInboundAccessControl({
+              accountId: options.accountId,
+              from,
+              selfE164,
+              senderE164,
+              group,
+              isFromMe: false,
+              connectedAtMs,
+              sock: { sendMessage: async () => ({}) },
+              remoteJid: chatJid,
+            });
+            if (!access.allowed) {
+              inboundLogger.debug(
+                { chatJid, senderJid, group },
+                "reaction blocked by access control",
+              );
+              continue;
+            }
+          }
+
+          const chatType = group ? "group" : "direct";
+          inboundLogger.info(
+            {
+              emoji: emoji || "(removed)",
+              messageId,
+              chatJid,
+              chatType,
+              senderJid,
+              isRemoval,
+              accountId: options.accountId,
+            },
+            isRemoval ? "inbound reaction removed" : "inbound reaction added",
+          );
+
+          options.onReaction({
+            messageId,
+            emoji,
+            isRemoval,
+            chatJid,
+            chatType,
+            accountId: options.accountId,
+            senderJid: senderJid ?? undefined,
+            senderE164: senderE164 ?? undefined,
+            reactedToFromMe: targetKey.fromMe ?? undefined,
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          inboundLogger.error(
+            {
+              error: String(err),
+              messageId: entry.key?.id,
+              chatJid: entry.key?.remoteJid,
+            },
+            "failed handling inbound reaction",
+          );
+        }
+      }
+    } catch (outerErr) {
+      inboundLogger.error({ error: String(outerErr) }, "reaction handler crashed");
+    }
+  };
+  sock.ev.on("messages.reaction", handleMessagesReaction as (...args: unknown[]) => void);
+
   const handleConnectionUpdate = (
     update: Partial<import("@whiskeysockets/baileys").ConnectionState>,
   ) => {
@@ -350,14 +458,19 @@ export async function monitorWebInbox(options: {
         const messagesUpsertHandler = handleMessagesUpsert as unknown as (
           ...args: unknown[]
         ) => void;
+        const messagesReactionHandler = handleMessagesReaction as unknown as (
+          ...args: unknown[]
+        ) => void;
         const connectionUpdateHandler = handleConnectionUpdate as unknown as (
           ...args: unknown[]
         ) => void;
         if (typeof ev.off === "function") {
           ev.off("messages.upsert", messagesUpsertHandler);
+          ev.off("messages.reaction", messagesReactionHandler);
           ev.off("connection.update", connectionUpdateHandler);
         } else if (typeof ev.removeListener === "function") {
           ev.removeListener("messages.upsert", messagesUpsertHandler);
+          ev.removeListener("messages.reaction", messagesReactionHandler);
           ev.removeListener("connection.update", connectionUpdateHandler);
         }
         sock.ws?.close();

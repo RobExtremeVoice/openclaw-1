@@ -40,3 +40,24 @@ export type WebInboundMessage = {
   mediaUrl?: string;
   wasMentioned?: boolean;
 };
+
+export type WebInboundReaction = {
+  /** Message ID being reacted to. */
+  messageId: string;
+  /** Emoji text (empty string when isRemoval=true). */
+  emoji: string;
+  /** True if this is a reaction removal (emoji will be empty). */
+  isRemoval?: boolean;
+  /** JID of the chat where the reaction occurred. */
+  chatJid: string;
+  chatType: "direct" | "group";
+  /** Account that received the reaction. */
+  accountId: string;
+  /** JID of the person who reacted. */
+  senderJid?: string;
+  /** E.164 of the person who reacted. */
+  senderE164?: string;
+  /** Whether the reacted message was sent by us. */
+  reactedToFromMe?: boolean;
+  timestamp?: number;
+};

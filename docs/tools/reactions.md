@@ -3,6 +3,7 @@ summary: "Reaction semantics shared across channels"
 read_when:
   - Working on reactions in any channel
 ---
+
 # Reaction tooling
 
 Shared reaction semantics across channels:
@@ -18,3 +19,4 @@ Channel notes:
 - **Telegram**: empty `emoji` removes the bot's reactions; `remove: true` also removes reactions but still requires a non-empty `emoji` for tool validation.
 - **WhatsApp**: empty `emoji` removes the bot reaction; `remove: true` maps to empty emoji (still requires `emoji`).
 - **Signal**: inbound reaction notifications emit system events when `channels.signal.reactionNotifications` is enabled.
+- **WhatsApp**: inbound reaction notifications are always surfaced as system events (no configuration required).

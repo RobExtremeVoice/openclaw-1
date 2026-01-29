@@ -28,6 +28,7 @@ import { whatsappHeartbeatLog, whatsappLog } from "./loggers.js";
 import { buildMentionConfig } from "./mentions.js";
 import { createEchoTracker } from "./monitor/echo.js";
 import { createWebOnMessageHandler } from "./monitor/on-message.js";
+import type { WebInboundReaction } from "../inbound.js";
 import type { WebChannelStatus, WebInboundMsg, WebMonitorTuning } from "./types.js";
 import { isLikelyWhatsAppCryptoError } from "./util.js";
 
@@ -173,7 +174,10 @@ export async function monitorWebChannel(
       account,
     });
 
-    const inboundDebounceMs = resolveInboundDebounceMs({ cfg, channel: "whatsapp" });
+    const inboundDebounceMs = resolveInboundDebounceMs({
+      cfg,
+      channel: "whatsapp",
+    });
     const shouldDebounce = (msg: WebInboundMsg) => {
       if (msg.mediaPath || msg.mediaType) return false;
       if (msg.location) return false;
@@ -197,6 +201,33 @@ export async function monitorWebChannel(
         emitStatus();
         _lastInboundMsg = msg;
         await onMessage(msg);
+      },
+      onReaction: (reaction: WebInboundReaction) => {
+        status.lastEventAt = Date.now();
+        emitStatus();
+        const route = resolveAgentRoute({
+          cfg,
+          channel: "whatsapp",
+          accountId: reaction.accountId,
+          peer: {
+            kind: reaction.chatType === "group" ? "group" : "dm",
+            id: reaction.chatJid,
+          },
+        });
+        const senderLabel = reaction.senderE164 ?? reaction.senderJid ?? "someone";
+        const action = reaction.isRemoval ? "removed" : "added";
+        const emojiPart = reaction.isRemoval ? "" : `: ${reaction.emoji}`;
+        const text = `WhatsApp reaction ${action}${emojiPart} by ${senderLabel} msg ${reaction.messageId}`;
+        const contextKey = [
+          "whatsapp",
+          "reaction",
+          action,
+          reaction.messageId,
+          reaction.senderJid ?? "unknown",
+          reaction.emoji || "removed",
+          reaction.chatJid,
+        ].join(":");
+        enqueueSystemEvent(text, { sessionKey: route.sessionKey, contextKey });
       },
     });
 
