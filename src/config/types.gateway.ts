@@ -191,6 +191,29 @@ export type GatewayHttpConfig = {
   endpoints?: GatewayHttpEndpointsConfig;
 };
 
+/**
+ * Rate limiting configuration for the gateway.
+ * Uses token bucket algorithm for smooth limiting with burst support.
+ */
+export type GatewayRateLimitConfig = {
+  /** Enable rate limiting (default: true). */
+  enabled?: boolean;
+  /** Max requests/min for unauthenticated clients (default: 60, 0 = unlimited). */
+  unauthenticated?: number;
+  /** Max requests/min for authenticated clients (default: 0 = unlimited). */
+  authenticated?: number;
+  /** Max messages/min per channel (default: 200, 0 = unlimited). */
+  channelMessages?: number;
+  /** Burst multiplier for token bucket (default: 2). */
+  burstMultiplier?: number;
+  /** Auth failures before exponential backoff starts (default: 5). */
+  authFailuresBeforeBackoff?: number;
+  /** Base delay in ms for auth backoff (default: 1000). */
+  authBackoffBaseMs?: number;
+  /** Max delay in ms for auth backoff (default: 60000). */
+  authBackoffMaxMs?: number;
+};
+
 export type GatewayNodesConfig = {
   /** Browser routing policy for node-hosted browser proxies. */
   browser?: {
@@ -233,6 +256,8 @@ export type GatewayConfig = {
   tls?: GatewayTlsConfig;
   http?: GatewayHttpConfig;
   nodes?: GatewayNodesConfig;
+  /** Rate limiting configuration for abuse prevention. */
+  rateLimit?: GatewayRateLimitConfig;
   /**
    * IPs of trusted reverse proxies (e.g. Traefik, nginx). When a connection
    * arrives from one of these IPs, the Gateway trusts `x-forwarded-for` (or
