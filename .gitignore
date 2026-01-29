@@ -71,3 +71,7 @@ USER.md
 
 # local tooling
 .serena/
+
+# Moltbot local data (chat history, credentials, config)
+.moltbot-data/
+workspace/

@@ -49,7 +49,7 @@ else
 fi
 cp -f "$NOTES_HTML" "$TMP_DIR/${ZIP_BASE}.html"
 
-DOWNLOAD_URL_PREFIX=${SPARKLE_DOWNLOAD_URL_PREFIX:-"https://github.com/moltbot/moltbot/releases/download/v${VERSION}/"}
+DOWNLOAD_URL_PREFIX=${SPARKLE_DOWNLOAD_URL_PREFIX:-"https://github.com/nugrahalabib/moltbot/releases/download/v${VERSION}/"}
 
 export PATH="$ROOT/apps/macos/.build/artifacts/sparkle/Sparkle/bin:$PATH"
 if ! command -v generate_appcast >/dev/null; then
