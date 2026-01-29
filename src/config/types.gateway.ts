@@ -191,6 +191,33 @@ export type GatewayHttpConfig = {
   endpoints?: GatewayHttpEndpointsConfig;
 };
 
+/** Audit event categories for filtering. */
+export type GatewayAuditCategory =
+  | "auth"
+  | "authz"
+  | "admin"
+  | "config"
+  | "rate_limit"
+  | "channel"
+  | "session";
+
+/**
+ * Security audit logging configuration.
+ * Records security-relevant events for compliance and forensics.
+ */
+export type GatewayAuditLogConfig = {
+  /** Enable audit event logging (default: false). */
+  enabled?: boolean;
+  /** Output target: 'file' or 'stdout' (default: 'file'). */
+  target?: "file" | "stdout";
+  /** File path for file target (default: ~/.clawdbot/audit/audit.jsonl). */
+  filePath?: string;
+  /** Categories to log (default: all). */
+  categories?: GatewayAuditCategory[];
+  /** Include request IDs for correlation (default: true). */
+  includeRequestIds?: boolean;
+};
+
 export type GatewayNodesConfig = {
   /** Browser routing policy for node-hosted browser proxies. */
   browser?: {
@@ -233,6 +260,8 @@ export type GatewayConfig = {
   tls?: GatewayTlsConfig;
   http?: GatewayHttpConfig;
   nodes?: GatewayNodesConfig;
+  /** Security audit event logging configuration. */
+  auditLog?: GatewayAuditLogConfig;
   /**
    * IPs of trusted reverse proxies (e.g. Traefik, nginx). When a connection
    * arrives from one of these IPs, the Gateway trusts `x-forwarded-for` (or
