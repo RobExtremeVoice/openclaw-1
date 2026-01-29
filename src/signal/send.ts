@@ -255,3 +255,69 @@ export async function sendReadReceiptSignal(
   });
   return true;
 }
+
+export type SignalPollOpts = SignalRpcOpts & {
+  /** Allow multiple selections (default: true) */
+  multiSelect?: boolean;
+};
+
+export type SignalPollResult = {
+  messageId: string;
+  timestamp?: number;
+};
+
+/**
+ * Create and send a poll to a Signal recipient or group.
+ */
+export async function sendPollSignal(
+  to: string,
+  question: string,
+  options: string[],
+  opts: SignalPollOpts = {},
+): Promise<SignalPollResult> {
+  if (!question?.trim()) {
+    throw new Error("Poll question is required");
+  }
+  if (!options || options.length < 2) {
+    throw new Error("Poll requires at least 2 options");
+  }
+  if (options.length > 12) {
+    throw new Error("Poll cannot have more than 12 options");
+  }
+
+  const { baseUrl, account } = resolveSignalRpcContext(opts);
+  const target = parseTarget(to);
+  const targetParams = buildTargetParams(target, {
+    recipient: true,
+    group: true,
+    username: true,
+  });
+  if (!targetParams) {
+    throw new Error("Signal poll recipient is required");
+  }
+
+  const params: Record<string, unknown> = {
+    question: question.trim(),
+    option: options.map((o) => o.trim()).filter(Boolean),
+    ...targetParams,
+  };
+
+  if (account) params.account = account;
+
+  // signal-cli uses --no-multi to disable multi-select, so we invert the logic
+  // Default is multi-select allowed (true), pass multiSelect: false to restrict to single choice
+  if (opts.multiSelect === false) {
+    params.multiSelect = false;
+  }
+
+  const result = await signalRpcRequest<{ timestamp?: number }>("sendPollCreate", params, {
+    baseUrl,
+    timeoutMs: opts.timeoutMs ?? 15_000, // polls may take longer
+  });
+
+  const timestamp = result?.timestamp;
+  return {
+    messageId: timestamp ? String(timestamp) : "unknown",
+    timestamp,
+  };
+}
