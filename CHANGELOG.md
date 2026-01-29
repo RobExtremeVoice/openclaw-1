@@ -57,6 +57,7 @@ Status: beta.
 - iMessage: normalize messaging targets. (#1708)
 - Signal: fix reactions and add configurable startup timeout. (#1651, #1677)
 - Matrix: decrypt E2EE media with size guard. (#1744)
+- Message tool: disable cross-context origin marker by default; set `tools.message.crossContext.marker.enabled: true` to restore. (#1782)
 
 
 ## 2026.1.24
