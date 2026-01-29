@@ -22,7 +22,7 @@ services:
         "dist/index.js",
         "gateway",
         "--bind",
-        "${CLAWDBOT_GATEWAY_BIND:-lan}",
+        "${CLAWDBOT_GATEWAY_BIND:-loopback}",
         "--port",
         "${CLAWDBOT_GATEWAY_PORT:-18789}"
       ]

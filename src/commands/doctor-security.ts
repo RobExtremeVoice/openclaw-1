@@ -60,6 +60,7 @@ export async function noteSecurityWarnings(cfg: MoltbotConfig) {
       warnings.push(
         `- CRITICAL: Gateway bound to ${bindDescriptor} without authentication.`,
         `  Anyone on your network (or internet if port-forwarded) can fully control your agent.`,
+        `  Your gateway is discoverable via internet scanners (Shodan, Censys).`,
         `  Fix: ${formatCliCommand("moltbot config set gateway.bind loopback")}`,
         ...authFixLines,
       );
@@ -67,6 +68,7 @@ export async function noteSecurityWarnings(cfg: MoltbotConfig) {
       // Auth is configured, but still warn about network exposure
       warnings.push(
         `- WARNING: Gateway bound to ${bindDescriptor} (network-accessible).`,
+        `  The gateway may be discoverable via internet scanners (Shodan, Censys).`,
         `  Ensure your auth credentials are strong and not exposed.`,
       );
     }

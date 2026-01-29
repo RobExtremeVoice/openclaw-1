@@ -256,6 +256,17 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     return;
   }
 
+  // Warn when binding to non-loopback even with auth
+  if (bind !== "loopback" && hasSharedSecret) {
+    gatewayLog.warn(
+      [
+        `Gateway binding to ${bind} (network-accessible).`,
+        "Ensure this is intentional. The gateway may be discoverable via internet scanners.",
+        "For local-only access, use --bind loopback or omit the --bind flag.",
+      ].join("\n"),
+    );
+  }
+
   try {
     await runGatewayLoop({
       runtime: defaultRuntime,
