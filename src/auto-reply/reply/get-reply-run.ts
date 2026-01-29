@@ -242,8 +242,9 @@ export async function runPreparedReply(
     sessionEntry.updatedAt = Date.now();
     sessionStore[sessionKey] = sessionEntry;
     if (storePath) {
+      const entryToStore = sessionEntry;
       await updateSessionStore(storePath, (store) => {
-        store[sessionKey] = sessionEntry;
+        store[sessionKey] = entryToStore;
       });
     }
   }
