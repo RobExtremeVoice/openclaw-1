@@ -5,7 +5,6 @@ import { promisify } from "node:util";
 import { colorize, isRich, theme } from "../terminal/theme.js";
 import {
   formatGatewayServiceDescription,
-  LEGACY_GATEWAY_SYSTEMD_SERVICE_NAMES,
   resolveGatewaySystemdServiceName,
 } from "./constants.js";
 import { parseKeyValueOutput } from "./runtime-parse.js";
@@ -60,6 +59,21 @@ function resolveSystemdSystemUnitPath(env: Record<string, string | undefined>): 
 
 export function resolveSystemdUserUnitPath(env: Record<string, string | undefined>): string {
   return resolveSystemdUnitPath(env);
+}
+
+export function findLegacySystemdUnits(
+  _env: Record<string, string | undefined>,
+): Promise<string[]> {
+  // TODO: Implement search for legacy unit names
+  return Promise.resolve([]);
+}
+
+export function uninstallLegacySystemdUnits(
+  _env: Record<string, string | undefined>,
+  _units: string[],
+): Promise<void> {
+  // TODO: Implement removal of legacy units
+  return Promise.resolve();
 }
 
 export { enableSystemdUserLinger, readSystemdUserLingerStatus };
@@ -379,8 +393,8 @@ export async function readSystemdServiceRuntime(
       state: parsed.activeState,
       subState: parsed.subState,
       pid: parsed.mainPid,
-      exitStatus: parsed.execMainStatus,
-      exitCode: parsed.execMainCode,
+      lastExitStatus: parsed.execMainStatus,
+      lastRunResult: parsed.execMainCode,
     };
   }
   
@@ -405,8 +419,8 @@ export async function readSystemdServiceRuntime(
       state: parsed.activeState,
       subState: parsed.subState,
       pid: parsed.mainPid,
-      exitStatus: parsed.execMainStatus,
-      exitCode: parsed.execMainCode,
+      lastExitStatus: parsed.execMainStatus,
+      lastRunResult: parsed.execMainCode,
     };
   }
   
