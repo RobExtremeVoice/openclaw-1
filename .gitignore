@@ -113,8 +113,8 @@ test-results/
 test-output/
 
 # Global Skills & Plugins (large, auto-generated)
-skills/global-shared/
-skills/global-skills/
+skills/global-shared
+skills/global-skills
 
 # OS & IDE Files
 .vscode/
