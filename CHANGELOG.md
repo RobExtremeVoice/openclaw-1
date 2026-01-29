@@ -22,7 +22,7 @@ Status: beta.
 - Docs: add Northflank one-click deployment guide. (#2167) Thanks @AdeboyeDN.
 - Gateway: warn on hook tokens via query params; document header auth preference. (#2200) Thanks @YuriNachos.
 - Gateway: add dangerous Control UI device auth bypass flag + audit warnings. (#2248)
-- Security: add exec command blocklist to prevent destructive operations regardless of security mode.
+- Security: add exec command blocklist to prevent destructive operations regardless of security mode. (#3959)
 - Doctor: warn on gateway exposure without auth. (#2016) Thanks @Alex-Alaniz.
 - Config: auto-migrate legacy state/config paths and keep config resolution consistent across legacy filenames.
 - Discord: add configurable privileged gateway intents for presences/members. (#2266) Thanks @kentaro.
