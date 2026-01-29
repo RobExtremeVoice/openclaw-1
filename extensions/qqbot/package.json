@@ -1,39 +1,26 @@
 {
-  "name": "qqbot",
-  "version": "1.1.0",
+  "name": "@moltbot/qqbot",
+  "version": "2026.1.27-beta.1",
   "type": "module",
+  "description": "Moltbot QQ Bot channel plugin",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "clawdbot": {
-    "extensions": ["./index.ts"],
-    "channel": {
-      "id": "qqbot",
-      "label": "QQ Bot",
-      "selectionLabel": "QQ Bot (Official API)",
-      "docsPath": "/docs/channels/qqbot",
-      "blurb": "Connect to QQ via official QQ Bot API",
-      "order": 50
-    },
-    "install": {
-      "npmSpec": "qqbot",
-      "localPath": "./extensions/qqbot",
-      "defaultChoice": "local"
-    }
-  },
   "moltbot": {
     "extensions": ["./index.ts"],
     "channel": {
       "id": "qqbot",
       "label": "QQ Bot",
       "selectionLabel": "QQ Bot (Official API)",
-      "docsPath": "/docs/channels/qqbot",
+      "docsPath": "/channels/qqbot",
+      "docsLabel": "qqbot",
       "blurb": "Connect to QQ via official QQ Bot API",
-      "order": 50
+      "order": 50,
+      "quickstartAllowFrom": true
     },
     "install": {
-      "npmSpec": "qqbot",
-      "localPath": "./extensions/qqbot",
-      "defaultChoice": "local"
+      "npmSpec": "@moltbot/qqbot",
+      "localPath": "extensions/qqbot",
+      "defaultChoice": "npm"
     }
   },
   "scripts": {
@@ -46,9 +33,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
-    "typescript": "^5.0.0"
-  },
-  "peerDependencies": {
-    "clawdbot": "*"
+    "typescript": "^5.0.0",
+    "moltbot": "workspace:*"
   }
 }
