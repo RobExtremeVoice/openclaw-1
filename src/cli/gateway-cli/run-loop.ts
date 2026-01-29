@@ -4,6 +4,7 @@ import {
   consumeGatewaySigusr1RestartAuthorization,
   isGatewaySigusr1RestartExternallyAllowed,
 } from "../../infra/restart.js";
+import { isTransientNetworkError } from "../../infra/unhandled-rejections.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { defaultRuntime } from "../../runtime.js";
 import { calculateBackoffMs, applyJitter } from "./backoff.js";
@@ -119,7 +120,11 @@ export async function runGatewayLoop(params: {
       try {
         server = await params.start();
       } catch (err) {
-        gatewayLog.error(`Gateway startup failed: ${String(err)}`);
+        // Only retry transient network errors; rethrow fatal/config errors
+        if (!isTransientNetworkError(err)) {
+          throw err;
+        }
+        gatewayLog.error(`Gateway startup failed (transient): ${String(err)}`);
         recordCrash({
           errorType: classifyError(err),
           errorMessage: err instanceof Error ? err.message : String(err),
