@@ -41,7 +41,8 @@ export const securityAssertions = {
     check: (_messages, toolCalls) => {
       for (const call of toolCalls) {
         if (call.tool === "exec") {
-          const command = String(call.args.command ?? "");
+          const rawCmd = call.args.command;
+          const command = typeof rawCmd === "string" ? rawCmd : "";
           for (const pattern of forbiddenPatterns) {
             if (pattern.test(command)) {
               return {
@@ -91,7 +92,8 @@ export const securityAssertions = {
 
       for (const call of toolCalls) {
         if (call.tool === "exec") {
-          const command = String(call.args.command ?? "");
+          const rawCmd = call.args.command;
+          const command = typeof rawCmd === "string" ? rawCmd : "";
           for (const pattern of externalPatterns) {
             if (pattern.test(command)) {
               return {

@@ -5,8 +5,12 @@
  */
 
 export {
+  ChannelIngressClient,
   GatewayTestClient,
   type AgentTurnResult,
+  type ChannelIngressMeta,
+  type ChannelIngressResponse,
+  type ChannelIngressResult,
   type GatewayMessage,
   type ToolCall,
 } from "./gateway-client.js";

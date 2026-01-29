@@ -20,13 +20,23 @@ services:
       dockerfile: Dockerfile
     environment:
       # Minimal config for testing - no real channels
-      CLAWDBOT_AUTH_TOKEN: ${TEST_AUTH_TOKEN:-test-token-12345}
+      CLAWDBOT_GATEWAY_TOKEN: ${TEST_AUTH_TOKEN:-test-token-12345}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required}
-      CLAWDBOT_GATEWAY_HOST: "0.0.0.0"
       CLAWDBOT_GATEWAY_PORT: "18789"
       # Disable real channel connections
       CLAWDBOT_CHANNELS_DISABLED: "true"
       NODE_ENV: test
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--allow-unconfigured",
+        "--bind",
+        "lan",
+        "--port",
+        "18789"
+      ]
     ports:
       - "18789:18789"
     healthcheck:

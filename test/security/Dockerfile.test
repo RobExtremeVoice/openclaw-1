@@ -9,6 +9,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ui/package.json ./ui/package.json
 COPY patches ./patches
+COPY scripts ./scripts
+COPY git-hooks ./git-hooks
 
 RUN pnpm install --frozen-lockfile
 
@@ -16,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Build the project (tests may need compiled code)
-RUN pnpm build
+RUN CLAWDBOT_A2UI_SKIP_MISSING=1 pnpm build
 
 # Create results directory
 RUN mkdir -p /app/test-results

@@ -143,6 +143,37 @@ export interface AgentTurnResult {
   error?: string;
 }
 
+export interface ChannelIngressMeta {
+  rawBody?: string;
+  body?: string;
+  commandAuthorized?: boolean;
+  forwardedFrom?: string;
+  forwardedFromType?: string;
+  forwardedFromId?: string;
+  forwardedFromUsername?: string;
+  forwardedFromTitle?: string;
+  forwardedFromSignature?: string;
+  forwardedDate?: number;
+  chatType?: string;
+  senderId?: string;
+  senderE164?: string;
+  groupSubject?: string;
+  wasMentioned?: boolean;
+}
+
+export interface ChannelIngressResponse {
+  runId: string;
+  status: "accepted" | "blocked";
+  sessionKey?: string;
+  summary?: string;
+  meta?: ChannelIngressMeta;
+}
+
+export interface ChannelIngressResult {
+  ingress: ChannelIngressResponse;
+  result: AgentTurnResult | null;
+}
+
 export class GatewayTestClient {
   private ws: WebSocket | null = null;
   private messageQueue: GatewayMessage[] = [];
@@ -160,7 +191,7 @@ export class GatewayTestClient {
     private authToken?: string,
   ) {}
 
-  private generateId(): string {
+  protected generateId(): string {
     return `test-${Date.now()}-${++this.requestCounter}`;
   }
 
@@ -172,8 +203,8 @@ export class GatewayTestClient {
       this.ws!.on("error", reject);
     });
 
-    this.ws.on("message", (data) => {
-      const frame = JSON.parse(data.toString()) as Frame;
+    this.ws.on("message", (data: Buffer) => {
+      const frame = JSON.parse(String(data)) as Frame;
       this.handleFrame(frame);
     });
 
@@ -186,7 +217,7 @@ export class GatewayTestClient {
       minProtocol: PROTOCOL_VERSION,
       maxProtocol: PROTOCOL_VERSION,
       client: {
-        id: "security-test-harness",
+        id: "test",
         displayName: "Security Test Client",
         version: "1.0.0",
         platform: process.platform,
@@ -238,7 +269,7 @@ export class GatewayTestClient {
     }
   }
 
-  private async request<T>(
+  protected async request<T>(
     method: string,
     params?: unknown,
     timeoutMs = 30000,
@@ -320,7 +351,7 @@ export class GatewayTestClient {
   /**
    * Wait for chat events to reach final/error/aborted state.
    */
-  private async waitForChatComplete(
+  protected async waitForChatComplete(
     runId: string,
     timeoutMs: number,
   ): Promise<AgentTurnResult> {
@@ -416,5 +447,63 @@ export class GatewayTestClient {
    */
   getChatEvents(runId: string): ChatEventPayload[] {
     return this.chatEvents.get(runId) ?? [];
+  }
+}
+
+export class ChannelIngressClient extends GatewayTestClient {
+  async sendChannelIngress(
+    channel: string,
+    payload: Record<string, unknown>,
+    opts?: {
+      runId?: string;
+      accountId?: string;
+      verbose?: boolean;
+      timeoutMs?: number;
+    },
+  ): Promise<ChannelIngressResult> {
+    const timeoutMs = opts?.timeoutMs ?? 60000;
+    const runId = opts?.runId ?? this.generateId();
+    const ingress = await this.request<ChannelIngressResponse>(
+      "chat.ingress",
+      {
+        channel,
+        payload,
+        runId,
+        accountId: opts?.accountId,
+        verbose: opts?.verbose,
+      },
+      timeoutMs,
+    );
+
+    if (ingress.status !== "accepted") {
+      return { ingress, result: null };
+    }
+
+    const result = await this.waitForChatComplete(ingress.runId ?? runId, timeoutMs);
+    return { ingress, result };
+  }
+
+  async sendTelegramMessage(
+    payload: Record<string, unknown>,
+    opts?: {
+      runId?: string;
+      accountId?: string;
+      verbose?: boolean;
+      timeoutMs?: number;
+    },
+  ): Promise<ChannelIngressResult> {
+    return this.sendChannelIngress("telegram", payload, opts);
+  }
+
+  async sendWhatsAppMessage(
+    payload: Record<string, unknown>,
+    opts?: {
+      runId?: string;
+      accountId?: string;
+      verbose?: boolean;
+      timeoutMs?: number;
+    },
+  ): Promise<ChannelIngressResult> {
+    return this.sendChannelIngress("whatsapp", payload, opts);
   }
 }
