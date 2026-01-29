@@ -62,4 +62,3 @@ describe("models-config: ZAI_BASE_URL", () => {
     });
   });
 });
-
