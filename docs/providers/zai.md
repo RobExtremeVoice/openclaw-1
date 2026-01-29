@@ -113,9 +113,10 @@ use a single API key for both if desired.
 
 ## Important Notes
 
-- **Same API key, different endpoints**: Your API key works on both general and coding
-  endpoints, but the billing is different. Using a Coding Plan key on the general
-  endpoint may return error 1113 ("Insufficient balance").
+- **Keys are subscription-gated**: Your API key only works on the endpoint matching
+  your active subscription. A Coding Plan key will return error 1113 ("Insufficient
+  balance") on the general pay-as-you-go endpoint, and vice versa. Choose the provider
+  variant that matches your subscription type.
 
 - **Regional keys are not interchangeable**: Keys from z.ai don't work on bigmodel.cn
   and vice versa. Create your key on the platform for your region.
