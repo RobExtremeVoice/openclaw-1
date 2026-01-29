@@ -269,6 +269,15 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
     return pick("QWEN_OAUTH_TOKEN") ?? pick("QWEN_PORTAL_API_KEY");
   }
 
+  // Ollama doesn't require an API key for local instances
+  if (normalized === "ollama") {
+    // If user provided OLLAMA_API_KEY (e.g. for remote/proxy), allow it
+    const explicit = pick("OLLAMA_API_KEY");
+    if (explicit) return explicit;
+    // Otherwise return a dummy key to bypass the "No API key found" check
+    return { apiKey: "ollama-local", source: "ollama-default" };
+  }
+
   const envMap: Record<string, string> = {
     openai: "OPENAI_API_KEY",
     google: "GEMINI_API_KEY",
