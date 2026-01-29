@@ -41,6 +41,10 @@ async function main() {
     (globalThis as unknown as { Long?: unknown }).Long = Long;
   }
 
+  // Prevent crashes on transient fetch/network failures (#3815)
+  const { installUnhandledRejectionHandler } = await import("../infra/unhandled-rejections.js");
+  installUnhandledRejectionHandler();
+
   const [
     { loadConfig },
     { startGatewayServer },

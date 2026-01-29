@@ -14,6 +14,7 @@ Status: beta.
 - Memory Search: allow extra paths for memory indexing. (#3600) Thanks @kira-ariaki.
 
 ### Changes
+- Gateway: prevent crash on transient fetch/network failures (#3815)
 - Providers: add Venice AI integration; update Moonshot Kimi references to kimi-k2.5; update MiniMax API endpoint/format. (#2762, #3064)
 - Telegram: quote replies, edit-message action, silent sends, sticker support + vision caching, linkPreview toggle, plugin sendPayload support. (#2900, #2394, #2382, #2548, #1700, #1917)
 - Discord: configurable privileged gateway intents for presences/members. (#2266) Thanks @kentaro.
