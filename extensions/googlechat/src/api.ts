@@ -281,3 +281,20 @@ export async function probeGoogleChat(account: ResolvedGoogleChatAccount): Promi
     };
   }
 }
+
+export async function getGoogleChatMessage(params: {
+  account: ResolvedGoogleChatAccount;
+  messageName: string;
+}): Promise<{ text?: string; name?: string; thread?: { name?: string } } | null> {
+  const { account, messageName } = params;
+  const url = `${CHAT_API_BASE}/${messageName}`;
+  try {
+    return await fetchJson<{ text?: string; name?: string; thread?: { name?: string } }>(
+      account,
+      url,
+      { method: "GET" }
+    );
+  } catch (err) {
+    return null;
+  }
+}
