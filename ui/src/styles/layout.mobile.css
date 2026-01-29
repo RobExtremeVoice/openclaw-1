@@ -2,8 +2,15 @@
    Mobile Layout
    =========================================== */
 
-/* Tablet: Horizontal nav */
+/* Tablet: Horizontal nav - sticky header */
 @media (max-width: 1100px) {
+  /* Keep topbar sticky on mobile */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
   .nav {
     display: flex;
     flex-direction: row;
@@ -13,6 +20,10 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    /* Sticky nav below topbar */
+    position: sticky;
+    top: var(--shell-topbar-height, 56px);
+    z-index: 30;
   }
 
   .nav::-webkit-scrollbar {
