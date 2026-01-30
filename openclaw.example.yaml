@@ -1,0 +1,14 @@
+# OpenClaw Configuration Example
+# Copy this file to 'openclaw.yaml' and fill in your credentials.
+
+channels:
+  feishu:
+    accounts:
+      # Change 'my_feishu_bot' to your preferred account name
+      my_feishu_bot:
+        appId: "cli_xxxxxxxxxxxxxxxx"
+        appSecret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        enabled: true
+        # Use Long Connection Mode (WebSocket) - Recommended for local dev/internal bots
+        # Set to false if you want to use Webhook mode (requires public IP/domain)
+        useLongConnection: true
