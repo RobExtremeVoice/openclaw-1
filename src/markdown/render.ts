@@ -93,18 +93,20 @@ export function renderMarkdownWithMarkers(ir: MarkdownIR, options: RenderOptions
   for (let i = 0; i < points.length; i += 1) {
     const pos = points[i];
 
-    while (stack.length && stack[stack.length - 1]?.end === pos) {
-      const span = stack.pop();
-      if (!span) break;
-      const marker = styleMarkers[span.style];
-      if (marker) out += marker.close;
-    }
-
+    // Close links before styles to maintain proper nesting order
+    // (links are typically nested inside styles like bold/italic)
     const closingLinks = linkEnds.get(pos);
     if (closingLinks && closingLinks.length > 0) {
       for (const link of closingLinks) {
         out += link.close;
       }
+    }
+
+    while (stack.length && stack[stack.length - 1]?.end === pos) {
+      const span = stack.pop();
+      if (!span) break;
+      const marker = styleMarkers[span.style];
+      if (marker) out += marker.close;
     }
 
     const openingLinks = linkStarts.get(pos);

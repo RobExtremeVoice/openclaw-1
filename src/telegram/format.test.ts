@@ -47,4 +47,19 @@ describe("markdownToTelegramHtml", () => {
     const res = markdownToTelegramHtml("```js\nconst x = 1;\n```");
     expect(res).toBe("<pre><code>const x = 1;\n</code></pre>");
   });
+
+  it("properly nests link tags inside bold when URL is at end of bold span", () => {
+    const res = markdownToTelegramHtml("**Check https://example.com**");
+    expect(res).toBe('<b>Check <a href="https://example.com">https://example.com</a></b>');
+  });
+
+  it("properly nests link tags inside italic", () => {
+    const res = markdownToTelegramHtml("_visit https://docs.molt.bot_");
+    expect(res).toBe('<i>visit <a href="https://docs.molt.bot">https://docs.molt.bot</a></i>');
+  });
+
+  it("renders emoji before bold correctly", () => {
+    const res = markdownToTelegramHtml("🧪 **Header text**");
+    expect(res).toBe("🧪 <b>Header text</b>");
+  });
 });
