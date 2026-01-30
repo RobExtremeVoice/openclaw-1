@@ -28,7 +28,6 @@ export async function runMonitorTui(runtime: RuntimeEnv, opts: { intervalMs: num
   tui.addChild(root);
 
   let running = true;
-  let lastUpdate = 0;
 
   const refresh = async () => {
     if (!running) return;
@@ -45,7 +44,6 @@ export async function runMonitorTui(runtime: RuntimeEnv, opts: { intervalMs: num
         : theme.error("Offline");
 
       const updateLatency = Date.now() - now;
-      lastUpdate = now;
 
       const updates = resolveUpdateAvailability(status.update);
       const updateMsg = updates.available ? ` • ${theme.accent("UPDATE AVAILABLE")}` : "";
@@ -90,7 +88,8 @@ export async function runMonitorTui(runtime: RuntimeEnv, opts: { intervalMs: num
 
       tui.requestRender();
     } catch (err) {
-      footer.setText(theme.error(`Error: ${err}`));
+      const msg = err instanceof Error ? err.message : String(err);
+      footer.setText(theme.error(`Error: ${msg}`));
     }
 
     if (running) {
@@ -99,7 +98,7 @@ export async function runMonitorTui(runtime: RuntimeEnv, opts: { intervalMs: num
   };
 
   tui.start();
-  refresh();
+  void refresh();
 
   process.on("SIGINT", () => {
     running = false;
