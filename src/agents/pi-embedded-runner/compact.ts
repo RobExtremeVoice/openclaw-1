@@ -390,7 +390,7 @@ export async function compactEmbeddedPiSessionDirect(
         authStorage,
         modelRegistry,
         model,
-        thinkingLevel: mapThinkingLevel(params.thinkLevel),
+        thinkingLevel: mapThinkingLevel(params.thinkLevel, model.compat),
         systemPrompt,
         tools: builtInTools,
         customTools,

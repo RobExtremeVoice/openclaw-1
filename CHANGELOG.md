@@ -5,6 +5,9 @@ Docs: https://docs.openclaw.ai
 ## 2026.1.29
 Status: stable.
 
+### Fixed
+- Fixed reasoning models that don't support the `reasoning_effort` parameter (like XAI's `grok-4-1-fast-reasoning`) by respecting the `supportsReasoningEffort` compat flag in model configurations
+
 ### Changes
 - Rebrand: rename the npm package/CLI to `openclaw`, add a `openclaw` compatibility shim, and move extensions to the `@openclaw/*` scope.
 - Onboarding: strengthen security warning copy for beta + access control expectations.
