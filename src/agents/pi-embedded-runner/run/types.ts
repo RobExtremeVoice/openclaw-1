@@ -86,6 +86,9 @@ export type EmbeddedRunAttemptParams = {
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  enableSelfValidation?: boolean;
+  validationTask?: string;
+  validationModel?: string;
 };
 
 export type EmbeddedRunAttemptResult = {

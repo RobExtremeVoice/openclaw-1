@@ -95,4 +95,10 @@ export type RunEmbeddedPiAgentParams = {
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  /** Enable self-validation loop. */
+  enableSelfValidation?: boolean;
+  /** Original task description for validation context. */
+  validationTask?: string;
+  /** Model to use for vision analysis. */
+  validationModel?: string;
 };

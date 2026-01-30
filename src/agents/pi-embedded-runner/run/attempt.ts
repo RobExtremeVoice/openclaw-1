@@ -85,6 +85,9 @@ import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 import { detectAndLoadPromptImages } from "./images.js";
+import { startSelfValidationLoop } from "../../../self-validation/lifecycle.js";
+import { createValidationAICall } from "../../../self-validation/ai-adapter.js";
+import { createValidationMessageSender } from "../../../self-validation/message-adapter.js";
 
 export function injectHistoryImagesIntoMessages(
   messages: AgentMessage[],
@@ -830,6 +833,32 @@ export async function runEmbeddedAttempt(
             .catch((err) => {
               log.warn(`agent_end hook failed: ${err}`);
             });
+        }
+
+        // Start self-validation after first agent response
+        if (params.enableSelfValidation && !isSubagentSessionKey(params.sessionKey)) {
+          const userMessageCount = messagesSnapshot.filter((m) => m.role === "user").length;
+
+          if (userMessageCount === 1) {
+            const validationTask = params.validationTask || params.prompt;
+
+            startSelfValidationLoop(params.sessionId, {
+              directory: effectiveWorkspace,
+              sessionId: params.sessionId,
+              originalTask: validationTask,
+              callAI: createValidationAICall({
+                config: params.config,
+                agentDir,
+                workspaceDir: effectiveWorkspace,
+                sessionId: params.sessionId,
+                provider: params.provider,
+                model: params.validationModel || params.modelId,
+              }),
+              sendMessage: createValidationMessageSender({
+                onBlockReply: params.onBlockReply,
+              }),
+            });
+          }
         }
       } finally {
         clearTimeout(abortTimer);

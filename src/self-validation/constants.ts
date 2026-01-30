@@ -1,0 +1,9 @@
+export const PHASE_1_INTERVAL_MS = 15000;
+export const PHASE_1_DURATION_MS = 60000;
+export const PHASE_2_INTERVAL_MS = 60000;
+export const TOTAL_WORK_DURATION_MS = 1800000;
+export const EXTENSION_DURATION_MS = 600000;
+export const DEFAULT_MAX_ITERATIONS = 30;
+export const DEFAULT_MAX_RETRIES = 3;
+export const STATE_FILE_NAME = "self-validation.json";
+export const SCREENSHOT_DIR_NAME = "self-validation-screenshots";
