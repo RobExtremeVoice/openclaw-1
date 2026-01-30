@@ -1,5 +1,4 @@
-import type { MoltbotConfig } from "../config/config.js";
-import { resolveMemorySearchConfig } from "../agents/memory-search.js";
+import type { OpenClawConfig } from "../config/config.js";
 import type { MemoryIndexManager } from "./manager.js";
 import type { CogneeMemoryProvider } from "./cognee-provider.js";
 
@@ -9,7 +8,7 @@ export type MemorySearchManagerResult = {
 };
 
 export async function getMemorySearchManager(params: {
-  cfg: MoltbotConfig;
+  cfg: OpenClawConfig;
   agentId: string;
 }): Promise<MemorySearchManagerResult> {
   try {
