@@ -1354,6 +1354,7 @@ EOF
             echo -e "跳过 onboard (已请求)。稍后运行 ${INFO}openclaw onboard${NC}。"
         else
             local config_path="${OPENCLAW_CONFIG_PATH:-$HOME/.openclaw/openclaw.json}"
+            if [[ -f "${config_path}" || -f "$HOME/.clawdbot/clawdbot.json" || -f "$HOME/.moltbot/moltbot.json" || -f "$HOME/.moldbot/moldbot.json" ]]; then
                 echo -e "配置已存在；正在运行 doctor..."
                 run_doctor
                 should_open_dashboard=true
