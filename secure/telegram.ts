@@ -1,14 +1,14 @@
 /**
- * Moltbot Secure - Telegram Channel
+ * AssureBot - Telegram Channel
  *
- * Minimal, secure Telegram bot handler.
+ * Minimal, secure Telegram bot handler with image analysis.
  * Allowlist-only: only approved users can interact.
  */
 
 import { Bot, Context } from "grammy";
 import type { SecureConfig } from "./config.js";
 import type { AuditLogger } from "./audit.js";
-import type { AgentCore, ConversationStore } from "./agent.js";
+import type { AgentCore, ConversationStore, ImageContent } from "./agent.js";
 
 export type TelegramBot = {
   bot: Bot;
@@ -62,7 +62,7 @@ export function createTelegramBot(deps: TelegramDeps): TelegramBot {
     }
 
     await ctx.reply(
-      `Welcome to Moltbot Secure.
+      `Welcome to AssureBot.
 
 You are authorized to use this bot.
 
@@ -72,7 +72,10 @@ Commands:
 /status - Check bot status
 /help - Show help
 
-Just send me a message to chat!`
+Features:
+- Send text messages to chat
+- Send images for analysis
+- Forward content for analysis`
     );
   });
 
@@ -113,12 +116,13 @@ Just send me a message to chat!`
     }
 
     await ctx.reply(
-      `Moltbot Secure Help
+      `AssureBot Help
 
-This is a secure, self-hosted AI assistant.
+A secure, self-hosted AI assistant.
 
 Features:
 - Chat with AI (text messages)
+- Image analysis (send photos)
 - Forward content for analysis
 - Receive webhook notifications
 
@@ -255,13 +259,74 @@ Security:
   // Handle photos
   bot.on("message:photo", async (ctx) => {
     const userId = ctx.from?.id;
+    const username = formatUsername(ctx);
+
     if (!userId || !isUserAllowed(userId, config.telegram.allowedUsers)) {
+      audit.messageBlocked({
+        userId: userId || 0,
+        username,
+        reason: "User not in allowlist",
+      });
       return;
     }
 
-    await ctx.reply(
-      "I received your image. Image analysis is available with Claude - please describe what you'd like me to analyze."
-    );
+    const startTime = Date.now();
+    const caption = ctx.message.caption || "What's in this image? Describe it in detail.";
+
+    try {
+      await ctx.replyWithChatAction("typing");
+
+      // Get the largest photo (last in array)
+      const photos = ctx.message.photo;
+      const photo = photos[photos.length - 1];
+
+      // Get file info
+      const file = await ctx.api.getFile(photo.file_id);
+      if (!file.file_path) {
+        await ctx.reply("Sorry, I couldn't download the image.");
+        return;
+      }
+
+      // Download the file
+      const fileUrl = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        await ctx.reply("Sorry, I couldn't download the image.");
+        return;
+      }
+
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+
+      // Determine media type from file path
+      const ext = file.file_path.split(".").pop()?.toLowerCase();
+      let mediaType: ImageContent["mediaType"] = "image/jpeg";
+      if (ext === "png") mediaType = "image/png";
+      else if (ext === "gif") mediaType = "image/gif";
+      else if (ext === "webp") mediaType = "image/webp";
+
+      // Analyze with AI
+      const result = await agent.analyzeImage(base64, mediaType, caption);
+
+      await ctx.reply(result.text, { parse_mode: "Markdown" }).catch(async () => {
+        await ctx.reply(result.text);
+      });
+
+      audit.message({
+        userId,
+        username,
+        text: `[IMAGE] ${caption}`,
+        response: result.text,
+        durationMs: Date.now() - startTime,
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      audit.error({
+        error: `Failed to analyze image: ${errorMsg}`,
+        metadata: { userId, username },
+      });
+      await ctx.reply("Sorry, I couldn't analyze that image. Please try again.");
+    }
   });
 
   // Handle documents

@@ -1,7 +1,7 @@
 /**
- * Moltbot Secure - Agent Core
+ * AssureBot - Agent Core
  *
- * Minimal AI agent that handles conversations.
+ * Minimal AI agent that handles conversations with image support.
  * Direct API calls to Anthropic or OpenAI - no intermediaries.
  */
 
@@ -10,9 +10,22 @@ import OpenAI from "openai";
 import type { SecureConfig } from "./config.js";
 import type { AuditLogger } from "./audit.js";
 
+export type ImageContent = {
+  type: "image";
+  data: string; // base64
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+};
+
+export type TextContent = {
+  type: "text";
+  text: string;
+};
+
+export type MessageContent = string | (TextContent | ImageContent)[];
+
 export type Message = {
   role: "user" | "assistant";
-  content: string;
+  content: MessageContent;
 };
 
 export type AgentResponse = {
@@ -25,6 +38,7 @@ export type AgentResponse = {
 
 export type AgentCore = {
   chat: (messages: Message[], systemPrompt?: string) => Promise<AgentResponse>;
+  analyzeImage: (imageData: string, mediaType: ImageContent["mediaType"], prompt?: string) => Promise<AgentResponse>;
   provider: "anthropic" | "openai";
 };
 
@@ -53,8 +67,28 @@ function createAnthropicAgent(config: SecureConfig, audit: AuditLogger): AgentCo
 
   const model = config.ai.model || DEFAULT_ANTHROPIC_MODEL;
 
+  function convertContent(content: MessageContent): Anthropic.MessageParam["content"] {
+    if (typeof content === "string") {
+      return content;
+    }
+    return content.map((part) => {
+      if (part.type === "text") {
+        return { type: "text" as const, text: part.text };
+      }
+      return {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: part.mediaType,
+          data: part.data,
+        },
+      };
+    });
+  }
+
   return {
     provider: "anthropic",
+
     async chat(messages: Message[], systemPrompt?: string): Promise<AgentResponse> {
       try {
         const response = await client.messages.create({
@@ -63,7 +97,7 @@ function createAnthropicAgent(config: SecureConfig, audit: AuditLogger): AgentCo
           system: systemPrompt || DEFAULT_SYSTEM_PROMPT,
           messages: messages.map((m) => ({
             role: m.role,
-            content: m.content,
+            content: convertContent(m.content),
           })),
         });
 
@@ -86,6 +120,23 @@ function createAnthropicAgent(config: SecureConfig, audit: AuditLogger): AgentCo
         throw err;
       }
     },
+
+    async analyzeImage(
+      imageData: string,
+      mediaType: ImageContent["mediaType"],
+      prompt = "What's in this image? Describe it in detail."
+    ): Promise<AgentResponse> {
+      const messages: Message[] = [
+        {
+          role: "user",
+          content: [
+            { type: "image", data: imageData, mediaType },
+            { type: "text", text: prompt },
+          ],
+        },
+      ];
+      return this.chat(messages);
+    },
   };
 }
 
@@ -96,20 +147,53 @@ function createOpenAIAgent(config: SecureConfig, audit: AuditLogger): AgentCore 
 
   const model = config.ai.model || DEFAULT_OPENAI_MODEL;
 
+  type OpenAIContent = OpenAI.ChatCompletionContentPart[];
+
+  function convertContent(content: MessageContent): string | OpenAIContent {
+    if (typeof content === "string") {
+      return content;
+    }
+    return content.map((part) => {
+      if (part.type === "text") {
+        return { type: "text" as const, text: part.text };
+      }
+      return {
+        type: "image_url" as const,
+        image_url: {
+          url: `data:${part.mediaType};base64,${part.data}`,
+        },
+      };
+    });
+  }
+
   return {
     provider: "openai",
+
     async chat(messages: Message[], systemPrompt?: string): Promise<AgentResponse> {
       try {
+        const openaiMessages: OpenAI.ChatCompletionMessageParam[] = [
+          { role: "system", content: systemPrompt || DEFAULT_SYSTEM_PROMPT },
+        ];
+
+        for (const m of messages) {
+          if (m.role === "user") {
+            openaiMessages.push({
+              role: "user",
+              content: convertContent(m.content),
+            });
+          } else {
+            // Assistant messages are always text
+            openaiMessages.push({
+              role: "assistant",
+              content: typeof m.content === "string" ? m.content : "",
+            });
+          }
+        }
+
         const response = await client.chat.completions.create({
           model,
           max_tokens: 4096,
-          messages: [
-            { role: "system", content: systemPrompt || DEFAULT_SYSTEM_PROMPT },
-            ...messages.map((m) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            })),
-          ],
+          messages: openaiMessages,
         });
 
         const text = response.choices[0]?.message?.content || "";
@@ -129,6 +213,23 @@ function createOpenAIAgent(config: SecureConfig, audit: AuditLogger): AgentCore 
         });
         throw err;
       }
+    },
+
+    async analyzeImage(
+      imageData: string,
+      mediaType: ImageContent["mediaType"],
+      prompt = "What's in this image? Describe it in detail."
+    ): Promise<AgentResponse> {
+      const messages: Message[] = [
+        {
+          role: "user",
+          content: [
+            { type: "image", data: imageData, mediaType },
+            { type: "text", text: prompt },
+          ],
+        },
+      ];
+      return this.chat(messages);
     },
   };
 }
