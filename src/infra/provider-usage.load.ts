@@ -69,6 +69,12 @@ export async function loadProviderUsageSummary(
             return await fetchMinimaxUsage(auth.token, timeoutMs, fetchFn);
           case "deepseek":
             return await fetchDeepSeekUsage(auth.token, timeoutMs, fetchFn);
+          case "xiaomi":
+            return {
+              provider: "xiaomi",
+              displayName: PROVIDER_LABELS.xiaomi,
+              windows: [],
+            };
           case "zai":
             return await fetchZaiUsage(auth.token, timeoutMs, fetchFn);
           default:

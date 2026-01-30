@@ -25,4 +25,5 @@ export type UsageProviderId =
   | "minimax"
   | "deepseek"
   | "openai-codex"
+  | "xiaomi"
   | "zai";
