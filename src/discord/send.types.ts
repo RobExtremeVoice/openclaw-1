@@ -68,6 +68,7 @@ export type DiscordMessageEdit = {
 
 export type DiscordThreadCreate = {
   messageId?: string;
+  message?: string;
   name: string;
   autoArchiveMinutes?: number;
 };
