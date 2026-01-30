@@ -68,15 +68,15 @@ export class CallManager {
   /**
    * Initialize the call manager with a provider.
    */
-  initialize(provider: VoiceCallProvider, webhookUrl: string): void {
+  async initialize(provider: VoiceCallProvider, webhookUrl: string): Promise<void> {
     this.provider = provider;
     this.webhookUrl = webhookUrl;
 
     // Ensure store directory exists
     fs.mkdirSync(this.storePath, { recursive: true });
 
-    // Load any persisted active calls
-    this.loadActiveCalls();
+    // Load any persisted active calls (verifying with provider)
+    await this.loadActiveCalls();
   }
 
   /**
@@ -811,9 +811,9 @@ export class CallManager {
 
   /**
    * Load active calls from persistence (for crash recovery).
-   * Uses streaming to handle large log files efficiently.
+   * Verifies with provider that calls are still active before loading.
    */
-  private loadActiveCalls(): void {
+  private async loadActiveCalls(): Promise<void> {
     const logPath = path.join(this.storePath, "calls.jsonl");
     if (!fs.existsSync(logPath)) {
       return;
@@ -838,18 +838,53 @@ export class CallManager {
       }
     }
 
-    // Only keep non-terminal calls
+    // Calls older than maxDurationSeconds are definitely stale (fallback check)
+    const maxAgeMs = this.config.maxDurationSeconds * 1000;
+    const now = Date.now();
+
+    // Only keep non-terminal calls that are verified active
     for (const [callId, call] of callMap) {
-      if (!TerminalStates.has(call.state)) {
-        this.activeCalls.set(callId, call);
-        // Populate providerCallId mapping for lookups
-        if (call.providerCallId) {
-          this.providerCallIdMap.set(call.providerCallId, callId);
+      // Skip terminal states
+      if (TerminalStates.has(call.state)) continue;
+
+      // Skip calls older than max duration (definitely stale)
+      const callAge = now - call.startedAt;
+      if (callAge > maxAgeMs) {
+        console.log(
+          `[voice-call] Skipping stale call ${callId} (age: ${Math.round(callAge / 1000)}s exceeds max: ${this.config.maxDurationSeconds}s)`,
+        );
+        continue;
+      }
+
+      // Verify with provider if call is still active
+      if (call.providerCallId && this.provider) {
+        try {
+          const status = await this.provider.getCallStatus({
+            providerCallId: call.providerCallId,
+          });
+          if (status.isTerminal) {
+            console.log(
+              `[voice-call] Skipping ended call ${callId} (provider status: ${status.status})`,
+            );
+            continue;
+          }
+        } catch (err) {
+          // If we can't verify, skip the call to be safe
+          console.log(
+            `[voice-call] Skipping unverifiable call ${callId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          continue;
         }
-        // Populate processed event IDs
-        for (const eventId of call.processedEventIds) {
-          this.processedEventIds.add(eventId);
-        }
+      }
+
+      this.activeCalls.set(callId, call);
+      // Populate providerCallId mapping for lookups
+      if (call.providerCallId) {
+        this.providerCallIdMap.set(call.providerCallId, callId);
+      }
+      // Populate processed event IDs
+      for (const eventId of call.processedEventIds) {
+        this.processedEventIds.add(eventId);
       }
     }
   }

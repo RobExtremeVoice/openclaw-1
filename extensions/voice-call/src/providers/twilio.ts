@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import type { TwilioConfig } from "../config.js";
 import type { MediaStreamHandler } from "../media-stream.js";
 import type {
+  GetCallStatusInput,
+  GetCallStatusResult,
   HangupCallInput,
   InitiateCallInput,
   InitiateCallResult,
@@ -567,6 +569,41 @@ export class TwilioProvider implements VoiceCallProvider {
   async stopListening(_input: StopListeningInput): Promise<void> {
     // Twilio's <Gather> automatically stops on speech end
     // No explicit action needed
+  }
+
+  /**
+   * Get call status from Twilio API.
+   * Used to verify if persisted calls are still active on gateway restart.
+   */
+  async getCallStatus(input: GetCallStatusInput): Promise<GetCallStatusResult> {
+    const terminalStatuses = new Set([
+      "completed",
+      "failed",
+      "busy",
+      "no-answer",
+      "canceled",
+    ]);
+
+    try {
+      const result = await this.apiRequest<TwilioCallResponse>(
+        `/Calls/${input.providerCallId}.json`,
+        {},
+        { allowNotFound: true },
+      );
+
+      const status = result?.status || "unknown";
+      return {
+        status,
+        isTerminal: terminalStatuses.has(status),
+      };
+    } catch (err) {
+      // If we can't reach Twilio, assume call is stale
+      return {
+        status: "unknown",
+        isTerminal: true,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 }
 
