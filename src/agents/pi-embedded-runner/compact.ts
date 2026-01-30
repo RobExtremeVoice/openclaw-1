@@ -3,6 +3,7 @@ import os from "node:os";
 
 import {
   createAgentSession,
+  DefaultResourceLoader,
   estimateTokens,
   SessionManager,
   SettingsManager,
@@ -322,7 +323,7 @@ export async function compactEmbeddedPiSessionDirect(
       moduleUrl: import.meta.url,
     });
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
-    const _appendPrompt = buildEmbeddedSystemPrompt({
+    const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
       defaultThinkLevel: params.thinkLevel,
       reasoningLevel: params.reasoningLevel ?? "off",
@@ -369,7 +370,8 @@ export async function compactEmbeddedPiSessionDirect(
         settingsManager,
         minReserveTokens: resolveCompactionReserveTokensFloor(params.config),
       });
-      const _additionalExtensionPaths = buildEmbeddedExtensionPaths({
+
+      const additionalExtensionPaths = buildEmbeddedExtensionPaths({
         cfg: params.config,
         sessionManager,
         provider,
@@ -381,6 +383,24 @@ export async function compactEmbeddedPiSessionDirect(
         tools,
         sandboxEnabled: !!sandbox?.enabled,
       });
+
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: resolvedWorkspace,
+        agentDir,
+        settingsManager,
+        systemPromptOverride: () => appendPrompt,
+        agentsFilesOverride: (current) => ({
+          agentsFiles: [
+            ...current.agentsFiles,
+            ...contextFiles.map((file) => ({
+              path: file.path,
+              content: file.content,
+            })),
+          ],
+        }),
+        additionalExtensionPaths,
+      });
+      await resourceLoader.reload();
 
       let session: Awaited<ReturnType<typeof createAgentSession>>["session"];
       ({ session } = await createAgentSession({
@@ -394,6 +414,7 @@ export async function compactEmbeddedPiSessionDirect(
         customTools,
         sessionManager,
         settingsManager,
+        resourceLoader,
       }));
 
       try {

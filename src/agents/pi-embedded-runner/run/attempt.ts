@@ -4,7 +4,12 @@ import os from "node:os";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, ImageContent } from "@mariozechner/pi-ai";
 import { streamSimple } from "@mariozechner/pi-ai";
-import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  SessionManager,
+  SettingsManager,
+} from "@mariozechner/pi-coding-agent";
 
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import {
@@ -52,9 +57,9 @@ import {
 import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
 import { buildSystemPromptReport } from "../../system-prompt-report.js";
 import { resolveDefaultModelForAgent } from "../../model-selection.js";
+import { buildEmbeddedExtensionPaths } from "../extensions.js";
 
 import { isAbortError } from "../abort.js";
-import { buildEmbeddedExtensionPaths } from "../extensions.js";
 import { applyExtraParamsToAgent } from "../extra-params.js";
 import { appendCacheTtlTimestamp, isCacheTtlEligibleProvider } from "../cache-ttl.js";
 import {
@@ -73,7 +78,7 @@ import {
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
-import { buildEmbeddedSystemPrompt, createSystemPromptOverride } from "../system-prompt.js";
+import { buildEmbeddedSystemPrompt } from "../system-prompt.js";
 import { splitSdkTools } from "../tool-split.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { buildSystemPromptParams } from "../../system-prompt-params.js";
@@ -382,7 +387,6 @@ export async function runEmbeddedAttempt(
       skillsPrompt,
       tools,
     });
-    const systemPrompt = createSystemPromptOverride(appendPrompt);
 
     const sessionLock = await acquireSessionWriteLock({
       sessionFile: params.sessionFile,
@@ -424,14 +428,6 @@ export async function runEmbeddedAttempt(
         minReserveTokens: resolveCompactionReserveTokensFloor(params.config),
       });
 
-      const _additionalExtensionPaths = buildEmbeddedExtensionPaths({
-        cfg: params.config,
-        sessionManager,
-        provider: params.provider,
-        modelId: params.modelId,
-        model: params.model,
-      });
-
       const { builtInTools, customTools } = splitSdkTools({
         tools,
         sandboxEnabled: !!sandbox?.enabled,
@@ -447,6 +443,32 @@ export async function runEmbeddedAttempt(
 
       const allCustomTools = [...customTools, ...clientToolDefs];
 
+      const additionalExtensionPaths = buildEmbeddedExtensionPaths({
+        cfg: params.config,
+        sessionManager,
+        provider: params.provider,
+        modelId: params.modelId,
+        model: params.model,
+      });
+
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: resolvedWorkspace,
+        agentDir,
+        settingsManager,
+        systemPromptOverride: () => appendPrompt,
+        agentsFilesOverride: (current) => ({
+          agentsFiles: [
+            ...current.agentsFiles,
+            ...contextFiles.map((file) => ({
+              path: file.path,
+              content: file.content,
+            })),
+          ],
+        }),
+        additionalExtensionPaths,
+      });
+      await resourceLoader.reload();
+
       ({ session } = await createAgentSession({
         cwd: resolvedWorkspace,
         agentDir,
@@ -458,6 +480,7 @@ export async function runEmbeddedAttempt(
         customTools: allCustomTools,
         sessionManager,
         settingsManager,
+        resourceLoader,
       }));
       if (!session) {
         throw new Error("Embedded agent session missing");
@@ -499,7 +522,7 @@ export async function runEmbeddedAttempt(
       if (cacheTrace) {
         cacheTrace.recordStage("session:loaded", {
           messages: activeSession.messages,
-          system: systemPrompt,
+          system: appendPrompt,
           note: "after session create",
         });
         activeSession.agent.streamFn = cacheTrace.wrapStreamFn(activeSession.agent.streamFn);
