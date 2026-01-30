@@ -9,7 +9,7 @@ import {
   resolveStorePath,
 } from "../config/sessions.js";
 import { normalizeMainKey } from "../routing/session-key.js";
-import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
+import { resolveQueueSettings, getFollowupQueueDepth } from "../auto-reply/reply/queue.js";
 import { callGateway } from "../gateway/call.js";
 import { defaultRuntime } from "../runtime.js";
 import {
@@ -461,6 +461,38 @@ export async function runSubagentAnnounceFlow(params: {
     if (queued === "queued") {
       didAnnounce = true;
       return true;
+    }
+
+    // Fix 2: If followup queue has pending user messages, enqueue the announce
+    // instead of sending directly. This prevents the announce from jumping
+    // ahead of queued user messages in the per-session lane.
+    {
+      const cfg = loadConfig();
+      const canonicalKey = resolveRequesterStoreKey(cfg, params.requesterSessionKey);
+      const followupDepth = getFollowupQueueDepth(canonicalKey);
+      if (followupDepth > 0) {
+        const { entry } = loadRequesterSessionEntry(params.requesterSessionKey);
+        const queueSettings = resolveQueueSettings({
+          cfg,
+          channel: entry?.channel ?? entry?.lastChannel,
+          sessionEntry: entry,
+        });
+        const origin = resolveAnnounceOrigin(entry, requesterOrigin);
+        enqueueAnnounce({
+          key: canonicalKey,
+          item: {
+            prompt: triggerMessage,
+            summaryLine: taskLabel,
+            enqueuedAt: Date.now(),
+            sessionKey: canonicalKey,
+            origin,
+          },
+          settings: queueSettings,
+          send: sendAnnounce,
+        });
+        didAnnounce = true;
+        return true;
+      }
     }
 
     // Send to main agent - it will respond in its own voice
