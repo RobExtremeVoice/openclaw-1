@@ -31,15 +31,30 @@ export async function downloadInboundMedia(
     return undefined;
   }
   try {
-    const buffer = (await downloadMediaMessage(
+    // Use stream mode instead of buffer mode to fix audio download issue
+    // where buffer mode returns empty data for audio messages in Baileys 7.x
+    const stream = await downloadMediaMessage(
       msg as WAMessage,
-      "buffer",
+      "stream",
       {},
       {
         reuploadRequest: sock.updateMediaMessage,
         logger: sock.logger,
       },
-    )) as Buffer;
+    );
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk as Buffer);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    // Validate buffer is not empty
+    if (!buffer || buffer.length === 0) {
+      logVerbose(`downloadMediaMessage returned empty buffer for ${mimetype}`);
+      return undefined;
+    }
+
     return { buffer, mimetype };
   } catch (err) {
     logVerbose(`downloadMediaMessage failed: ${String(err)}`);
