@@ -4,13 +4,14 @@ import path from "node:path";
 import process from "node:process";
 
 import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
-import { isTruthyEnvValue } from "./infra/env.js";
+import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
 import { installProcessWarningFilter } from "./infra/warnings.js";
 import { attachChildProcessBridge } from "./process/child-process-bridge.js";
 import { initGlobalProxy } from "./infra/global-proxy.js";
 
 process.title = "moltbot";
 installProcessWarningFilter();
+normalizeEnv();
 initGlobalProxy();
 
 if (process.argv.includes("--no-color")) {
