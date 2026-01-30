@@ -37,7 +37,8 @@ export const signalMessageActions: ChannelMessageActionAdapter = {
     const configuredAccounts = accounts.filter((account) => account.configured);
     if (configuredAccounts.length === 0) return [];
 
-    const actions = new Set<ChannelMessageActionName>(["send"]);
+    // Signal supports send and poll via outbound adapter
+    const actions = new Set<ChannelMessageActionName>(["send", "poll"]);
 
     const reactionsEnabled = configuredAccounts.some((account) =>
       createActionGate(account.config.actions)("reactions"),
@@ -48,7 +49,8 @@ export const signalMessageActions: ChannelMessageActionAdapter = {
 
     return Array.from(actions);
   },
-  supportsAction: ({ action }) => action !== "send",
+  // send and poll are handled by outbound adapter, not action handler
+  supportsAction: ({ action }) => action !== "send" && action !== "poll",
 
   handleAction: async ({ action, params, cfg, accountId }) => {
     if (action === "send") {

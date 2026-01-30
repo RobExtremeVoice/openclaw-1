@@ -70,6 +70,7 @@ type MessagePollParams = {
   maxSelections?: number;
   durationHours?: number;
   channel?: string;
+  accountId?: string;
   dryRun?: boolean;
   cfg?: OpenClawConfig;
   gateway?: MessageGatewayOptions;
@@ -83,7 +84,7 @@ export type MessagePollResult = {
   options: string[];
   maxSelections: number;
   durationHours: number | null;
-  via: "gateway";
+  via: "direct" | "gateway";
   result?: {
     messageId: string;
     toJid?: string;
@@ -243,6 +244,7 @@ export async function sendPoll(params: MessagePollParams): Promise<MessagePollRe
   const normalized = outbound.pollMaxOptions
     ? normalizePollInput(pollInput, { maxOptions: outbound.pollMaxOptions })
     : normalizePollInput(pollInput);
+  const deliveryMode = outbound.deliveryMode ?? "direct";
 
   if (params.dryRun) {
     return {
@@ -252,8 +254,44 @@ export async function sendPoll(params: MessagePollParams): Promise<MessagePollRe
       options: normalized.options,
       maxSelections: normalized.maxSelections,
       durationHours: normalized.durationHours ?? null,
-      via: "gateway",
+      via: deliveryMode === "gateway" ? "gateway" : "direct",
       dryRun: true,
+    };
+  }
+
+  // Direct delivery for channels with direct mode (e.g., Signal)
+  if (deliveryMode !== "gateway") {
+    const resolvedTarget = resolveOutboundTarget({
+      channel: channel as Exclude<OutboundChannel, "none">,
+      to: params.to,
+      cfg,
+      accountId: params.accountId,
+      mode: "explicit",
+    });
+    if (!resolvedTarget.ok) throw resolvedTarget.error;
+
+    const result = await outbound.sendPoll({
+      cfg,
+      to: resolvedTarget.to,
+      poll: normalized,
+      accountId: params.accountId,
+    });
+
+    return {
+      channel,
+      to: params.to,
+      question: normalized.question,
+      options: normalized.options,
+      maxSelections: normalized.maxSelections,
+      durationHours: normalized.durationHours ?? null,
+      via: "direct",
+      result: {
+        messageId: result.messageId,
+        toJid: result.toJid,
+        channelId: result.channelId,
+        conversationId: result.conversationId,
+        pollId: result.pollId,
+      },
     };
   }
 

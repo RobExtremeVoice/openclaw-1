@@ -7,23 +7,27 @@ export function normalizeSignalMessagingTarget(raw: string): string | undefined 
   }
   if (!normalized) return undefined;
   const lower = normalized.toLowerCase();
+  // Signal group IDs are base64 encoded and CASE-SENSITIVE - don't lowercase them
   if (lower.startsWith("group:")) {
     const id = normalized.slice("group:".length).trim();
-    return id ? `group:${id}`.toLowerCase() : undefined;
+    return id ? `group:${id}` : undefined;
   }
+  // Usernames are case-insensitive, lowercase them
   if (lower.startsWith("username:")) {
     const id = normalized.slice("username:".length).trim();
-    return id ? `username:${id}`.toLowerCase() : undefined;
+    return id ? `username:${id.toLowerCase()}` : undefined;
   }
   if (lower.startsWith("u:")) {
     const id = normalized.slice("u:".length).trim();
-    return id ? `username:${id}`.toLowerCase() : undefined;
+    return id ? `username:${id.toLowerCase()}` : undefined;
   }
+  // UUIDs are case-insensitive, lowercase them
   if (lower.startsWith("uuid:")) {
     const id = normalized.slice("uuid:".length).trim();
     return id ? id.toLowerCase() : undefined;
   }
-  return normalized.toLowerCase();
+  // Phone numbers - keep as-is (they're already normalized)
+  return normalized;
 }
 
 // UUID pattern for signal-cli recipient IDs
