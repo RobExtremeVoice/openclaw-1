@@ -125,6 +125,14 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "mtui",
+    description: "Modern Terminal UI (React/Ink)",
+    register: async (program) => {
+      const mod = await import("../mtui-cli.js");
+      mod.registerMtuiCli(program);
+    },
+  },
+  {
     name: "cron",
     description: "Cron scheduler",
     register: async (program) => {
