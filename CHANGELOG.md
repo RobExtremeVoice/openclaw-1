@@ -2,11 +2,11 @@
 
 Docs: https://docs.openclaw.ai
 
-## 2026.1.29
+## 2026.1.30
 Status: stable.
 
 ### Changes
-- Rebrand: rename the npm package/CLI to `openclaw`, add a `openclaw` compatibility shim, and move extensions to the `@openclaw/*` scope.
+- Models: add native NVIDIA NIM provider integration with 14+ models including Llama 3.1/3.3, Nemotron 70B/253B, DeepSeek R1, Kimi K2.5, Mistral Large 2, and vision-capable models.
 - Onboarding: strengthen security warning copy for beta + access control expectations.
 - Onboarding: add Venice API key to non-interactive flow. (#1893) Thanks @jonisjongithub.
 - Config: auto-migrate legacy state/config paths and keep config resolution consistent across legacy filenames.
