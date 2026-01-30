@@ -1,5 +1,6 @@
 import process from "node:process";
 
+import { isAllModelsFailedError } from "../agents/model-fallback-error.js";
 import { extractErrorCode, formatUncaughtError } from "./errors.js";
 
 type UnhandledRejectionHandler = (reason: unknown) => boolean;
@@ -131,6 +132,22 @@ export function installUnhandledRejectionHandler(): void {
     // Log it but don't crash - these are expected during graceful shutdown
     if (isAbortError(reason)) {
       console.warn("[openclaw] Suppressed AbortError:", formatUncaughtError(reason));
+      return;
+    }
+
+    // Handle AllModelsFailedError - don't crash on cooldown
+    if (isAllModelsFailedError(reason)) {
+      if (reason.allInCooldown) {
+        const mins = reason.retryAfterMs ? Math.round(reason.retryAfterMs / 60000) : "unknown";
+        console.warn(
+          `[openclaw] All models in cooldown - gateway continuing. ` +
+            `Retry after ${mins}min. ` +
+            `Providers: ${reason.attempts.map((a) => a.provider).join(", ")}`,
+        );
+        return; // Don't exit
+      }
+      // Mixed failures (not all cooldown) - log but don't crash
+      console.warn("[openclaw] All models failed (mixed reasons):", formatUncaughtError(reason));
       return;
     }
 

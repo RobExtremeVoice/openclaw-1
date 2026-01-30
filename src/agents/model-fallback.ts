@@ -1,4 +1,9 @@
 import type { OpenClawConfig } from "../config/config.js";
+import {
+  ensureAuthProfileStore,
+  isProfileInCooldown,
+  resolveAuthProfileOrder,
+} from "./auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import {
   coerceToFailoverError,
@@ -6,6 +11,7 @@ import {
   isFailoverError,
   isTimeoutError,
 } from "./failover-error.js";
+import { AllModelsFailedError } from "./model-fallback-error.js";
 import {
   buildModelAliasIndex,
   modelKey,
@@ -14,11 +20,6 @@ import {
   resolveModelRefFromString,
 } from "./model-selection.js";
 import type { FailoverReason } from "./pi-embedded-helpers.js";
-import {
-  ensureAuthProfileStore,
-  isProfileInCooldown,
-  resolveAuthProfileOrder,
-} from "./auth-profiles.js";
 
 type ModelCandidate = {
   provider: string;
@@ -293,9 +294,46 @@ export async function runWithModelFallback<T>(params: {
           )
           .join(" | ")
       : "unknown";
-  throw new Error(`All models failed (${attempts.length || candidates.length}): ${summary}`, {
-    cause: lastError instanceof Error ? lastError : undefined,
-  });
+
+  // Determine if all failures are due to cooldown (rate_limit)
+  const allCooldown = attempts.length > 0 && attempts.every((a) => a.reason === "rate_limit");
+
+  // Calculate earliest retry time if all in cooldown
+  let retryAfterMs: number | undefined;
+  if (allCooldown && authStore) {
+    const profileIds = new Set<string>();
+    for (const candidate of candidates) {
+      const profiles = resolveAuthProfileOrder({
+        cfg: params.cfg,
+        store: authStore,
+        provider: candidate.provider,
+      });
+      profiles.forEach((id) => profileIds.add(id));
+    }
+
+    let earliest: number | null = null;
+    for (const id of profileIds) {
+      const stats = authStore.usageStats?.[id];
+      if (!stats) continue;
+      const unusableUntil = Math.max(stats.cooldownUntil ?? 0, stats.disabledUntil ?? 0);
+      if (unusableUntil > 0 && (earliest === null || unusableUntil < earliest)) {
+        earliest = unusableUntil;
+      }
+    }
+    if (earliest) {
+      retryAfterMs = Math.max(0, earliest - Date.now());
+    }
+  }
+
+  throw new AllModelsFailedError(
+    `All models failed (${attempts.length || candidates.length}): ${summary}`,
+    {
+      attempts,
+      allInCooldown: allCooldown,
+      retryAfterMs,
+      cause: lastError instanceof Error ? lastError : undefined,
+    },
+  );
 }
 
 export async function runWithImageModelFallback<T>(params: {
