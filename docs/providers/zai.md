@@ -1,7 +1,7 @@
 ---
-summary: "Use Z.AI / Zhipu AI (GLM models) with Moltbot"
+summary: "Use Z.AI / Zhipu AI (GLM models) with OpenClaw"
 read_when:
-  - You want Z.AI / GLM models in Moltbot
+  - You want Z.AI / GLM models in OpenClaw
   - You need to choose between international and China endpoints
   - You have a Coding Plan subscription
 ---
@@ -33,32 +33,32 @@ performance. They use subscription-based billing rather than per-token billing.
 
 ```bash
 # International (pay-as-you-go)
-moltbot onboard --auth-choice zai-api-key
+openclaw onboard --auth-choice zai-api-key
 
 # International (Coding Plan)
-moltbot onboard --auth-choice zai-coding-api-key
+openclaw onboard --auth-choice zai-coding-api-key
 
 # China (pay-as-you-go)
-moltbot onboard --auth-choice zhipu-api-key
+openclaw onboard --auth-choice zhipu-api-key
 
 # China (Coding Plan)
-moltbot onboard --auth-choice zhipu-coding-api-key
+openclaw onboard --auth-choice zhipu-coding-api-key
 ```
 
 ### Non-interactive
 
 ```bash
 # International (pay-as-you-go)
-moltbot onboard --non-interactive --auth-choice zai-api-key --zai-api-key "$ZAI_API_KEY"
+openclaw onboard --non-interactive --auth-choice zai-api-key --zai-api-key "$ZAI_API_KEY"
 
 # International (Coding Plan)
-moltbot onboard --non-interactive --auth-choice zai-coding-api-key --zai-coding-api-key "$ZAI_API_KEY"
+openclaw onboard --non-interactive --auth-choice zai-coding-api-key --zai-coding-api-key "$ZAI_API_KEY"
 
 # China (pay-as-you-go)
-moltbot onboard --non-interactive --auth-choice zhipu-api-key --zhipu-api-key "$ZHIPU_API_KEY"
+openclaw onboard --non-interactive --auth-choice zhipu-api-key --zhipu-api-key "$ZHIPU_API_KEY"
 
 # China (Coding Plan)
-moltbot onboard --non-interactive --auth-choice zhipu-coding-api-key --zhipu-coding-api-key "$ZHIPU_API_KEY"
+openclaw onboard --non-interactive --auth-choice zhipu-coding-api-key --zhipu-coding-api-key "$ZHIPU_API_KEY"
 ```
 
 ## Environment Variables

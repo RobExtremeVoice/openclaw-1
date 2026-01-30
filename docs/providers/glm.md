@@ -1,7 +1,7 @@
 ---
-summary: "GLM model family overview + how to use it in Moltbot"
+summary: "GLM model family overview + how to use it in OpenClaw"
 read_when:
-  - You want GLM models in Moltbot
+  - You want GLM models in OpenClaw
   - You need the model naming convention and setup
 ---
 # GLM Models
@@ -24,10 +24,10 @@ GLM is a **model family** developed by Zhipu AI. GLM models are available throug
 
 ```bash
 # International users
-moltbot onboard --auth-choice zai-api-key
+openclaw onboard --auth-choice zai-api-key
 
 # China users
-moltbot onboard --auth-choice zhipu-api-key
+openclaw onboard --auth-choice zhipu-api-key
 ```
 
 ## Config Snippet
