@@ -289,6 +289,76 @@ describe("resolveSlackMedia", () => {
     expect(result).toBeNull();
   });
 
+  it("allows genuine HTML file when mimetype indicates text/html", async () => {
+    // Mock the store module
+    vi.doMock("../../media/store.js", () => ({
+      saveMediaBuffer: vi.fn().mockResolvedValue({
+        path: "/tmp/test.html",
+        contentType: "text/html",
+      }),
+    }));
+
+    const { resolveSlackMedia } = await import("./media.js");
+
+    // A genuine HTML file shared by a user
+    const htmlContent = `<!DOCTYPE html><html><body>User's HTML page</body></html>`;
+    const htmlResponse = new Response(htmlContent, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+    mockFetch.mockResolvedValueOnce(htmlResponse);
+
+    const result = await resolveSlackMedia({
+      files: [
+        {
+          url_private: "https://files.slack.com/page.html",
+          name: "page.html",
+          mimetype: "text/html",
+        },
+      ],
+      token: "xoxb-test-token",
+      maxBytes: 10 * 1024 * 1024,
+    });
+
+    // Should allow genuine HTML files
+    expect(result).not.toBeNull();
+    expect(result?.contentType).toBe("text/html");
+  });
+
+  it("allows HTML file based on .html extension even without mimetype", async () => {
+    // Mock the store module
+    vi.doMock("../../media/store.js", () => ({
+      saveMediaBuffer: vi.fn().mockResolvedValue({
+        path: "/tmp/test.html",
+        contentType: "text/html",
+      }),
+    }));
+
+    const { resolveSlackMedia } = await import("./media.js");
+
+    const htmlContent = `<!DOCTYPE html><html><body>User's HTML snippet</body></html>`;
+    const htmlResponse = new Response(htmlContent, {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    });
+    mockFetch.mockResolvedValueOnce(htmlResponse);
+
+    const result = await resolveSlackMedia({
+      files: [
+        {
+          url_private: "https://files.slack.com/snippet.html",
+          name: "snippet.html",
+          // No mimetype set
+        },
+      ],
+      token: "xoxb-test-token",
+      maxBytes: 10 * 1024 * 1024,
+    });
+
+    // Should allow based on .html extension
+    expect(result).not.toBeNull();
+  });
+
   it("falls through to next file when first returns HTML", async () => {
     // Mock the store module
     vi.doMock("../../media/store.js", () => ({

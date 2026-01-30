@@ -82,8 +82,12 @@ export async function resolveSlackMedia(params: {
 
       // Guard: reject if we received HTML instead of expected media.
       // This happens when Slack auth fails and returns a login page.
+      // Skip this check if the file metadata indicates it's genuinely an HTML file.
       const detectedMime = fetched.contentType?.split(";")[0]?.trim().toLowerCase();
-      if (detectedMime === "text/html" || looksLikeHtml(fetched.buffer)) {
+      const expectedMime = file.mimetype?.split(";")[0]?.trim().toLowerCase();
+      const isExpectedHtml =
+        expectedMime === "text/html" || file.name?.toLowerCase().endsWith(".html");
+      if (!isExpectedHtml && (detectedMime === "text/html" || looksLikeHtml(fetched.buffer))) {
         const fileId = file.name ?? file.id ?? "unknown";
         logWarn(
           `slack: received HTML instead of media for file ${fileId}; possible auth failure or expired URL`,
