@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
 import type { AppViewState } from "./app-view-state";
@@ -10,6 +10,7 @@ import { syncUrlWithSessionKey } from "./app-settings";
 import type { SessionsListResult } from "./types";
 import type { ThemeMode } from "./theme";
 import type { ThemeTransitionContext } from "./theme-transition";
+import { humanizeSessionKey } from "./views/thread-list";
 
 export function renderTab(state: AppViewState, tab: Tab) {
   const href = pathForTab(tab, state.basePath);
@@ -53,6 +54,10 @@ export function renderChatControls(state: AppViewState) {
   // Refresh icon
   const refreshIcon = html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>`;
   const focusIcon = html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3"></path><path d="M20 7V4h-3"></path><path d="M4 17v3h3"></path><path d="M20 17v3h-3"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+  const splitActive = Boolean(state.splitLayout);
+  const disableSplitToggle = state.onboarding;
+  // Split pane icon (columns)
+  const splitIcon = html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>`;
   return html`
     <div class="chat-controls">
       <label class="field chat-controls__session">
@@ -83,7 +88,7 @@ export function renderChatControls(state: AppViewState) {
             (entry) => entry.key,
             (entry) =>
               html`<option value=${entry.key}>
-                ${entry.displayName ?? entry.key}
+                ${entry.displayName || humanizeSessionKey(entry.key)}
               </option>`,
           )}
         </select>
@@ -134,6 +139,26 @@ export function renderChatControls(state: AppViewState) {
       >
         ${focusIcon}
       </button>
+      <button
+        class="btn btn--sm btn--icon ${splitActive ? "active" : ""}"
+        ?disabled=${disableSplitToggle}
+        @click=${() => {
+          if (disableSplitToggle) return;
+          if (splitActive) {
+            state.exitSplitMode();
+          } else {
+            state.splitPane('horizontal');
+          }
+        }}
+        aria-pressed=${splitActive}
+        title=${disableSplitToggle
+          ? "Disabled during onboarding"
+          : splitActive
+            ? "Exit split view"
+            : "Split view (Cmd+D)"}
+      >
+        ${splitIcon}
+      </button>
     </div>
   `;
 }
@@ -164,20 +189,27 @@ function resolveSessionOptions(
   const seen = new Set<string>();
   const options: Array<{ key: string; displayName?: string }> = [];
 
-  const resolvedMain =
-    mainSessionKey && sessions?.sessions?.find((s) => s.key === mainSessionKey);
+  const resolvedMain = mainSessionKey
+    ? sessions?.sessions?.find((s) => s.key === mainSessionKey)
+    : undefined;
   const resolvedCurrent = sessions?.sessions?.find((s) => s.key === sessionKey);
 
   // Add main session key first
   if (mainSessionKey) {
     seen.add(mainSessionKey);
-    options.push({ key: mainSessionKey, displayName: resolvedMain?.displayName });
+    options.push({
+      key: mainSessionKey,
+      displayName: resolvedMain?.displayName || resolvedMain?.label,
+    });
   }
 
   // Add current session key next
   if (!seen.has(sessionKey)) {
     seen.add(sessionKey);
-    options.push({ key: sessionKey, displayName: resolvedCurrent?.displayName });
+    options.push({
+      key: sessionKey,
+      displayName: resolvedCurrent?.displayName || resolvedCurrent?.label,
+    });
   }
 
   // Add sessions from the result
@@ -185,7 +217,7 @@ function resolveSessionOptions(
     for (const s of sessions.sessions) {
       if (!seen.has(s.key)) {
         seen.add(s.key);
-        options.push({ key: s.key, displayName: s.displayName });
+        options.push({ key: s.key, displayName: s.displayName || s.label });
       }
     }
   }

@@ -52,6 +52,8 @@ import {
 } from "./controllers/devices";
 import { renderSkills } from "./views/skills";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
+import { renderNavThreadList } from "./views/thread-list";
+import { renderSplitPaneContainer } from "./views/split-pane-container";
 import { loadChannels } from "./controllers/channels";
 import { loadPresence } from "./controllers/presence";
 import { deleteSession, loadSessions, patchSession } from "./controllers/sessions";
@@ -82,9 +84,20 @@ import {
 import { loadCronRuns, toggleCronJob, runCronJob, removeCronJob, addCronJob } from "./controllers/cron";
 import { loadDebug, callDebugMethod } from "./controllers/debug";
 import { loadLogs } from "./controllers/logs";
+import { syncUrlWithSessionKey } from "./app-settings";
+import type { NavSessionEntry } from "./views/thread-list";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
+
+/** Ensure the current session key is always present in the sessions list */
+function ensureCurrentSession(
+  sessions: NavSessionEntry[],
+  currentKey: string,
+): NavSessionEntry[] {
+  if (sessions.some((s) => s.key === currentKey)) return sessions;
+  return [{ key: currentKey }, ...sessions];
+}
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
@@ -170,6 +183,82 @@ export function renderApp(state: AppViewState) {
               </button>
               <div class="nav-group__items">
                 ${group.tabs.map((tab) => renderTab(state, tab))}
+                ${group.label === "Chat" && state.tab === "chat"
+                  ? renderNavThreadList({
+                      sessions: ensureCurrentSession(
+                        state.sessionsResult?.sessions ?? [],
+                        state.sessionKey,
+                      ),
+                      activeSessionKey: state.sessionKey,
+                      unreadCounts: new Map(),
+                      onSelect: (sessionKey) => {
+                        // In split mode, also update the focused pane's leaf
+                        if (state.splitLayout && state.focusedPaneId) {
+                          state.setThreadInPane(state.focusedPaneId, sessionKey);
+                        }
+                        // Full session switch: clear state + load history
+                        state.sessionKey = sessionKey;
+                        state.chatMessage = "";
+                        state.chatMessages = [];
+                        state.chatToolMessages = [];
+                        state.chatStream = null;
+                        state.chatStreamStartedAt = null;
+                        state.chatRunId = null;
+                        state.resetToolStream();
+                        state.resetChatScroll();
+                        state.applySettings({
+                          ...state.settings,
+                          sessionKey,
+                          lastActiveSessionKey: sessionKey,
+                        });
+                        void state.loadAssistantIdentity();
+                        syncUrlWithSessionKey(
+                          state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+                          sessionKey,
+                          true,
+                        );
+                        void loadChatHistory(state);
+                      },
+                      onRename: (sessionKey, label) => {
+                        void patchSession(state, sessionKey, { label });
+                      },
+                      onDelete: (sessionKey) => {
+                        void deleteSession(state, sessionKey);
+                      },
+                      onNewSession: () => {
+                        const base = state.sessionKey.split(":thread:")[0];
+                        const id = crypto.randomUUID();
+                        const newKey = `${base}:thread:${id}`;
+                        // In split mode, also update the focused pane's leaf
+                        if (state.splitLayout && state.focusedPaneId) {
+                          state.setThreadInPane(state.focusedPaneId, newKey);
+                        }
+                        state.sessionKey = newKey;
+                        state.chatMessage = "";
+                        state.chatStream = null;
+                        state.chatStreamStartedAt = null;
+                        state.chatRunId = null;
+                        state.chatMessages = [];
+                        state.resetToolStream();
+                        state.resetChatScroll();
+                        state.applySettings({
+                          ...state.settings,
+                          sessionKey: newKey,
+                          lastActiveSessionKey: newKey,
+                        });
+                        void state.loadAssistantIdentity();
+                        syncUrlWithSessionKey(
+                          state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+                          newKey,
+                          true,
+                        );
+                      },
+                      onRequestUpdate: () => {
+                        // Force re-render by touching a reactive property
+                        state.threads = new Map(state.threads);
+                      },
+                    })
+                  : nothing}
               </div>
             </div>
           `;
@@ -426,7 +515,11 @@ export function renderApp(state: AppViewState) {
             })
           : nothing}
 
-        ${state.tab === "chat"
+        ${state.tab === "chat" && state.splitLayout
+          ? renderSplitPaneContainer(state)
+          : nothing}
+
+        ${state.tab === "chat" && !state.splitLayout
           ? renderChat({
               sessionKey: state.sessionKey,
               onSessionKeyChange: (next) => {
@@ -487,7 +580,6 @@ export function renderApp(state: AppViewState) {
               onQueueRemove: (id) => state.removeQueuedMessage(id),
               onNewSession: () =>
                 state.handleSendChat("/new", { restoreDraft: true }),
-              // Sidebar props for tool output viewing
               sidebarOpen: state.sidebarOpen,
               sidebarContent: state.sidebarContent,
               sidebarError: state.sidebarError,

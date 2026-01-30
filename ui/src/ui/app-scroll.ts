@@ -18,14 +18,18 @@ export function scheduleChatScroll(host: ScrollHost, force = false) {
     host.chatScrollTimeout = null;
   }
   const pickScrollTarget = () => {
-    const container = host.querySelector(".chat-thread") as HTMLElement | null;
-    if (container) {
-      const overflowY = getComputedStyle(container).overflowY;
+    // If a pane selector is provided (split pane mode), scope to that pane
+    const paneSelector = (host as ScrollHost & { _scrollPaneId?: string })._scrollPaneId;
+    const scope = paneSelector
+      ? host.querySelector(`[data-pane-id="${paneSelector}"] .chat-thread`) as HTMLElement | null
+      : host.querySelector(".chat-thread") as HTMLElement | null;
+    if (scope) {
+      const overflowY = getComputedStyle(scope).overflowY;
       const canScroll =
         overflowY === "auto" ||
         overflowY === "scroll" ||
-        container.scrollHeight - container.clientHeight > 1;
-      if (canScroll) return container;
+        scope.scrollHeight - scope.clientHeight > 1;
+      if (canScroll) return scope;
     }
     return (document.scrollingElement ?? document.documentElement) as HTMLElement | null;
   };
@@ -94,6 +98,24 @@ export function handleLogsScroll(host: ScrollHost, event: Event) {
 export function resetChatScroll(host: ScrollHost) {
   host.chatHasAutoScrolled = false;
   host.chatUserNearBottom = true;
+}
+
+/**
+ * Schedule a scroll for a specific pane in split-pane mode.
+ * Scopes the scroll target to [data-pane-id="..."] .chat-thread.
+ */
+export function schedulePaneChatScroll(
+  host: ScrollHost,
+  paneId: string,
+  force = false,
+) {
+  const hostWithPane = host as ScrollHost & { _scrollPaneId?: string };
+  hostWithPane._scrollPaneId = paneId;
+  scheduleChatScroll(host, force);
+  // Clear the pane scope after scheduling
+  requestAnimationFrame(() => {
+    hostWithPane._scrollPaneId = undefined;
+  });
 }
 
 export function exportLogs(lines: string[], label: string) {

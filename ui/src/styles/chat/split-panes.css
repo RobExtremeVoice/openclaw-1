@@ -1,0 +1,187 @@
+/* Split Pane Layout */
+
+.split-pane-root {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+.split-branch {
+  gap: 0;
+}
+
+.split-branch__child {
+  position: relative;
+  min-height: 120px;
+  min-width: 120px;
+}
+
+/* Individual pane wrapper */
+.split-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color 150ms ease-out;
+}
+
+.split-pane--focused {
+  border-color: var(--accent, #007bff);
+}
+
+/* Pane title bar */
+.split-pane__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--bg-accent);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 28px;
+  user-select: none;
+}
+
+.split-pane__titlebar--focused {
+  color: var(--fg);
+  background: var(--bg-elevated);
+}
+
+.split-pane__titlebar-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.split-pane__titlebar-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.split-pane__titlebar-status--streaming {
+  color: var(--accent);
+}
+
+.split-pane__titlebar-status--empty {
+  font-style: italic;
+  opacity: 0.5;
+}
+
+.split-pane__titlebar-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.5;
+  transition: opacity 100ms;
+}
+
+.split-pane__titlebar-close:hover {
+  opacity: 1;
+}
+
+/* Override card styles within split panes to remove excess padding */
+.split-pane .card.chat {
+  border-radius: 0;
+  border: none;
+  height: 100%;
+}
+
+/* Drop zone indicators for drag-and-drop */
+.split-pane-drop-zone {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+  background: var(--accent, #007bff);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.split-pane-drop-zone--active {
+  opacity: 0.15;
+  pointer-events: auto;
+}
+
+.split-pane-drop-zone--center {
+  inset: 20%;
+  border-radius: 8px;
+}
+
+.split-pane-drop-zone--top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30%;
+}
+
+.split-pane-drop-zone--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30%;
+}
+
+.split-pane-drop-zone--left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+}
+
+.split-pane-drop-zone--right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 30%;
+}
+
+/* Keyboard shortcut hint (shown briefly on split) */
+.split-pane-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Mobile: disable split panes below 768px */
+@media (max-width: 768px) {
+  .split-pane-root {
+    flex-direction: column;
+  }
+
+  .split-branch {
+    flex-direction: column !important;
+  }
+
+  .split-branch__child:not(:first-child) {
+    display: none;
+  }
+
+  .split-branch resizable-divider {
+    display: none;
+  }
+
+  .split-pane {
+    border: none;
+  }
+}

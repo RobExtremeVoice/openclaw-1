@@ -17,6 +17,13 @@ import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
 import { startLogsPolling, stopLogsPolling, startDebugPolling, stopDebugPolling } from "./app-polling";
 import { refreshChat } from "./app-chat";
 import type { OpenClawApp } from "./app";
+import type { SplitPaneLayout } from "./split-tree";
+import {
+  allLeaves,
+  allLeafIds,
+  reconcileTreeWithPanes,
+  deserializeLayout,
+} from "./split-tree";
 
 type SettingsHost = {
   settings: UiSettings;
@@ -57,7 +64,9 @@ export function setLastActiveSessionKey(host: SettingsHost, next: string) {
   applySettings(host, { ...host.settings, lastActiveSessionKey: trimmed });
 }
 
-export function applySettingsFromUrl(host: SettingsHost) {
+export function applySettingsFromUrl(host: SettingsHost & {
+  urlPanes?: { paneKeys: string[]; focusIndex: number } | null;
+}) {
   if (!window.location.search) return;
   const params = new URLSearchParams(window.location.search);
   const tokenRaw = params.get("token");
@@ -104,6 +113,9 @@ export function applySettingsFromUrl(host: SettingsHost) {
     params.delete("gatewayUrl");
     shouldCleanUrl = true;
   }
+
+  // Read pane keys from URL for later restoration in handleConnected
+  host.urlPanes = readPanesFromUrl();
 
   if (!shouldCleanUrl) return;
   const url = new URL(window.location.href);
@@ -240,7 +252,12 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   syncUrlWithTab(host, resolved, replace);
 }
 
-export function onPopState(host: SettingsHost) {
+export function onPopState(host: SettingsHost & {
+  splitLayout: SplitPaneLayout | null;
+  focusedPaneId: string | null;
+  syncPaneStatesFromLayout?: () => void;
+  restoreSplitLayout?: () => void;
+}) {
   if (typeof window === "undefined") return;
   const resolved = tabFromPath(window.location.pathname, host.basePath);
   if (!resolved) return;
@@ -254,6 +271,26 @@ export function onPopState(host: SettingsHost) {
       sessionKey: session,
       lastActiveSessionKey: session,
     });
+  }
+
+  // Restore split pane state from URL
+  const urlPanes = readPanesFromUrl();
+  if (urlPanes && urlPanes.paneKeys.length > 1) {
+    const layout = restoreSplitLayoutFromUrl(
+      urlPanes.paneKeys,
+      urlPanes.focusIndex,
+      host.settings.splitLayout,
+    );
+    if (layout) {
+      host.splitLayout = layout;
+      host.focusedPaneId = layout.focusedPaneId;
+      host.syncPaneStatesFromLayout?.();
+    }
+  } else if (!urlPanes && host.splitLayout) {
+    // No panes in URL → exit split mode
+    host.splitLayout = null;
+    host.focusedPaneId = null;
+    host.syncPaneStatesFromLayout?.();
   }
 
   setTabFromRoute(host, resolved);
@@ -304,6 +341,66 @@ export function syncUrlWithSessionKey(
   url.searchParams.set("session", sessionKey);
   if (replace) window.history.replaceState({}, "", url.toString());
   else window.history.pushState({}, "", url.toString());
+}
+
+type PanesSyncHost = SettingsHost & {
+  splitLayout: SplitPaneLayout | null;
+  focusedPaneId: string | null;
+};
+
+export function syncUrlWithPanes(host: PanesSyncHost, replace: boolean) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+
+  if (host.splitLayout) {
+    const leaves = allLeaves(host.splitLayout.root)
+    const paneKeys = leaves.map((l) => l.threadId)
+    url.searchParams.set('panes', paneKeys.join(','))
+
+    const focusIdx = host.focusedPaneId
+      ? leaves.findIndex((l) => l.id === host.focusedPaneId)
+      : 0
+    if (focusIdx > 0) url.searchParams.set('focus', String(focusIdx))
+    else url.searchParams.delete('focus')
+
+    // Keep session= in sync with focused pane
+    const focusedKey = paneKeys[Math.max(0, focusIdx)]
+    if (focusedKey) url.searchParams.set('session', focusedKey)
+  } else {
+    url.searchParams.delete('panes')
+    url.searchParams.delete('focus')
+  }
+
+  if (replace) window.history.replaceState({}, '', url.toString())
+  else window.history.pushState({}, '', url.toString())
+}
+
+/** Read panes from the current URL. Returns null if no panes param present. */
+export function readPanesFromUrl(): { paneKeys: string[]; focusIndex: number } | null {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const panesRaw = params.get('panes')
+  if (!panesRaw) return null
+  const paneKeys = panesRaw.split(',').map((k) => k.trim()).filter(Boolean)
+  if (paneKeys.length === 0) return null
+  const focusRaw = params.get('focus')
+  const focusIndex = focusRaw ? Math.max(0, parseInt(focusRaw, 10) || 0) : 0
+  return { paneKeys, focusIndex }
+}
+
+/** Restore a split layout from URL pane keys, reconciling with localStorage tree structure. */
+export function restoreSplitLayoutFromUrl(
+  paneKeys: string[],
+  focusIndex: number,
+  existingLayoutJson: string | null,
+): SplitPaneLayout | null {
+  if (paneKeys.length <= 1) return null
+  const existingLayout = existingLayoutJson ? deserializeLayout(existingLayoutJson) : null
+  const root = reconcileTreeWithPanes(existingLayout?.root ?? null, paneKeys)
+  const leaves = allLeaves(root)
+  const clampedFocus = Math.min(focusIndex, leaves.length - 1)
+  const focusedPaneId = leaves[clampedFocus]?.id ?? allLeafIds(root)[0]
+  return { root, focusedPaneId }
 }
 
 export async function loadOverview(host: SettingsHost) {

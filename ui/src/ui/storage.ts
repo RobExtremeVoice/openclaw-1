@@ -7,10 +7,12 @@ export type UiSettings = {
   token: string;
   sessionKey: string;
   lastActiveSessionKey: string;
+  lastActiveThreadId: string;
   theme: ThemeMode;
   chatFocusMode: boolean;
   chatShowThinking: boolean;
   splitRatio: number; // Sidebar split ratio (0.4 to 0.7, default 0.6)
+  splitLayout: string | null; // Serialized SplitPaneLayout (null = single pane mode)
   navCollapsed: boolean; // Collapsible sidebar state
   navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
 };
@@ -26,10 +28,12 @@ export function loadSettings(): UiSettings {
     token: "",
     sessionKey: "main",
     lastActiveSessionKey: "main",
+    lastActiveThreadId: "",
     theme: "system",
     chatFocusMode: false,
     chatShowThinking: true,
     splitRatio: 0.6,
+    splitLayout: null,
     navCollapsed: false,
     navGroupsCollapsed: {},
   };
@@ -55,6 +59,11 @@ export function loadSettings(): UiSettings {
           : (typeof parsed.sessionKey === "string" &&
               parsed.sessionKey.trim()) ||
             defaults.lastActiveSessionKey,
+      lastActiveThreadId:
+        typeof parsed.lastActiveThreadId === "string" &&
+        parsed.lastActiveThreadId.trim()
+          ? parsed.lastActiveThreadId.trim()
+          : defaults.lastActiveThreadId,
       theme:
         parsed.theme === "light" ||
         parsed.theme === "dark" ||
@@ -75,6 +84,10 @@ export function loadSettings(): UiSettings {
         parsed.splitRatio <= 0.7
           ? parsed.splitRatio
           : defaults.splitRatio,
+      splitLayout:
+        typeof parsed.splitLayout === "string"
+          ? parsed.splitLayout
+          : defaults.splitLayout,
       navCollapsed:
         typeof parsed.navCollapsed === "boolean"
           ? parsed.navCollapsed
