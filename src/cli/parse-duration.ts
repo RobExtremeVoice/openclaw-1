@@ -31,3 +31,9 @@ export function parseDurationMs(raw: string, opts?: DurationMsParseOptions): num
   if (!Number.isFinite(ms)) throw new Error(`invalid duration: ${raw}`);
   return ms;
 }
+
+/**
+ * Alias for parseDurationMs
+ * @deprecated Use parseDurationMs instead
+ */
+export const parseDuration = parseDurationMs;

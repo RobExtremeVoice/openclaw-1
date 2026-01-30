@@ -4,7 +4,7 @@
  */
 
 import type { IncomingMessage } from "node:http";
-import { rateLimiter, RateLimitKeys, type RateLimit, type RateLimitResult } from "./rate-limiter.js";
+import { rateLimiter, RateLimitKeys, type RateLimitResult } from "./rate-limiter.js";
 import { ipManager } from "./ip-manager.js";
 import { intrusionDetector } from "./intrusion-detector.js";
 import { securityLogger } from "./events/logger.js";
@@ -36,9 +36,10 @@ export class SecurityShield {
     this.config = {
       enabled: config?.enabled ?? DEFAULT_SECURITY_CONFIG.shield.enabled,
       rateLimiting: config?.rateLimiting ?? DEFAULT_SECURITY_CONFIG.shield.rateLimiting,
-      intrusionDetection: config?.intrusionDetection ?? DEFAULT_SECURITY_CONFIG.shield.intrusionDetection,
+      intrusionDetection:
+        config?.intrusionDetection ?? DEFAULT_SECURITY_CONFIG.shield.intrusionDetection,
       ipManagement: config?.ipManagement ?? DEFAULT_SECURITY_CONFIG.shield.ipManagement,
-    };
+    } as Required<SecurityShieldConfig>;
   }
 
   /**
@@ -105,7 +106,11 @@ export class SecurityShield {
     }
 
     // Rate limit per-device (if deviceId provided)
-    if (ctx.deviceId && this.config.rateLimiting?.enabled && this.config.rateLimiting.perDevice?.authAttempts) {
+    if (
+      ctx.deviceId &&
+      this.config.rateLimiting?.enabled &&
+      this.config.rateLimiting.perDevice?.authAttempts
+    ) {
       const limit = this.config.rateLimiting.perDevice.authAttempts;
       const result = rateLimiter.check(RateLimitKeys.authAttemptDevice(ctx.deviceId), limit);
 
@@ -348,11 +353,7 @@ export class SecurityShield {
   /**
    * Check webhook rate limit
    */
-  checkWebhook(params: {
-    token: string;
-    path: string;
-    ip: string;
-  }): SecurityCheckResult {
+  checkWebhook(params: { token: string; path: string; ip: string }): SecurityCheckResult {
     if (!this.config.enabled) {
       return { allowed: true };
     }

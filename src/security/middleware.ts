@@ -24,7 +24,7 @@ export function createSecurityContext(req: IncomingMessage): SecurityContext {
 export function securityMiddleware(
   req: IncomingMessage,
   res: ServerResponse,
-  next: () => void
+  next: () => void,
 ): void {
   const shield = getSecurityShield();
 
@@ -48,7 +48,10 @@ export function securityMiddleware(
   if (!requestCheck.allowed) {
     res.statusCode = 429;
     res.setHeader("Content-Type", "text/plain");
-    res.setHeader("Retry-After", String(Math.ceil((requestCheck.rateLimitInfo?.retryAfterMs ?? 60000) / 1000)));
+    res.setHeader(
+      "Retry-After",
+      String(Math.ceil((requestCheck.rateLimitInfo?.retryAfterMs ?? 60000) / 1000)),
+    );
     res.end("Too Many Requests");
     return;
   }
@@ -83,7 +86,10 @@ export function checkConnectionRateLimit(req: IncomingMessage): {
  * Authentication rate limit check
  * Call this before processing authentication
  */
-export function checkAuthRateLimit(req: IncomingMessage, deviceId?: string): {
+export function checkAuthRateLimit(
+  req: IncomingMessage,
+  deviceId?: string,
+): {
   allowed: boolean;
   reason?: string;
   retryAfterMs?: number;
@@ -130,11 +136,7 @@ export function logAuthFailure(req: IncomingMessage, reason: string, deviceId?: 
 /**
  * Pairing rate limit check
  */
-export function checkPairingRateLimit(params: {
-  channel: string;
-  sender: string;
-  ip: string;
-}): {
+export function checkPairingRateLimit(params: { channel: string; sender: string; ip: string }): {
   allowed: boolean;
   reason?: string;
 } {
@@ -155,11 +157,7 @@ export function checkPairingRateLimit(params: {
 /**
  * Webhook rate limit check
  */
-export function checkWebhookRateLimit(params: {
-  token: string;
-  path: string;
-  ip: string;
-}): {
+export function checkWebhookRateLimit(params: { token: string; path: string; ip: string }): {
   allowed: boolean;
   reason?: string;
   retryAfterMs?: number;

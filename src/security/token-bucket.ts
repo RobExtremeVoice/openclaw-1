@@ -16,9 +16,7 @@ export class TokenBucket {
   private tokens: number;
   private lastRefillTime: number;
 
-  constructor(
-    private readonly config: TokenBucketConfig
-  ) {
+  constructor(private readonly config: TokenBucketConfig) {
     this.tokens = config.capacity;
     this.lastRefillTime = Date.now();
   }
@@ -86,10 +84,7 @@ export class TokenBucket {
 /**
  * Create a token bucket from max/window configuration
  */
-export function createTokenBucket(params: {
-  max: number;
-  windowMs: number;
-}): TokenBucket {
+export function createTokenBucket(params: { max: number; windowMs: number }): TokenBucket {
   const { max, windowMs } = params;
 
   // Refill rate: max tokens over windowMs

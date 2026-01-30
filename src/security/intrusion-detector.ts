@@ -47,16 +47,16 @@ export class IntrusionDetector {
   /**
    * Check for brute force attack pattern
    */
-  checkBruteForce(params: {
-    ip: string;
-    event: SecurityEvent;
-  }): IntrusionDetectionResult {
+  checkBruteForce(params: { ip: string; event: SecurityEvent }): IntrusionDetectionResult {
     if (!this.config.enabled) {
       return { detected: false };
     }
 
     const { ip, event } = params;
     const pattern = this.config.patterns.bruteForce;
+    if (!pattern || !pattern.threshold || !pattern.windowMs) {
+      return { detected: false };
+    }
     const key = `brute_force:${ip}`;
 
     const crossed = securityEventAggregator.trackEvent({
@@ -99,16 +99,16 @@ export class IntrusionDetector {
   /**
    * Check for SSRF bypass attempts
    */
-  checkSsrfBypass(params: {
-    ip: string;
-    event: SecurityEvent;
-  }): IntrusionDetectionResult {
+  checkSsrfBypass(params: { ip: string; event: SecurityEvent }): IntrusionDetectionResult {
     if (!this.config.enabled) {
       return { detected: false };
     }
 
     const { ip, event } = params;
     const pattern = this.config.patterns.ssrfBypass;
+    if (!pattern || !pattern.threshold || !pattern.windowMs) {
+      return { detected: false };
+    }
     const key = `ssrf_bypass:${ip}`;
 
     const crossed = securityEventAggregator.trackEvent({
@@ -148,16 +148,16 @@ export class IntrusionDetector {
   /**
    * Check for path traversal attempts
    */
-  checkPathTraversal(params: {
-    ip: string;
-    event: SecurityEvent;
-  }): IntrusionDetectionResult {
+  checkPathTraversal(params: { ip: string; event: SecurityEvent }): IntrusionDetectionResult {
     if (!this.config.enabled) {
       return { detected: false };
     }
 
     const { ip, event } = params;
     const pattern = this.config.patterns.pathTraversal;
+    if (!pattern || !pattern.threshold || !pattern.windowMs) {
+      return { detected: false };
+    }
     const key = `path_traversal:${ip}`;
 
     const crossed = securityEventAggregator.trackEvent({
@@ -197,16 +197,16 @@ export class IntrusionDetector {
   /**
    * Check for port scanning
    */
-  checkPortScanning(params: {
-    ip: string;
-    event: SecurityEvent;
-  }): IntrusionDetectionResult {
+  checkPortScanning(params: { ip: string; event: SecurityEvent }): IntrusionDetectionResult {
     if (!this.config.enabled) {
       return { detected: false };
     }
 
     const { ip, event } = params;
     const pattern = this.config.patterns.portScanning;
+    if (!pattern || !pattern.threshold || !pattern.windowMs) {
+      return { detected: false };
+    }
     const key = `port_scan:${ip}`;
 
     const crossed = securityEventAggregator.trackEvent({

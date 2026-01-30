@@ -24,11 +24,11 @@ export class AlertManager {
 
   private initializeChannels(): void {
     // Telegram channel
-    if (this.config.channels.telegram?.enabled) {
+    if (this.config.channels?.telegram?.enabled) {
       const telegram = new TelegramAlertChannel({
         enabled: true,
-        botToken: this.config.channels.telegram.botToken,
-        chatId: this.config.channels.telegram.chatId,
+        botToken: this.config.channels.telegram.botToken ?? "",
+        chatId: this.config.channels.telegram.chatId ?? "",
       });
       if (telegram.isEnabled()) {
         this.channels.push(telegram);
@@ -47,7 +47,7 @@ export class AlertManager {
    * Check if alerting is enabled
    */
   isEnabled(): boolean {
-    return this.config.enabled && this.channels.length > 0;
+    return (this.config.enabled ?? false) && this.channels.length > 0;
   }
 
   /**
@@ -71,20 +71,17 @@ export class AlertManager {
     }
 
     // Send to all channels
-    const results = await Promise.allSettled(
-      this.channels.map((channel) => channel.send(alert)),
-    );
+    const results = await Promise.allSettled(this.channels.map((channel) => channel.send(alert)));
 
     // Log results
     let successCount = 0;
-    let failureCount = 0;
+    let _failureCount = 0;
     for (const result of results) {
       if (result.status === "fulfilled" && result.value.ok) {
         successCount++;
       } else {
-        failureCount++;
-        const error =
-          result.status === "fulfilled" ? result.value.error : String(result.reason);
+        _failureCount++;
+        const error = result.status === "fulfilled" ? result.value.error : String(result.reason);
         log.error(`alert send failed: ${error}`);
       }
     }
@@ -105,10 +102,7 @@ export class AlertManager {
     }
 
     // Critical events
-    if (
-      event.severity === "critical" &&
-      this.config.triggers.criticalEvents?.enabled
-    ) {
+    if (event.severity === "critical" && this.config.triggers?.criticalEvents?.enabled) {
       await this.sendAlert({
         id: randomUUID(),
         severity: "critical",
@@ -126,10 +120,7 @@ export class AlertManager {
     }
 
     // IP blocked
-    if (
-      event.action === SecurityActions.IP_BLOCKED &&
-      this.config.triggers.ipBlocked?.enabled
-    ) {
+    if (event.action === SecurityActions.IP_BLOCKED && this.config.triggers?.ipBlocked?.enabled) {
       await this.sendAlert({
         id: randomUUID(),
         severity: "warn",
@@ -146,14 +137,14 @@ export class AlertManager {
     }
 
     // Intrusion detected
-    if (
-      [
-        SecurityActions.BRUTE_FORCE_DETECTED,
-        SecurityActions.SSRF_BYPASS_ATTEMPT,
-        SecurityActions.PATH_TRAVERSAL_ATTEMPT,
-        SecurityActions.PORT_SCANNING_DETECTED,
-      ].includes(event.action)
-    ) {
+    const criticalActions = [
+      SecurityActions.BRUTE_FORCE_DETECTED,
+      SecurityActions.SSRF_BYPASS_ATTEMPT,
+      SecurityActions.PATH_TRAVERSAL_ATTEMPT,
+      SecurityActions.PORT_SCANNING_DETECTED,
+    ] as const;
+
+    if (criticalActions.includes(event.action as (typeof criticalActions)[number])) {
       const pattern = event.attackPattern || "unknown";
       await this.sendAlert({
         id: randomUUID(),
@@ -164,7 +155,8 @@ export class AlertManager {
         details: {
           pattern,
           ip: event.ip,
-          attempts: event.details.failedAttempts || event.details.attempts || event.details.connections,
+          attempts:
+            event.details.failedAttempts || event.details.attempts || event.details.connections,
           threshold: event.details.threshold,
         },
         trigger: "intrusion_detected",
@@ -175,9 +167,9 @@ export class AlertManager {
   private getThrottleMs(trigger: string): number {
     switch (trigger) {
       case "critical_event":
-        return this.config.triggers.criticalEvents?.throttleMs || 0;
+        return this.config.triggers?.criticalEvents?.throttleMs || 0;
       case "ip_blocked":
-        return this.config.triggers.ipBlocked?.throttleMs || 0;
+        return this.config.triggers?.ipBlocked?.throttleMs || 0;
       case "intrusion_detected":
         return 300_000; // 5 minutes default
       default:

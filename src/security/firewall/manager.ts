@@ -41,7 +41,7 @@ export class FirewallManager {
     } else if (this.config.backend === "ufw") {
       this.backend = new UfwBackend();
     } else {
-      return { ok: false, error: `unknown backend: ${this.config.backend}` };
+      return { ok: false, error: `unknown backend: ${String(this.config.backend)}` };
     }
 
     // Check availability
@@ -196,9 +196,7 @@ let firewallManager: FirewallManager | null = null;
 /**
  * Initialize firewall manager with config
  */
-export async function initFirewallManager(
-  config: FirewallManagerConfig,
-): Promise<FirewallManager> {
+export async function initFirewallManager(config: FirewallManagerConfig): Promise<FirewallManager> {
   firewallManager = new FirewallManager(config);
   await firewallManager.initialize();
   return firewallManager;

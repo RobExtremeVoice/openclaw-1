@@ -3,7 +3,7 @@
  * Aggregates events over time windows for alerting and intrusion detection
  */
 
-import type { SecurityEvent, SecurityEventCategory, SecurityEventSeverity } from "./schema.js";
+import type { SecurityEvent } from "./schema.js";
 
 /**
  * Event count within a time window
@@ -59,9 +59,7 @@ export class SecurityEventAggregator {
     }
 
     // Filter out events outside the time window
-    count.events = count.events.filter(
-      (e) => new Date(e.timestamp).getTime() > windowStart
-    );
+    count.events = count.events.filter((e) => new Date(e.timestamp).getTime() > windowStart);
 
     // Add new event
     count.events.push(event);
@@ -80,10 +78,7 @@ export class SecurityEventAggregator {
   /**
    * Get event count for a key within a window
    */
-  getCount(params: {
-    key: string;
-    windowMs: number;
-  }): number {
+  getCount(params: { key: string; windowMs: number }): number {
     const { key, windowMs } = params;
     const count = this.eventCounts.get(key);
 
@@ -94,7 +89,7 @@ export class SecurityEventAggregator {
 
     // Filter events in window
     const eventsInWindow = count.events.filter(
-      (e) => new Date(e.timestamp).getTime() > windowStart
+      (e) => new Date(e.timestamp).getTime() > windowStart,
     );
 
     return eventsInWindow.length;
@@ -103,10 +98,7 @@ export class SecurityEventAggregator {
   /**
    * Get aggregated events for a key
    */
-  getEvents(params: {
-    key: string;
-    windowMs?: number;
-  }): SecurityEvent[] {
+  getEvents(params: { key: string; windowMs?: number }): SecurityEvent[] {
     const { key, windowMs } = params;
     const count = this.eventCounts.get(key);
 
@@ -119,9 +111,7 @@ export class SecurityEventAggregator {
     const now = Date.now();
     const windowStart = now - windowMs;
 
-    return count.events.filter(
-      (e) => new Date(e.timestamp).getTime() > windowStart
-    );
+    return count.events.filter((e) => new Date(e.timestamp).getTime() > windowStart);
   }
 
   /**

@@ -1,3 +1,4 @@
+/* eslint-disable typescript-eslint/unbound-method */
 import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import { IntrusionDetector } from "./intrusion-detector.js";
 import { SecurityActions, AttackPatterns, type SecurityEvent } from "./events/schema.js";

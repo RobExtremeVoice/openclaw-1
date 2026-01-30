@@ -1,3 +1,4 @@
+/* eslint-disable typescript-eslint/unbound-method */
 import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import { SecurityShield, type SecurityContext } from "./shield.js";
 import { rateLimiter } from "./rate-limiter.js";

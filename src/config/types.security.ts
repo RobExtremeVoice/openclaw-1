@@ -97,7 +97,12 @@ export interface AlertingConfig {
   /** Alert triggers */
   triggers?: {
     criticalEvents?: AlertTriggerConfig;
-    failedAuthSpike?: { enabled?: boolean; threshold?: number; windowMs?: number; throttleMs?: number };
+    failedAuthSpike?: {
+      enabled?: boolean;
+      threshold?: number;
+      windowMs?: number;
+      throttleMs?: number;
+    };
     ipBlocked?: AlertTriggerConfig;
   };
 

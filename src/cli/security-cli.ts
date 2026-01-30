@@ -167,18 +167,32 @@ export function registerSecurityCli(program: Command) {
       const lines: string[] = [];
       lines.push(theme.heading("Security Shield Status"));
       lines.push("");
-      lines.push(`Shield:               ${enabled ? theme.success("ENABLED") : theme.error("DISABLED")}`);
-      lines.push(`Rate Limiting:        ${rateLimitingEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`);
-      lines.push(`Intrusion Detection:  ${intrusionDetectionEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`);
-      lines.push(`Firewall Integration: ${firewallEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`);
-      lines.push(`Alerting:             ${alertingEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`);
+      lines.push(
+        `Shield:               ${enabled ? theme.success("ENABLED") : theme.error("DISABLED")}`,
+      );
+      lines.push(
+        `Rate Limiting:        ${rateLimitingEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`,
+      );
+      lines.push(
+        `Intrusion Detection:  ${intrusionDetectionEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`,
+      );
+      lines.push(
+        `Firewall Integration: ${firewallEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`,
+      );
+      lines.push(
+        `Alerting:             ${alertingEnabled ? theme.success("ENABLED") : theme.muted("disabled")}`,
+      );
 
       if (alertingEnabled && cfg.security?.alerting?.channels?.telegram?.enabled) {
         lines.push(`  Telegram:           ${theme.success("ENABLED")}`);
       }
 
       lines.push("");
-      lines.push(theme.muted(`Docs: ${formatDocsLink("/security/shield", "docs.openclaw.ai/security/shield")}`));
+      lines.push(
+        theme.muted(
+          `Docs: ${formatDocsLink("/security/shield", "docs.openclaw.ai/security/shield")}`,
+        ),
+      );
       defaultRuntime.log(lines.join("\n"));
     });
 
@@ -194,7 +208,11 @@ export function registerSecurityCli(program: Command) {
 
       await writeConfigFile(cfg);
       defaultRuntime.log(theme.success("✓ Security shield enabled"));
-      defaultRuntime.log(theme.muted(`  Restart gateway for changes to take effect: ${formatCliCommand("openclaw gateway restart")}`));
+      defaultRuntime.log(
+        theme.muted(
+          `  Restart gateway for changes to take effect: ${formatCliCommand("openclaw gateway restart")}`,
+        ),
+      );
     });
 
   // openclaw security disable
@@ -211,7 +229,11 @@ export function registerSecurityCli(program: Command) {
       cfg.security.shield.enabled = false;
       await writeConfigFile(cfg);
       defaultRuntime.log(theme.warn("⚠ Security shield disabled"));
-      defaultRuntime.log(theme.muted(`  Restart gateway for changes to take effect: ${formatCliCommand("openclaw gateway restart")}`));
+      defaultRuntime.log(
+        theme.muted(
+          `  Restart gateway for changes to take effect: ${formatCliCommand("openclaw gateway restart")}`,
+        ),
+      );
     });
 
   // openclaw security logs
@@ -279,16 +301,14 @@ export function registerSecurityCli(program: Command) {
     });
 
   // openclaw blocklist
-  const blocklist = program
-    .command("blocklist")
-    .description("Manage IP blocklist");
+  const blocklist = program.command("blocklist").description("Manage IP blocklist");
 
   blocklist
     .command("list")
     .description("List all blocked IPs")
     .option("--json", "Print JSON", false)
     .action(async (opts: { json?: boolean }) => {
-      const entries = ipManager.getBlocklist();
+      const entries = ipManager.getBlockedIps();
 
       if (opts.json) {
         defaultRuntime.log(JSON.stringify(entries, null, 2));
@@ -310,11 +330,13 @@ export function registerSecurityCli(program: Command) {
         const hours = Math.floor(remaining / (1000 * 60 * 60));
         const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
 
-        defaultRuntime.log(`${theme.bold(entry.ip)}`);
+        defaultRuntime.log(`${theme.heading(entry.ip)}`);
         defaultRuntime.log(`  Reason:  ${entry.reason}`);
         defaultRuntime.log(`  Source:  ${entry.source}`);
         defaultRuntime.log(`  Blocked: ${new Date(entry.blockedAt).toLocaleString()}`);
-        defaultRuntime.log(`  Expires: ${expiresAt.toLocaleString()} (${hours}h ${minutes}m remaining)`);
+        defaultRuntime.log(
+          `  Expires: ${expiresAt.toLocaleString()} (${hours}h ${minutes}m remaining)`,
+        );
         defaultRuntime.log("");
       }
     });
@@ -354,16 +376,14 @@ export function registerSecurityCli(program: Command) {
     });
 
   // openclaw allowlist
-  const allowlist = program
-    .command("allowlist")
-    .description("Manage IP allowlist");
+  const allowlist = program.command("allowlist").description("Manage IP allowlist");
 
   allowlist
     .command("list")
     .description("List all allowed IPs")
     .option("--json", "Print JSON", false)
     .action(async (opts: { json?: boolean }) => {
-      const entries = ipManager.getAllowlist();
+      const entries = ipManager.getAllowedIps();
 
       if (opts.json) {
         defaultRuntime.log(JSON.stringify(entries, null, 2));
@@ -379,7 +399,7 @@ export function registerSecurityCli(program: Command) {
       defaultRuntime.log("");
 
       for (const entry of entries) {
-        defaultRuntime.log(`${theme.bold(entry.ip)}`);
+        defaultRuntime.log(`${theme.heading(entry.ip)}`);
         defaultRuntime.log(`  Reason: ${entry.reason}`);
         defaultRuntime.log(`  Source: ${entry.source}`);
         defaultRuntime.log(`  Added:  ${new Date(entry.addedAt).toLocaleString()}`);

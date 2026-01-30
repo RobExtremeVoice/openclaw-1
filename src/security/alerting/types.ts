@@ -31,26 +31,44 @@ export interface AlertChannelInterface {
 }
 
 export interface AlertTriggerConfig {
-  enabled: boolean;
+  enabled?: boolean;
   throttleMs?: number;
 }
 
 export interface AlertingConfig {
-  enabled: boolean;
-  triggers: {
+  enabled?: boolean;
+  triggers?: {
     criticalEvents?: AlertTriggerConfig;
-    failedAuthSpike?: AlertTriggerConfig & { threshold: number; windowMs: number };
+    failedAuthSpike?: AlertTriggerConfig & { threshold?: number; windowMs?: number };
     ipBlocked?: AlertTriggerConfig;
   };
-  channels: {
+  channels?: {
     telegram?: {
-      enabled: boolean;
-      botToken: string;
-      chatId: string;
+      enabled?: boolean;
+      botToken?: string;
+      chatId?: string;
     };
     webhook?: {
-      enabled: boolean;
-      url: string;
+      enabled?: boolean;
+      url?: string;
+    };
+    slack?: {
+      enabled?: boolean;
+      webhookUrl?: string;
+    };
+    email?: {
+      enabled?: boolean;
+      smtp?: {
+        host?: string;
+        port?: number;
+        secure?: boolean;
+        auth?: {
+          user?: string;
+          pass?: string;
+        };
+      };
+      from?: string;
+      to?: string[];
     };
   };
 }

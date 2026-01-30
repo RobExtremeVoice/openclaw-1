@@ -7,9 +7,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import type { SecurityEvent, SecurityEventSeverity, SecurityEventCategory, SecurityEventOutcome } from "./schema.js";
-import { DEFAULT_LOG_DIR } from "../../logging/logger.js";
-import { getChildLogger } from "../../logging/index.js";
+import type {
+  SecurityEvent,
+  SecurityEventSeverity,
+  SecurityEventCategory,
+  SecurityEventOutcome,
+} from "./schema.js";
+import { DEFAULT_LOG_DIR, getChildLogger } from "../../logging/logger.js";
 import { getAlertManager } from "../alerting/manager.js";
 
 const SECURITY_LOG_PREFIX = "security";
@@ -229,7 +233,8 @@ class SecurityEventLogger {
    * Log event to main logger for OTEL export and console output
    */
   private logToMainLogger(event: SecurityEvent): void {
-    const logMethod = event.severity === "critical" ? "error" : event.severity === "warn" ? "warn" : "info";
+    const logMethod =
+      event.severity === "critical" ? "error" : event.severity === "warn" ? "warn" : "info";
 
     this.logger[logMethod](`[${event.category}] ${event.action}`, {
       eventId: event.eventId,

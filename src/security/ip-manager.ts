@@ -250,7 +250,7 @@ export class IpManager {
         securityLogger.logIpManagement({
           action: "firewall_block_failed",
           ip,
-          severity: "error",
+          severity: "critical",
           details: { error: String(err) },
         });
       });
@@ -282,7 +282,7 @@ export class IpManager {
           securityLogger.logIpManagement({
             action: "firewall_unblock_failed",
             ip,
-            severity: "error",
+            severity: "critical",
             details: { error: String(err) },
           });
         });
@@ -295,11 +295,7 @@ export class IpManager {
   /**
    * Add IP to allowlist
    */
-  allowIp(params: {
-    ip: string;
-    reason: string;
-    source?: "auto" | "manual";
-  }): void {
+  allowIp(params: { ip: string; reason: string; source?: "auto" | "manual" }): void {
     const { ip, reason, source = "manual" } = params;
 
     // Check if already in allowlist

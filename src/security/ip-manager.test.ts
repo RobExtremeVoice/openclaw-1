@@ -1,8 +1,5 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import { IpManager } from "./ip-manager.js";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 vi.mock("node:fs", () => ({
   default: {
