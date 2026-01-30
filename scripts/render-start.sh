@@ -1,10 +1,10 @@
 #!/bin/sh
-# Render startup script - creates config and starts gateway
+# Render / cloud startup script - creates config and starts gateway.
+# Supports OPENCLAW_* env vars (Render and other providers); falls back to CLAWDBOT_* for backward compat.
 # Don't use set -e initially - we'll enable it after setup
 
-echo "=== Render startup script ==="
+echo "=== OpenClaw startup script ==="
 echo "HOME=${HOME:-not set}"
-echo "CLAWDBOT_STATE_DIR=${CLAWDBOT_STATE_DIR:-not set}"
 echo "User: $(whoami 2>/dev/null || echo unknown)"
 echo "UID: $(id -u 2>/dev/null || echo unknown)"
 echo "PWD: $(pwd)"
@@ -19,29 +19,40 @@ if [ -z "${HOME}" ]; then
   echo "Set HOME to: ${HOME}"
 fi
 
-# Use CLAWDBOT_STATE_DIR if set and writable, otherwise use HOME/.clawdbot
-CONFIG_DIR="${HOME}/.clawdbot"
-if [ -n "${CLAWDBOT_STATE_DIR}" ]; then
-  # Test if we can write to it (disable exit on error for this test)
+# Prefer OPENCLAW_* then CLAWDBOT_* (so Render and all providers work)
+STATE_DIR="${OPENCLAW_STATE_DIR:-${CLAWDBOT_STATE_DIR}}"
+WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-${CLAWDBOT_WORKSPACE_DIR}}"
+GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-${CLAWDBOT_GATEWAY_TOKEN}}"
+CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${CLAWDBOT_CONFIG_PATH}}"
+
+# Default state dir: .openclaw (project default) or .clawdbot (legacy)
+CONFIG_DIR="${STATE_DIR:-${HOME}/.openclaw}"
+CONFIG_FILE="${CONFIG_PATH:-${CONFIG_DIR}/openclaw.json}"
+# Legacy: if only CLAWDBOT_* was used, config file might be clawdbot.json
+if [ -z "${STATE_DIR}" ] && [ -z "${OPENCLAW_STATE_DIR}" ] && [ -n "${CLAWDBOT_STATE_DIR}" ]; then
+  CONFIG_DIR="${CLAWDBOT_STATE_DIR}"
+  CONFIG_FILE="${CONFIG_FILE:-${CONFIG_DIR}/clawdbot.json}"
+fi
+
+if [ -n "${STATE_DIR}" ]; then
   set +e
-  mkdir -p "${CLAWDBOT_STATE_DIR}" 2>/dev/null
-  touch "${CLAWDBOT_STATE_DIR}/.test" 2>/dev/null
+  mkdir -p "${STATE_DIR}" 2>/dev/null
+  touch "${STATE_DIR}/.test" 2>/dev/null
   if [ $? -eq 0 ]; then
-    rm -f "${CLAWDBOT_STATE_DIR}/.test" 2>/dev/null
-    CONFIG_DIR="${CLAWDBOT_STATE_DIR}"
-    echo "Using CLAWDBOT_STATE_DIR: ${CONFIG_DIR}"
+    rm -f "${STATE_DIR}/.test" 2>/dev/null
+    CONFIG_DIR="${STATE_DIR}"
+    CONFIG_FILE="${CONFIG_PATH:-${CONFIG_DIR}/openclaw.json}"
+    echo "Using STATE_DIR: ${CONFIG_DIR}"
   else
-    echo "Warning: ${CLAWDBOT_STATE_DIR} not writable, using ${CONFIG_DIR}"
+    echo "Warning: ${STATE_DIR} not writable, using ${CONFIG_DIR}"
   fi
   set -e
 fi
 
-CONFIG_FILE="${CONFIG_DIR}/clawdbot.json"
-
 echo "Config dir: ${CONFIG_DIR}"
 echo "Config file: ${CONFIG_FILE}"
 
-# Create config directory (this should always work for HOME/.clawdbot)
+# Create config directory
 if ! mkdir -p "${CONFIG_DIR}" 2>/dev/null; then
   echo "ERROR: Failed to create config directory: ${CONFIG_DIR}"
   exit 1
@@ -67,20 +78,23 @@ fi
 echo "=== Config written to ${CONFIG_FILE} ==="
 cat "${CONFIG_FILE}" || echo "Warning: Could not read config file"
 
-# Verify config file exists and is readable
 if [ ! -f "${CONFIG_FILE}" ]; then
   echo "ERROR: Config file does not exist: ${CONFIG_FILE}"
   exit 1
 fi
 
-# Set environment variables for gateway
+# Export for gateway (both OPENCLAW_* and CLAWDBOT_* so CLI works)
+export OPENCLAW_STATE_DIR="${CONFIG_DIR}"
+export OPENCLAW_CONFIG_PATH="${CONFIG_FILE}"
 export CLAWDBOT_STATE_DIR="${CONFIG_DIR}"
 export CLAWDBOT_CONFIG_PATH="${CONFIG_FILE}"
 export CLAWDBOT_CONFIG_CACHE_MS=0
+if [ -n "${WORKSPACE_DIR}" ]; then
+  export OPENCLAW_WORKSPACE_DIR="${WORKSPACE_DIR}"
+  export CLAWDBOT_WORKSPACE_DIR="${WORKSPACE_DIR}"
+fi
 
 echo "=== Starting gateway ==="
-echo "CLAWDBOT_STATE_DIR=${CLAWDBOT_STATE_DIR}"
-echo "CLAWDBOT_CONFIG_PATH=${CLAWDBOT_CONFIG_PATH}"
 
 # Verify node is available
 if ! command -v node >/dev/null 2>&1; then
@@ -91,34 +105,34 @@ fi
 
 echo "Node version: $(node --version)"
 
-# Verify dist/index.js exists
+# Verify dist/index.js exists (we're in /app when run from Docker)
 if [ ! -f "dist/index.js" ]; then
   echo "ERROR: dist/index.js not found"
   echo "Contents of /app:"
-  ls -la /app 2>/dev/null || echo "Cannot list /app"
-  echo "Contents of current directory:"
-  ls -la . 2>/dev/null || echo "Cannot list current directory"
+  ls -la /app 2>/dev/null || true
+  ls -la . 2>/dev/null || true
   exit 1
 fi
 
 echo "Found dist/index.js"
 
-# Check if token is set
-if [ -z "${CLAWDBOT_GATEWAY_TOKEN}" ]; then
-  echo "ERROR: CLAWDBOT_GATEWAY_TOKEN is not set"
+if [ -z "${GATEWAY_TOKEN}" ]; then
+  echo "ERROR: OPENCLAW_GATEWAY_TOKEN (or CLAWDBOT_GATEWAY_TOKEN) is not set"
   exit 1
 fi
 
-echo "Token is set (length: ${#CLAWDBOT_GATEWAY_TOKEN})"
+echo "Token is set (length: ${#GATEWAY_TOKEN})"
 
-# Enable strict error handling for the final exec
+# PORT from env (Render sets PORT=8080)
+PORT="${PORT:-8080}"
+echo "Gateway port: ${PORT}"
+
 set -e
 
-# Start gateway
-echo "Executing: node dist/index.js gateway --port 8080 --bind lan --auth token --allow-unconfigured"
+echo "Executing: node dist/index.js gateway --port ${PORT} --bind lan --auth token --allow-unconfigured"
 exec node dist/index.js gateway \
-  --port 8080 \
+  --port "${PORT}" \
   --bind lan \
   --auth token \
-  --token "${CLAWDBOT_GATEWAY_TOKEN}" \
+  --token "${GATEWAY_TOKEN}" \
   --allow-unconfigured
