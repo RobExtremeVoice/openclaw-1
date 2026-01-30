@@ -321,6 +321,11 @@ Minimal `~/.clawdbot/moltbot.json` (model + defaults):
 
 Details: [Security guide](https://docs.molt.bot/gateway/security) · [Docker + sandboxing](https://docs.molt.bot/install/docker) · [Sandbox config](https://docs.molt.bot/gateway/configuration)
 
+### Architecture Diagram
+These are the key pieces of moltbot with areas of the [Lethal Trifecta Categories](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) identified.
+
+![architecture diagram](assets/moltbot-architecture-diagram.png)
+
 ### [WhatsApp](https://docs.molt.bot/channels/whatsapp)
 
 - Link the device: `pnpm moltbot channels login` (stores creds in `~/.clawdbot/credentials`).
