@@ -65,6 +65,7 @@ Docs: https://docs.openclaw.ai
 - Matrix: switch plugin SDK to @vector-im/matrix-bot-sdk.
 - Tlon: format thread reply IDs as @ud. (#1837) Thanks @wca4a.
 - Tools: add per-sender group tool policies and fix precedence. (#1757) Thanks @adam91holt.
+- Tools: add SearXNG as a `web_search` provider. (#2317)
 - Agents: summarize dropped messages during compaction safeguard pruning. (#2509) Thanks @jogi47.
 - Agents: expand cron tool description with full schema docs. (#1988) Thanks @tomascupr.
 - Agents: honor tools.exec.safeBins in exec allowlist checks. (#2281)
