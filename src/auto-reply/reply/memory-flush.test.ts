@@ -45,10 +45,10 @@ describe("memory flush settings", () => {
 });
 
 describe("shouldRunMemoryFlush", () => {
-  it("requires totalTokens and threshold", () => {
+  it("requires contextTokens and threshold", () => {
     expect(
       shouldRunMemoryFlush({
-        entry: { totalTokens: 0 },
+        entry: { contextTokens: 0 },
         contextWindowTokens: 16_000,
         reserveTokensFloor: 20_000,
         softThresholdTokens: DEFAULT_MEMORY_FLUSH_SOFT_TOKENS,
@@ -70,7 +70,7 @@ describe("shouldRunMemoryFlush", () => {
   it("skips when under threshold", () => {
     expect(
       shouldRunMemoryFlush({
-        entry: { totalTokens: 10_000 },
+        entry: { contextTokens: 10_000 },
         contextWindowTokens: 100_000,
         reserveTokensFloor: 20_000,
         softThresholdTokens: 10_000,
@@ -81,7 +81,7 @@ describe("shouldRunMemoryFlush", () => {
   it("triggers at the threshold boundary", () => {
     expect(
       shouldRunMemoryFlush({
-        entry: { totalTokens: 85 },
+        entry: { contextTokens: 85 },
         contextWindowTokens: 100,
         reserveTokensFloor: 10,
         softThresholdTokens: 5,
@@ -93,7 +93,7 @@ describe("shouldRunMemoryFlush", () => {
     expect(
       shouldRunMemoryFlush({
         entry: {
-          totalTokens: 90_000,
+          contextTokens: 90_000,
           compactionCount: 2,
           memoryFlushCompactionCount: 2,
         },
@@ -107,7 +107,7 @@ describe("shouldRunMemoryFlush", () => {
   it("runs when above threshold and not flushed", () => {
     expect(
       shouldRunMemoryFlush({
-        entry: { totalTokens: 96_000, compactionCount: 1 },
+        entry: { contextTokens: 96_000, compactionCount: 1 },
         contextWindowTokens: 100_000,
         reserveTokensFloor: 5_000,
         softThresholdTokens: 2_000,

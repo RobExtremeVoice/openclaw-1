@@ -69,19 +69,19 @@ export function resolveMemoryFlushContextWindowTokens(params: {
 }
 
 export function shouldRunMemoryFlush(params: {
-  entry?: Pick<SessionEntry, "totalTokens" | "compactionCount" | "memoryFlushCompactionCount">;
+  entry?: Pick<SessionEntry, "contextTokens" | "compactionCount" | "memoryFlushCompactionCount">;
   contextWindowTokens: number;
   reserveTokensFloor: number;
   softThresholdTokens: number;
 }): boolean {
-  const totalTokens = params.entry?.totalTokens;
-  if (!totalTokens || totalTokens <= 0) return false;
+  const contextTokens = params.entry?.contextTokens;
+  if (!contextTokens || contextTokens <= 0) return false;
   const contextWindow = Math.max(1, Math.floor(params.contextWindowTokens));
   const reserveTokens = Math.max(0, Math.floor(params.reserveTokensFloor));
   const softThreshold = Math.max(0, Math.floor(params.softThresholdTokens));
   const threshold = Math.max(0, contextWindow - reserveTokens - softThreshold);
   if (threshold <= 0) return false;
-  if (totalTokens < threshold) return false;
+  if (contextTokens < threshold) return false;
 
   const compactionCount = params.entry?.compactionCount ?? 0;
   const lastFlushAt = params.entry?.memoryFlushCompactionCount;
