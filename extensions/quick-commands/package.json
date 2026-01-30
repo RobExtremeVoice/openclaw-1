@@ -1,0 +1,17 @@
+{
+  "name": "@clawdbot/quick-commands",
+  "version": "0.1.0",
+  "description": "Quick slash commands using Haiku for fast, cheap status queries",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "keywords": [
+    "clawdbot",
+    "plugin",
+    "quick-commands",
+    "haiku"
+  ],
+  "license": "MIT"
+}

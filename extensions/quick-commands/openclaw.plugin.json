@@ -1,0 +1,7 @@
+{
+  "id": "quick-commands",
+  "name": "Quick Commands",
+  "version": "0.1.0",
+  "description": "Quick slash commands using Haiku for fast, cheap status queries. Commands: /status, /board, /prs, /ralph, /sessions",
+  "main": "index.ts"
+}
