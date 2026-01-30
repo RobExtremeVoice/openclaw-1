@@ -17,6 +17,8 @@ import {
   applySyntheticProviderConfig,
   applyXiaomiConfig,
   applyXiaomiProviderConfig,
+  applyNebiusConfig,
+  applyNebiusProviderConfig,
   OPENROUTER_DEFAULT_MODEL_REF,
   SYNTHETIC_DEFAULT_MODEL_ID,
   SYNTHETIC_DEFAULT_MODEL_REF,
@@ -464,5 +466,46 @@ describe("applyOpenrouterConfig", () => {
       },
     });
     expect(cfg.agents?.defaults?.model?.fallbacks).toEqual(["anthropic/claude-opus-4-5"]);
+  });
+});
+describe("applyNebiusConfig", () => {
+  it("adds Nebius provider with correct settings", () => {
+    const cfg = applyNebiusConfig({});
+    expect(cfg.models?.providers?.nebius).toMatchObject({
+      baseUrl: "https://api.tokenfactory.nebius.com/v1",
+      api: "openai-completions",
+    });
+    expect(cfg.agents?.defaults?.model?.primary).toBe("nebius/zai-org/GLM-4.7-FP8");
+  });
+
+  it("merges Nebius models and keeps existing provider overrides", () => {
+    const cfg = applyNebiusProviderConfig({
+      models: {
+        providers: {
+          nebius: {
+            baseUrl: "https://old.example.com",
+            apiKey: "old-key",
+            api: "openai-completions",
+            models: [
+              {
+                id: "custom-model",
+                name: "Custom",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 1000,
+                maxTokens: 100,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(cfg.models?.providers?.nebius?.baseUrl).toBe("https://api.tokenfactory.nebius.com/v1");
+    expect(cfg.models?.providers?.nebius?.api).toBe("openai-completions");
+    expect(cfg.models?.providers?.nebius?.apiKey).toBe("old-key");
+    expect(cfg.models?.providers?.nebius?.models.map((m) => m.id)).toContain("custom-model");
+    expect(cfg.models?.providers?.nebius?.models.map((m) => m.id)).toContain("zai-org/GLM-4.7-FP8");
   });
 });
