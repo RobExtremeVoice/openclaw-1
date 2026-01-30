@@ -63,6 +63,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       replyTo?: string;
       sessionId?: string;
       sessionKey?: string;
+      model?: string;
       thinking?: string;
       deliver?: boolean;
       attachments?: Array<{
@@ -353,6 +354,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         to: resolvedTo,
         sessionId: resolvedSessionId,
         sessionKey: requestedSessionKey,
+        model: request.model?.trim() || undefined,
         thinking: request.thinking,
         deliver,
         deliveryTargetMode,
