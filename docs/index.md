@@ -7,17 +7,14 @@ read_when:
 
 > *"EXFOLIATE! EXFOLIATE!"* — A space lobster, probably
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="/assets/openclaw-logo-text.png" />
-    <source media="(prefers-color-scheme: light)" srcset="/assets/openclaw-logo-text-dark.png" />
-    <img src="/assets/openclaw-logo-text.png" alt="OpenClaw" width="520" />
-  </picture>
-</p>
 
 <p align="center">
-  <img src="whatsapp-openclaw.jpg" alt="OpenClaw" width="420" />
+    <picture>
+        <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text-dark.png">
+        <img src="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text.png" alt="OpenClaw" width="500">
+    </picture>
 </p>
+
 
 <p align="center">
   <strong>Any OS + WhatsApp/Telegram/Discord/iMessage gateway for AI agents (Pi).</strong><br />
@@ -49,6 +46,10 @@ immediately. If it fails, start the Gateway first: `openclaw gateway`.
 The dashboard is the browser Control UI for chat, config, nodes, sessions, and more.
 Local default: http://127.0.0.1:18789/
 Remote access: [Web surfaces](/web) and [Tailscale](/gateway/tailscale)
+
+<p align="center">
+  <img src="whatsapp-openclaw.jpg" alt="OpenClaw" width="420" />
+</p>
 
 ## How it works
 
