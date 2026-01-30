@@ -1,5 +1,5 @@
 ---
-summary: "Use LiteLLM as an OpenAI-compatible proxy in Clawdbot"
+summary: "Use LiteLLM as an OpenAI-compatible proxy in OpenClaw"
 read_when:
   - You want to use LiteLLM as a model provider
   - You need to connect to a self-hosted LiteLLM proxy
@@ -7,7 +7,7 @@ read_when:
 ---
 # LiteLLM
 
-LiteLLM is an OpenAI-compatible proxy that supports 100+ LLM APIs. Clawdbot
+LiteLLM is an OpenAI-compatible proxy that supports 100+ LLM APIs. OpenClaw
 registers it as the `litellm` provider and uses the OpenAI Completions API.
 
 ## Quick setup
@@ -20,7 +20,7 @@ registers it as the `litellm` provider and uses the OpenAI Completions API.
 3) Run onboarding:
 
 ```bash
-clawdbot onboard --auth-choice litellm-api-key
+openclaw onboard --auth-choice litellm-api-key
 ```
 
 The wizard will prompt for:
@@ -88,12 +88,12 @@ Add additional models to your config as needed:
 Then switch models using:
 
 ```bash
-clawdbot config set agents.defaults.model.primary litellm/claude-3-opus
+openclaw config set agents.defaults.model.primary litellm/claude-3-opus
 ```
 
 ## Prompt caching
 
-When using Anthropic models through LiteLLM (e.g., `claude-opus-4-5`, `claude-sonnet-4-5`), Moltbot automatically enables **prompt caching** to reduce costs:
+When using Anthropic models through LiteLLM (e.g., `claude-opus-4-5`, `claude-sonnet-4-5`), OpenClaw automatically enables **prompt caching** to reduce costs:
 
 ```json5
 {
@@ -125,7 +125,7 @@ Caching is **automatically enabled** for all `claude-*` models through LiteLLM.
 ## Notes
 
 - Model refs use `litellm/<modelId>` where `modelId` matches your LiteLLM config.
-- The base URL should not include `/v1` - Moltbot's OpenAI client appends it.
+- The base URL should not include `/v1` - OpenClaw's OpenAI client appends it.
 - Supported LiteLLM models depend on your proxy configuration.
 - **Prompt caching works automatically** when using Claude models through LiteLLM.
 - See [Model providers](/concepts/model-providers) for provider rules.

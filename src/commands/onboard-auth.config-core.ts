@@ -490,7 +490,7 @@ export function applyVeniceConfig(cfg: OpenClawConfig): OpenClawConfig {
  * are user-configurable.
  */
 export function applyLitellmProviderConfig(
-  cfg: MoltbotConfig,
+  cfg: OpenClawConfig,
   params: {
     baseUrl: string;
     modelId: string;
@@ -498,7 +498,7 @@ export function applyLitellmProviderConfig(
     contextWindow?: number;
     maxTokens?: number;
   },
-): MoltbotConfig {
+): OpenClawConfig {
   const modelRef = `litellm/${params.modelId}`;
   const models = { ...cfg.agents?.defaults?.models };
   models[modelRef] = {
@@ -562,7 +562,7 @@ export function applyLitellmProviderConfig(
  * Use this when LiteLLM is the primary provider choice during onboarding.
  */
 export function applyLitellmConfig(
-  cfg: MoltbotConfig,
+  cfg: OpenClawConfig,
   params: {
     baseUrl: string;
     modelId: string;
@@ -570,7 +570,7 @@ export function applyLitellmConfig(
     contextWindow?: number;
     maxTokens?: number;
   },
-): MoltbotConfig {
+): OpenClawConfig {
   const next = applyLitellmProviderConfig(cfg, params);
   const modelRef = `litellm/${params.modelId}`;
   const existingModel = next.agents?.defaults?.model;
