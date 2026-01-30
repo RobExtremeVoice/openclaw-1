@@ -105,6 +105,27 @@ export function listFeishuAccountIds(cfg: OpenClawConfig): string[] {
 }
 
 /**
+ * List enabled Feishu accounts (for action adapter)
+ */
+export function listEnabledFeishuAccounts(cfg: OpenClawConfig): ResolvedFeishuAccount[] {
+  const accountIds = listFeishuAccountIds(cfg);
+  const accounts: ResolvedFeishuAccount[] = [];
+
+  for (const accountId of accountIds) {
+    try {
+      const account = resolveFeishuAccount({ cfg, accountId });
+      if (account.enabled) {
+        accounts.push(account);
+      }
+    } catch {
+      // Skip accounts that fail to resolve
+    }
+  }
+
+  return accounts;
+}
+
+/**
  * Resolve the default Feishu account ID
  */
 export function resolveDefaultFeishuAccountId(cfg: OpenClawConfig): string | undefined {
