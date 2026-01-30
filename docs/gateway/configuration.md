@@ -2030,9 +2030,16 @@ of `every`, keep `HEARTBEAT.md` tiny, and/or choose a cheaper `model`.
   Note: `applyPatch` is only under `tools.exec`.
 
 `tools.web` configures web search + fetch tools:
-
 - `tools.web.search.enabled` (default: true when key is present)
-- `tools.web.search.apiKey` (recommended: set via `openclaw configure --section web`, or use `BRAVE_API_KEY` env var)
+- `tools.web.search.provider` (`brave` | `perplexity` | `searxng`)
+- `tools.web.search.apiKey` (Brave; recommended: set via `openclaw configure --section web`, or use `BRAVE_API_KEY` env var)
+- `tools.web.search.perplexity.apiKey` (Perplexity/OpenRouter; optional if `PERPLEXITY_API_KEY` or `OPENROUTER_API_KEY` is set)
+- `tools.web.search.perplexity.baseUrl` (optional override)
+- `tools.web.search.perplexity.model` (optional override)
+- `tools.web.search.searxng.baseUrl` (SearXNG; optional if `SEARXNG_BASE_URL` is set)
+- `tools.web.search.searxng.apiKey` (optional auth token; sent as Authorization header)
+- `tools.web.search.searxng.headers` (optional extra headers)
+- `tools.web.search.searxng.params` (optional default query params)
 - `tools.web.search.maxResults` (1–10, default 5)
 - `tools.web.search.timeoutSeconds` (default 30)
 - `tools.web.search.cacheTtlMinutes` (default 15)

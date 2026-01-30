@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { __testing } from "./web-search.js";
 
-const { inferPerplexityBaseUrlFromApiKey, resolvePerplexityBaseUrl, normalizeFreshness } =
-  __testing;
+const {
+  inferPerplexityBaseUrlFromApiKey,
+  resolvePerplexityBaseUrl,
+  normalizeFreshness,
+  resolveSearxngBaseUrl,
+  resolveSearxngHeaders,
+} = __testing;
 
 describe("web_search perplexity baseUrl defaults", () => {
   it("detects a Perplexity key prefix", () => {
@@ -67,5 +72,38 @@ describe("web_search freshness normalization", () => {
     expect(normalizeFreshness("2024-13-01to2024-01-31")).toBeUndefined();
     expect(normalizeFreshness("2024-02-30to2024-03-01")).toBeUndefined();
     expect(normalizeFreshness("2024-03-10to2024-03-01")).toBeUndefined();
+  });
+});
+
+describe("web_search searxng config resolution", () => {
+  it("prefers config baseUrl and trims trailing slash", () => {
+    expect(resolveSearxngBaseUrl({ baseUrl: "http://localhost:8080/" })).toBe(
+      "http://localhost:8080",
+    );
+  });
+
+  it("falls back to SEARXNG_BASE_URL env var", () => {
+    const prev = process.env.SEARXNG_BASE_URL;
+    process.env.SEARXNG_BASE_URL = "http://searxng.local:8888/";
+    try {
+      expect(resolveSearxngBaseUrl(undefined)).toBe("http://searxng.local:8888");
+    } finally {
+      if (prev === undefined) {
+        delete process.env.SEARXNG_BASE_URL;
+      } else {
+        process.env.SEARXNG_BASE_URL = prev;
+      }
+    }
+  });
+
+  it("builds headers with optional auth and extras", () => {
+    expect(resolveSearxngHeaders(undefined)).toEqual({ Accept: "application/json" });
+
+    expect(resolveSearxngHeaders({ apiKey: "token-123" }).Authorization).toBe("Bearer token-123");
+    expect(resolveSearxngHeaders({ apiKey: "Basic abc" }).Authorization).toBe("Basic abc");
+
+    const headers = resolveSearxngHeaders({ headers: { "X-Test": "ok" }, apiKey: "token-123" });
+    expect(headers["X-Test"]).toBe("ok");
+    expect(headers.Accept).toBe("application/json");
   });
 });

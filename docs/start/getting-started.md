@@ -45,9 +45,8 @@ run on host, set an explicit per-agent override:
 
 - Node `>=22`
 - `pnpm` (optional; recommended if you build from source)
-- **Recommended:** Brave Search API key for web search. Easiest path:
-  `openclaw configure --section web` (stores `tools.web.search.apiKey`).
-  See [Web tools](/tools/web).
+- **Recommended:** configure a `web_search` provider (Brave, Perplexity, or SearXNG) for web search.
+  Easiest path: `openclaw configure --section web`. See [Web tools](/tools/web).
 
 macOS: if you plan to build the apps, install Xcode / CLT. For the CLI + gateway only, Node is enough.
 Windows: use **WSL2** (Ubuntu recommended). WSL2 is strongly recommended; native Windows is untested, more problematic, and has poorer tool compatibility. Install WSL2 first, then run the Linux steps inside WSL. See [Windows (WSL2)](/platforms/windows).

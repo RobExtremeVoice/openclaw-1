@@ -1371,10 +1371,13 @@ The Gateway watches the config and supports hot‑reload:
 
 ### How do I enable web search and web fetch
 
-`web_fetch` works without an API key. `web_search` requires a Brave Search API
-key. **Recommended:** run `openclaw configure --section web` to store it in
-`tools.web.search.apiKey`. Environment alternative: set `BRAVE_API_KEY` for the
-Gateway process.
+`web_fetch` works without an API key. `web_search` requires provider setup:
+
+- Brave: `tools.web.search.apiKey` or `BRAVE_API_KEY`
+- Perplexity: `tools.web.search.perplexity.apiKey` or `PERPLEXITY_API_KEY` / `OPENROUTER_API_KEY`
+- SearXNG: `tools.web.search.searxng.baseUrl` or `SEARXNG_BASE_URL`
+
+**Recommended:** run `openclaw configure --section web` to set these in config.
 
 ```json5
 {
@@ -1382,6 +1385,7 @@ Gateway process.
     web: {
       search: {
         enabled: true,
+        provider: "brave",
         apiKey: "BRAVE_API_KEY_HERE",
         maxResults: 5,
       },
