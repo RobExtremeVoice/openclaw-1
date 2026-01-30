@@ -32,10 +32,13 @@ import {
   validateResponseFrame,
 } from "./protocol/index.js";
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000; // 30 second default request timeout
+
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (err: unknown) => void;
   expectFinal: boolean;
+  timer?: NodeJS.Timeout;
 };
 
 export type GatewayClientOptions = {
@@ -311,6 +314,7 @@ export class GatewayClient {
         if (pending.expectFinal && status === "accepted") {
           return;
         }
+        if (pending.timer) clearTimeout(pending.timer);
         this.pending.delete(parsed.id);
         if (parsed.ok) pending.resolve(parsed.payload);
         else pending.reject(new Error(parsed.error?.message ?? "unknown error"));
@@ -342,6 +346,7 @@ export class GatewayClient {
 
   private flushPendingErrors(err: Error) {
     for (const [, p] of this.pending) {
+      if (p.timer) clearTimeout(p.timer);
       p.reject(err);
     }
     this.pending.clear();
@@ -382,7 +387,7 @@ export class GatewayClient {
   async request<T = unknown>(
     method: string,
     params?: unknown,
-    opts?: { expectFinal?: boolean },
+    opts?: { expectFinal?: boolean; timeoutMs?: number },
   ): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("gateway not connected");
@@ -395,11 +400,20 @@ export class GatewayClient {
       );
     }
     const expectFinal = opts?.expectFinal === true;
+    const timeoutMs = opts?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     const p = new Promise<T>((resolve, reject) => {
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              this.pending.delete(id);
+              reject(new Error(`gateway request timeout for ${method}`));
+            }, timeoutMs)
+          : undefined;
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
         expectFinal,
+        timer,
       });
     });
     this.ws.send(JSON.stringify(frame));
