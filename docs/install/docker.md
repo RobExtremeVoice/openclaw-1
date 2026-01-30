@@ -73,6 +73,7 @@ chown -R 1000:1000 /mnt/user/appdata/moltbot
 2) Copy `docker-compose.unraid.yml` into `/mnt/user/appdata/moltbot/`, then
 create a stack in the Unraid Compose Manager plugin using that file. Set:
 - `CLAWDBOT_GATEWAY_TOKEN` to a strong value
+- Keep `CLAWDBOT_GATEWAY_TOKEN` in sync with `gateway.auth.token` in `moltbot.json`
 - Optional: `CLAWDBOT_GATEWAY_PORT` and `CLAWDBOT_GATEWAY_BIND` (default `18789` / `lan`)
 - Optional: `CLAWDBOT_IMAGE` if you build or pull a custom tag
 
@@ -84,7 +85,30 @@ create a stack in the Unraid Compose Manager plugin using that file. Set:
 docker compose -f /mnt/user/appdata/moltbot/docker-compose.unraid.yml run --rm moltbot-cli onboard --no-install-daemon
 ```
 
-Open `http://gateway-host:18789/` and paste the token.
+5) Open the Control UI from a **secure context** (LAN HTTP is blocked). The
+quickest path is an SSH tunnel:
+
+```bash
+ssh -N -L 18789:127.0.0.1:18789 root@gateway-host
+```
+
+Then open:
+`http://127.0.0.1:18789/?token=<gateway-token>`
+
+6) If the UI says `pairing required`, approve the device:
+
+```bash
+TOKEN="<gateway-token>"
+docker compose -f /mnt/user/appdata/moltbot/docker-compose.unraid.yml exec \
+  -e CLAWDBOT_GATEWAY_TOKEN="$TOKEN" \
+  moltbot-gateway node dist/index.js devices list
+docker compose -f /mnt/user/appdata/moltbot/docker-compose.unraid.yml exec \
+  -e CLAWDBOT_GATEWAY_TOKEN="$TOKEN" \
+  moltbot-gateway node dist/index.js devices approve <requestId>
+```
+
+Note: the Unraid compose file sets `MOLTBOT_STATE_DIR=/home/node/.clawdbot` to
+avoid legacy state migration warnings when the config dir is bind-mounted.
 
 ### Manual flow (compose)
 

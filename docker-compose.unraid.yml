@@ -4,8 +4,10 @@ services:
     environment:
       HOME: /home/node
       TERM: xterm-256color
+      MOLTBOT_STATE_DIR: /home/node/.clawdbot
       CLAWDBOT_GATEWAY_BIND: ${CLAWDBOT_GATEWAY_BIND:-lan}
       CLAWDBOT_GATEWAY_PORT: ${CLAWDBOT_GATEWAY_PORT:-18789}
+      # Keep this in sync with gateway.auth.token in moltbot.json.
       CLAWDBOT_GATEWAY_TOKEN: ${CLAWDBOT_GATEWAY_TOKEN:-change-me}
     volumes:
       - /mnt/user/appdata/moltbot/config:/home/node/.clawdbot
@@ -32,6 +34,8 @@ services:
       HOME: /home/node
       TERM: xterm-256color
       BROWSER: echo
+      MOLTBOT_STATE_DIR: /home/node/.clawdbot
+      CLAWDBOT_GATEWAY_TOKEN: ${CLAWDBOT_GATEWAY_TOKEN:-change-me}
     volumes:
       - /mnt/user/appdata/moltbot/config:/home/node/.clawdbot
       - /mnt/user/appdata/moltbot/workspace:/home/node/clawd
