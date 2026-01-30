@@ -6,6 +6,7 @@ import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation";
 import { icons } from "./icons";
 import { loadChatHistory } from "./controllers/chat";
 import { refreshChat } from "./app-chat";
+import { patchSession } from "./controllers/sessions";
 import { syncUrlWithSessionKey } from "./app-settings";
 import type { SessionsListResult } from "./types";
 import type { ThemeMode } from "./theme";
@@ -46,6 +47,10 @@ export function renderChatControls(state: AppViewState) {
     state.sessionsResult,
     mainSessionKey,
   );
+  const activeSession = state.sessionsResult?.sessions?.find(
+    (row) => row.key === state.sessionKey,
+  );
+  const sessionLabel = activeSession?.label ?? "";
   const disableThinkingToggle = state.onboarding;
   const disableFocusToggle = state.onboarding;
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
@@ -81,13 +86,32 @@ export function renderChatControls(state: AppViewState) {
           ${repeat(
             sessionOptions,
             (entry) => entry.key,
-            (entry) =>
-              html`<option value=${entry.key}>
-                ${entry.displayName ?? entry.key}
-              </option>`,
+            (entry) => {
+              const base = entry.displayName ?? entry.key;
+              // Only append label if it differs from displayName
+              const showLabel = entry.label && entry.label !== entry.displayName;
+              const text = showLabel ? `${base} — ${entry.label}` : base;
+              return html`<option value=${entry.key}>${text}</option>`;
+            },
           )}
         </select>
       </label>
+      <input
+        type="text"
+        class="chat-controls__label"
+        .value=${sessionLabel}
+        ?disabled=${!state.connected}
+        placeholder="Label"
+        title="Session label"
+        @change=${(e: Event) => {
+          const value = (e.target as HTMLInputElement).value.trim();
+          void patchSession(
+            state as Parameters<typeof patchSession>[0],
+            state.sessionKey,
+            { label: value || null },
+          );
+        }}
+      />
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
@@ -162,7 +186,7 @@ function resolveSessionOptions(
   mainSessionKey?: string | null,
 ) {
   const seen = new Set<string>();
-  const options: Array<{ key: string; displayName?: string }> = [];
+  const options: Array<{ key: string; displayName?: string; label?: string }> = [];
 
   const resolvedMain =
     mainSessionKey && sessions?.sessions?.find((s) => s.key === mainSessionKey);
@@ -171,13 +195,13 @@ function resolveSessionOptions(
   // Add main session key first
   if (mainSessionKey) {
     seen.add(mainSessionKey);
-    options.push({ key: mainSessionKey, displayName: resolvedMain?.displayName });
+    options.push({ key: mainSessionKey, displayName: resolvedMain?.displayName, label: resolvedMain?.label });
   }
 
   // Add current session key next
   if (!seen.has(sessionKey)) {
     seen.add(sessionKey);
-    options.push({ key: sessionKey, displayName: resolvedCurrent?.displayName });
+    options.push({ key: sessionKey, displayName: resolvedCurrent?.displayName, label: resolvedCurrent?.label });
   }
 
   // Add sessions from the result
@@ -185,7 +209,7 @@ function resolveSessionOptions(
     for (const s of sessions.sessions) {
       if (!seen.has(s.key)) {
         seen.add(s.key);
-        options.push({ key: s.key, displayName: s.displayName });
+        options.push({ key: s.key, displayName: s.displayName, label: s.label });
       }
     }
   }
