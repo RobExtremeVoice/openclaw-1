@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { buildHistoryContextFromEntries, type HistoryEntry } from "../auto-reply/reply/history.js";
+import type { ImageContent } from "../commands/agent/types.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { agentCommand } from "../commands/agent.js";
 import { emitAgentEvent, onAgentEvent } from "../infra/agent-events.js";
@@ -64,29 +65,59 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+function extractImages(content: unknown): ImageContent[] {
+  if (!Array.isArray(content)) return [];
+  const images: ImageContent[] = [];
+  for (const part of content) {
+    if (!part || typeof part !== "object") continue;
+    const p = part as { type?: string; image_url?: { url?: string } };
+    if (p.type === "image_url" && typeof p.image_url?.url === "string") {
+      const url = p.image_url.url;
+      if (url.startsWith("data:")) {
+        const match = url.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          images.push({
+            type: "image",
+            mimeType: match[1]!,
+            data: match[2]!,
+          });
+        }
+      }
+    }
+  }
+  return images;
+}
+
 function buildAgentPrompt(messagesUnknown: unknown): {
   message: string;
   extraSystemPrompt?: string;
+  images?: ImageContent[];
 } {
   const messages = asMessages(messagesUnknown);
 
   const systemParts: string[] = [];
   const conversationEntries: Array<{ role: "user" | "assistant" | "tool"; entry: HistoryEntry }> =
     [];
+  let lastUserImages: ImageContent[] | undefined;
 
   for (const msg of messages) {
     if (!msg || typeof msg !== "object") continue;
     const role = typeof msg.role === "string" ? msg.role.trim() : "";
     const content = extractTextContent(msg.content).trim();
-    if (!role || !content) continue;
+    if (!role && !Array.isArray(msg.content)) continue;
+
     if (role === "system" || role === "developer") {
-      systemParts.push(content);
+      if (content) systemParts.push(content);
       continue;
     }
 
     const normalizedRole = role === "function" ? "tool" : role;
     if (normalizedRole !== "user" && normalizedRole !== "assistant" && normalizedRole !== "tool") {
       continue;
+    }
+
+    if (normalizedRole === "user") {
+      lastUserImages = extractImages(msg.content);
     }
 
     const name = typeof msg.name === "string" ? msg.name.trim() : "";
@@ -135,6 +166,7 @@ function buildAgentPrompt(messagesUnknown: unknown): {
   return {
     message,
     extraSystemPrompt: systemParts.length > 0 ? systemParts.join("\n\n") : undefined,
+    images: lastUserImages,
   };
 }
 
@@ -206,6 +238,7 @@ export async function handleOpenAiHttpRequest(
         {
           message: prompt.message,
           extraSystemPrompt: prompt.extraSystemPrompt,
+          images: prompt.images,
           sessionKey,
           runId,
           deliver: false,
@@ -313,6 +346,7 @@ export async function handleOpenAiHttpRequest(
         {
           message: prompt.message,
           extraSystemPrompt: prompt.extraSystemPrompt,
+          images: prompt.images,
           sessionKey,
           runId,
           deliver: false,
