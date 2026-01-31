@@ -67,7 +67,9 @@ const DEFAULT_BODY_BYTES = 20 * 1024 * 1024;
 
 function writeSseEvent(res: ServerResponse, event: StreamingEvent) {
   res.write(`event: ${event.type}\n`);
-  res.write(`data: ${JSON.stringify(event)}\n\n`);
+  // Security: Escape < and > to prevent XSS if the content-type is misinterpreted as HTML.
+  const json = JSON.stringify(event).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+  res.write(`data: ${json}\n\n`);
 }
 
 function extractTextContent(content: string | ContentPart[]): string {
@@ -451,8 +453,12 @@ export async function handleOpenResponsesHttpRequest(
     resolvedClientTools = toolChoiceResult.tools;
     toolChoicePrompt = toolChoiceResult.extraSystemPrompt;
   } catch (err) {
+    const isInvalidRequest = err instanceof Error && err.message.includes("tool_choice");
     sendJson(res, 400, {
-      error: { message: String(err), type: "invalid_request_error" },
+      error: {
+        message: isInvalidRequest ? (err as Error).message : "Invalid request",
+        type: "invalid_request_error",
+      },
     });
     return true;
   }
@@ -571,8 +577,9 @@ export async function handleOpenResponsesHttpRequest(
         model,
         status: "failed",
         output: [],
-        error: { code: "api_error", message: String(err) },
+        error: { code: "api_error", message: "Internal server error" },
       });
+      defaultRuntime.error(`OpenResponses gateway error: ${String(err)}`);
       sendJson(res, 500, response);
     }
     return true;

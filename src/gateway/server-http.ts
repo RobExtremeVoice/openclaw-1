@@ -30,6 +30,7 @@ import { applyHookMappings } from "./hooks-mapping.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
+import { handleMetricsRequest, handleHealthRequest, handleReadyRequest } from "./metrics-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -236,6 +237,21 @@ export function createGatewayHttpServer(opts: {
     if (String(req.headers.upgrade ?? "").toLowerCase() === "websocket") return;
 
     try {
+      // Observability endpoints - no auth required for health checks
+      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      if (req.method === "GET" && url.pathname === "/metrics") {
+        await handleMetricsRequest(req, res);
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/health") {
+        handleHealthRequest(req, res);
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/ready") {
+        await handleReadyRequest(req, res);
+        return;
+      }
+
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
       if (await handleHooksRequest(req, res)) return;
