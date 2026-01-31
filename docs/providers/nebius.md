@@ -23,8 +23,8 @@ openclaw onboard --auth-choice nebius-api-key
   env: { NEBIUS_API_KEY: "v1..." },
   agents: {
     defaults: {
-      model: { primary: "nebius/zai-org/GLM-4.7-FP8" }
-    }
+      model: { primary: "nebius/zai-org/GLM-4.7-FP8" },
+    },
   },
   models: {
     mode: "merge",
@@ -41,12 +41,12 @@ openclaw onboard --auth-choice nebius-api-key
             input: ["text"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 131072,
-            maxTokens: 8192
-          }
-        ]
-      }
-    }
-  }
+            maxTokens: 8192,
+          },
+        ],
+      },
+    },
+  },
 }
 ```
 
