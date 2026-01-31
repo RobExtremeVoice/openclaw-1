@@ -5,6 +5,23 @@ read_when: "Setting up Slack or debugging Slack socket/HTTP mode"
 
 # Slack
 
+## Quick Start Checklist ✅
+
+Before diving into configuration, ensure these prerequisites are met:
+
+1. ✅ **Gateway auth token configured** - Check that `gateway.auth.token` is NOT `"undefined"`
+2. ✅ **Single workspace tokens** - All tokens (botToken, appToken, userToken) must be from the same Slack workspace
+3. ✅ **Agent bindings configured** - Add bindings for each Slack account to route messages to agents
+4. ✅ **Group policy configured** - Set `groupPolicy: "open"` or allowlist specific channels
+5. ✅ **User pairing approved** - Approve users who want to DM the bot
+
+**Common Issues Resolved:**
+- [Bot doesn't respond in channels](#troubleshooting-channel-messages)
+- [Gateway crashes on startup](#troubleshooting-crashes)
+- [Mixed workspace token errors](#troubleshooting-token-conflicts)
+
+---
+
 ## Socket mode (default)
 
 ### Quick setup (beginner)
@@ -19,9 +36,20 @@ Minimal config:
     slack: {
       enabled: true,
       appToken: "xapp-...",
-      botToken: "xoxb-..."
+      botToken: "xoxb-...",
+      groupPolicy: "open"  // 👈 Important: Allow all channels or use allowlist
     }
-  }
+  },
+  // 👈 Important: Add bindings to route messages to agents
+  bindings: [
+    {
+      agentId: "main",
+      match: {
+        channel: "slack",
+        accountId: "default"
+      }
+    }
+  ]
 }
 ```
 
@@ -59,9 +87,66 @@ Or via config:
     slack: {
       enabled: true,
       appToken: "xapp-...",
-      botToken: "xoxb-..."
+      botToken: "xoxb-...",
+      groupPolicy: "open"  // 👈 Allow all channels, or use "allowlist"
     }
-  }
+  },
+  // 👈 Required: Route Slack messages to your agent
+  bindings: [
+    {
+      agentId: "main",
+      match: {
+        channel: "slack", 
+        accountId: "default"
+      }
+    }
+  ]
+}
+```
+
+### Multi-account setup
+
+For multiple Slack workspaces, use the `accounts` pattern:
+
+```json5
+{
+  channels: {
+    slack: {
+      enabled: true,
+      groupPolicy: "open",
+      accounts: {
+        "company": {
+          name: "Company Workspace",
+          botToken: "xoxb-111-222-CompanyToken",
+          appToken: "xapp-1-A111-222-CompanyAppToken",
+          groupPolicy: "open"  // 👈 Can override per-account
+        },
+        "personal": {
+          name: "Personal Workspace", 
+          botToken: "xoxb-333-444-PersonalToken",
+          appToken: "xapp-1-A333-444-PersonalAppToken",
+          groupPolicy: "allowlist"  // 👈 Different policy per workspace
+        }
+      }
+    }
+  },
+  // 👈 Bind each account to an agent
+  bindings: [
+    {
+      agentId: "main",
+      match: {
+        channel: "slack",
+        accountId: "company"
+      }
+    },
+    {
+      agentId: "main", 
+      match: {
+        channel: "slack",
+        accountId: "personal"
+      }
+    }
+  ]
 }
 ```
 
@@ -147,6 +232,208 @@ Example request URL:
 
 Multi-account HTTP mode: set `channels.slack.accounts.<id>.mode = "http"` and provide a unique
 `webhookPath` per account so each Slack app can point to its own URL.
+
+## Troubleshooting
+
+### Troubleshooting: Channel Messages
+
+**Problem**: Bot responds to DMs but not channel messages.
+
+**Common Causes**:
+1. **Wrong groupPolicy**: Bot ignores all channels
+2. **Missing bindings**: Messages not routed to agent
+3. **Bot not invited**: Bot must be added to channels
+4. **User not paired**: User needs approval for DMs
+
+**Solutions**:
+
+#### 1. Check Group Policy
+```bash
+openclaw config get | grep -A5 "groupPolicy"
+```
+
+Fix with:
+```json5
+{
+  channels: {
+    slack: {
+      groupPolicy: "open",  // Allow all channels
+      accounts: {
+        "yourAccount": {
+          groupPolicy: "open"  // Account-level policy can override
+        }
+      }
+    }
+  }
+}
+```
+
+#### 2. Check Agent Bindings
+```bash
+openclaw config get | grep -A10 "bindings"
+```
+
+Add missing bindings:
+```json5
+{
+  bindings: [
+    {
+      agentId: "main",
+      match: {
+        channel: "slack",
+        accountId: "default"  // Or your account ID
+      }
+    }
+  ]
+}
+```
+
+#### 3. Invite Bot to Channel
+In Slack: `/invite @YourBotName`
+
+#### 4. Check User Pairing (for DMs)
+If user gets pairing code:
+```bash
+openclaw pairing approve slack PWNPX4M8
+```
+
+### Troubleshooting: Crashes
+
+**Problem**: Gateway crashes on startup.
+
+**Common Causes**:
+1. **Gateway auth token undefined**: `gateway.auth.token: "undefined"`
+2. **Mixed workspace tokens**: Tokens from different Slack workspaces
+3. **Invalid token format**: Malformed or expired tokens
+
+**Solutions**:
+
+#### 1. Fix Gateway Auth Token
+```bash
+# Generate secure token
+openssl rand -hex 32
+
+# Update config
+openclaw config patch '{"gateway": {"auth": {"token": "YOUR_SECURE_TOKEN_HERE"}}}'
+```
+
+#### 2. Check Token Workspace Consistency
+All tokens must be from the same workspace:
+- ✅ `botToken: "xoxb-6859017778738-..."` (workspace 6859017778738)
+- ✅ `appToken: "xapp-1-A0AC15K9V70-..."` (workspace A0AC15K9V70)
+- ❌ Mixed: `botToken` from workspace A, `appToken` from workspace B
+
+**Fix**: Use tokens from a single Slack workspace.
+
+#### 3. Verify Token Format
+- Bot Token: `xoxb-{workspace}-{bot}-{secret}`
+- App Token: `xapp-1-{app}-{id}-{secret}`
+- User Token: `xoxp-{workspace}-{user}-{id}-{secret}`
+
+### Troubleshooting: Token Conflicts
+
+**Problem**: Authentication errors with multiple tokens configured.
+
+**Symptoms**:
+- "invalid_auth" errors in logs
+- Bot connects but doesn't respond
+- Mixed workspace IDs in tokens
+
+**Solution**: Ensure workspace consistency
+```json5
+{
+  channels: {
+    slack: {
+      accounts: {
+        "workspace1": {
+          // ✅ All from workspace 6859017778738
+          botToken: "xoxb-6859017778738-...",
+          appToken: "xapp-1-A0AC15K9V70-...",
+          userToken: "xoxp-6859017778738-..."
+        }
+      }
+    }
+  }
+}
+```
+
+### Debugging Commands
+
+**Check gateway status**:
+```bash
+openclaw status
+```
+
+**View live logs**:
+```bash
+openclaw logs --follow
+```
+
+**Test Slack connection**:
+```bash
+openclaw status --deep
+```
+
+**Check configuration**:
+```bash
+openclaw config get | jq '.channels.slack'
+```
+
+## Group Policy Deep Dive
+
+The `groupPolicy` setting controls whether the bot responds in channels:
+
+### Policy Options
+- **`"open"`**: Respond in any channel the bot is invited to
+- **`"allowlist"`**: Only respond in explicitly allowed channels
+- **`"disabled"`**: Never respond in channels (DMs only)
+
+### Policy Hierarchy
+1. **Account-level** (`channels.slack.accounts.{id}.groupPolicy`)
+2. **Channel-level** (`channels.slack.groupPolicy`) 
+3. **Global default** (`channels.defaults.groupPolicy`)
+
+### Configuration Examples
+
+**Allow all channels**:
+```json5
+{
+  channels: {
+    slack: {
+      groupPolicy: "open",
+      accounts: {
+        "main": { groupPolicy: "open" }
+      }
+    }
+  }
+}
+```
+
+**Allowlist specific channels**:
+```json5
+{
+  channels: {
+    slack: {
+      groupPolicy: "allowlist",
+      channels: {
+        "#general": { allow: true },
+        "#bot-testing": { allow: true, requireMention: true }
+      }
+    }
+  }
+}
+```
+
+**DMs only (no channels)**:
+```json5
+{
+  channels: {
+    slack: {
+      groupPolicy: "disabled"
+    }
+  }
+}
+```
 
 ### Manifest (optional)
 Use this Slack app manifest to create the app quickly (adjust the name/command if you want). Include the
@@ -439,7 +726,7 @@ For fine-grained control, use these tags in agent responses:
 - DMs share the `main` session (like WhatsApp/Telegram).
 - Channels map to `agent:<agentId>:slack:channel:<channelId>` sessions.
 - Slash commands use `agent:<agentId>:slack:slash:<userId>` sessions (prefix configurable via `channels.slack.slashCommand.sessionPrefix`).
-- If Slack doesn’t provide `channel_type`, OpenClaw infers it from the channel ID prefix (`D`, `C`, `G`) and defaults to `channel` to keep session keys stable.
+- If Slack doesn't provide `channel_type`, OpenClaw infers it from the channel ID prefix (`D`, `C`, `G`) and defaults to `channel` to keep session keys stable.
 - Native command registration uses `commands.native` (global default `"auto"` → Slack off) and can be overridden per-workspace with `channels.slack.commands.native`. Text commands require standalone `/...` messages and can be disabled with `commands.text: false`. Slack slash commands are managed in the Slack app and are not removed automatically. Use `commands.useAccessGroups: false` to bypass access-group checks for commands.
 - Full command list + config: [Slash commands](/tools/slash-commands)
 
