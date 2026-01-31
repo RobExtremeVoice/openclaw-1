@@ -29,7 +29,12 @@ export function registerSlackBlockActions(params: { ctx: SlackMonitorContext }) 
         return;
       }
 
-      const channelId = (body as { channel?: { id?: string } }).channel?.id;
+      // Channel ID can be in body.channel.id or body.container.channel_id depending on context
+      const typedBody = body as {
+        channel?: { id?: string };
+        container?: { channel_id?: string };
+      };
+      const channelId = typedBody.channel?.id ?? typedBody.container?.channel_id;
       const channelInfo = channelId ? await ctx.resolveChannelName(channelId) : undefined;
       const channelType = channelInfo?.type;
 
