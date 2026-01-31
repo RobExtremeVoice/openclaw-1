@@ -49,7 +49,43 @@ See [Voice Call](/plugins/voice-call) for a concrete example plugin.
 - Qwen OAuth (provider auth) — bundled as `qwen-portal-auth` (disabled by default)
 - Copilot Proxy (provider auth) — local VS Code Copilot Proxy bridge; distinct from built-in `github-copilot` device login (bundled, disabled by default)
 
-OpenClaw plugins are **TypeScript modules** loaded at runtime via jiti. **Config
+## Community plugins
+
+Community-contributed plugins that extend Moltbot:
+
+- **[ClawdBoost](https://github.com/NikeGunn/clawdboost)** — `clawdboost` — Smart context injection plugin. Automatically injects relevant context into AI conversations based on pattern matching and time-aware rules. Features include keyword triggers, time-based context (morning/evening, weekdays/weekends), CLI management (`moltbot cb`), and AI tool integration. [npm](https://www.npmjs.com/package/clawdboost) | [Quick Start](#clawdboost-quick-start)
+
+<details>
+<summary id="clawdboost-quick-start"><strong>ClawdBoost Quick Start</strong></summary>
+
+```bash
+# Install
+npm install clawdboost
+# Initialize with examples
+npx clawdboost init
+```
+
+Add to `~/.clawdbot/moltbot.json`:
+```json
+{
+  "plugins": {
+    "entries": { "clawdboost": { "enabled": true } },
+    "load": { "paths": ["node_modules/clawdboost"] }
+  }
+}
+```
+
+```bash
+# Use
+moltbot cb status
+moltbot cb add "Work Context" --content "I work at Acme Corp" --patterns "work,job"
+```
+
+</details>
+
+> Want your plugin listed? Open a PR adding it to this section!
+
+Moltbot plugins are **TypeScript modules** loaded at runtime via jiti. **Config
 validation does not execute plugin code**; it uses the plugin manifest and JSON
 Schema instead. See [Plugin manifest](/plugins/manifest).
 
