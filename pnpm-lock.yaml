@@ -262,6 +262,22 @@ importers:
         specifier: 3.15.0
         version: 3.15.0(typescript@5.9.3)
 
+  extensions/arcade:
+    dependencies:
+      '@arcadeai/arcadejs':
+        specifier: ^2.1.0
+        version: 2.1.0
+      '@sinclair/typebox':
+        specifier: 0.34.47
+        version: 0.34.47
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      openclaw:
+        specifier: workspace:*
+        version: link:../..
+
   extensions/bluebubbles: {}
 
   extensions/copilot-proxy: {}
@@ -533,6 +549,10 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  '@arcadeai/arcadejs@2.1.0':
+    resolution: {integrity: sha512-gRk/hwIOOzk9IBWNYGl/7z72N5yLIH0gDlUwCcazQrVUStgiE6w9TZLA10F6x8UHJQY8TYGOijenbdHh1vWlFA==}
+    hasBin: true
 
   '@aws-crypto/crc32@5.2.0':
     resolution: {integrity: sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg==}
@@ -5247,6 +5267,7 @@ packages:
   tar@7.5.4:
     resolution: {integrity: sha512-AN04xbWGrSTDmVwlI4/GTlIIwMFk/XEv7uL8aa57zuvRy6s4hdBed+lVq2fAZ89XDa7Us3ANXcE3Tvqvja1kTA==}
     engines: {node: '>=18'}
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exhorbitant rates) by contacting i@izs.me
 
   thenify-all@1.6.0:
     resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
@@ -5645,6 +5666,8 @@ snapshots:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 4.3.6
+
+  '@arcadeai/arcadejs@2.1.0': {}
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:
