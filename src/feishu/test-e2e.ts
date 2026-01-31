@@ -12,13 +12,33 @@
 
 import * as lark from "@larksuiteoapi/node-sdk";
 
+import { loadConfig } from "../config/config.js";
+import { resolveFeishuAccount, resolveDefaultFeishuAccountId } from "./accounts.js";
+
 // ========== 配置 ==========
-const APP_ID = process.env.APP_ID || process.env.FEISHU_APP_ID || "";
-const APP_SECRET = process.env.APP_SECRET || process.env.FEISHU_APP_SECRET || "";
+const cfg = loadConfig();
+const accountId = process.env.ACCOUNT_ID || resolveDefaultFeishuAccountId(cfg);
+let APP_ID = "";
+let APP_SECRET = "";
+
+if (accountId) {
+    try {
+        const account = resolveFeishuAccount({ cfg, accountId });
+        APP_ID = account.appId || "";
+        APP_SECRET = account.appSecret || "";
+        console.log(`✅ Loaded configuration for account: ${accountId}`);
+    } catch (e) {
+        console.warn(`⚠️ Failed to load account ${accountId}: ${e}`);
+    }
+}
+
+// Fallback to Env
+if (!APP_ID) APP_ID = process.env.APP_ID || process.env.FEISHU_APP_ID || "";
+if (!APP_SECRET) APP_SECRET = process.env.APP_SECRET || process.env.FEISHU_APP_SECRET || "";
 
 if (!APP_ID || !APP_SECRET) {
-    console.error("❌ 错误: 请设置 APP_ID 和 APP_SECRET 环境变量");
-    console.error("   示例: APP_ID=cli_xxx APP_SECRET=xxx npx tsx src/feishu/test-e2e.ts");
+    console.error("❌ 错误: 未找到飞书配置");
+    console.error("   请确保 openclaw.json 已配置或设置 APP_ID/APP_SECRET 环境变量");
     process.exit(1);
 }
 
