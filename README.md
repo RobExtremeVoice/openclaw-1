@@ -77,7 +77,7 @@ OpenClaw and some extensions (including the Matrix plugin) require:
 - **pnpm** (workspace install required)
 
 Running OpenClaw with unsupported Node.js versions or without pnpm may cause
-extensions like Matrix to fail to load with unclear errors. 
+extensions like Matrix to fail to load with unclear errors.
 
 
 Upgrading? [Updating guide](https://docs.openclaw.ai/install/updating) (and run `openclaw doctor`).
