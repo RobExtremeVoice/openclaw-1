@@ -1,3 +1,4 @@
+export { PIXELML_DEFAULT_MODEL_ID, PIXELML_DEFAULT_MODEL_REF } from "../agents/pixelml-models.js";
 export {
   SYNTHETIC_DEFAULT_MODEL_ID,
   SYNTHETIC_DEFAULT_MODEL_REF,
@@ -11,6 +12,8 @@ export {
   applyMoonshotProviderConfig,
   applyOpenrouterConfig,
   applyOpenrouterProviderConfig,
+  applyPixelmlConfig,
+  applyPixelmlProviderConfig,
   applySyntheticConfig,
   applySyntheticProviderConfig,
   applyVeniceConfig,
@@ -43,6 +46,7 @@ export {
   setMoonshotApiKey,
   setOpencodeZenApiKey,
   setOpenrouterApiKey,
+  setPixelmlApiKey,
   setSyntheticApiKey,
   setVeniceApiKey,
   setVercelAiGatewayApiKey,

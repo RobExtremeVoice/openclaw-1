@@ -21,6 +21,8 @@ import {
   applyOpencodeZenProviderConfig,
   applyOpenrouterConfig,
   applyOpenrouterProviderConfig,
+  applyPixelmlConfig,
+  applyPixelmlProviderConfig,
   applySyntheticConfig,
   applySyntheticProviderConfig,
   applyVeniceConfig,
@@ -33,6 +35,7 @@ import {
   KIMI_CODING_MODEL_REF,
   MOONSHOT_DEFAULT_MODEL_REF,
   OPENROUTER_DEFAULT_MODEL_REF,
+  PIXELML_DEFAULT_MODEL_REF,
   SYNTHETIC_DEFAULT_MODEL_REF,
   VENICE_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
@@ -42,6 +45,7 @@ import {
   setMoonshotApiKey,
   setOpencodeZenApiKey,
   setOpenrouterApiKey,
+  setPixelmlApiKey,
   setSyntheticApiKey,
   setVeniceApiKey,
   setVercelAiGatewayApiKey,
@@ -92,6 +96,8 @@ export async function applyAuthChoiceApiProviders(
       authChoice = "synthetic-api-key";
     } else if (params.opts.tokenProvider === "venice") {
       authChoice = "venice-api-key";
+    } else if (params.opts.tokenProvider === "pixelml") {
+      authChoice = "pixelml-api-key";
     } else if (params.opts.tokenProvider === "opencode") {
       authChoice = "opencode-zen";
     }
@@ -575,6 +581,64 @@ export async function applyAuthChoiceApiProviders(
         applyDefaultConfig: applyVeniceConfig,
         applyProviderConfig: applyVeniceProviderConfig,
         noteDefault: VENICE_DEFAULT_MODEL_REF,
+        noteAgentModel,
+        prompter: params.prompter,
+      });
+      nextConfig = applied.config;
+      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
+    }
+    return { config: nextConfig, agentModelOverride };
+  }
+
+  if (authChoice === "pixelml-api-key") {
+    let hasCredential = false;
+
+    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "pixelml") {
+      await setPixelmlApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+      hasCredential = true;
+    }
+
+    if (!hasCredential) {
+      await params.prompter.note(
+        [
+          "PixelML provides access to multiple AI models (GPT, Claude, etc.).",
+          "Get your API key at: https://platform.pixelml.com",
+        ].join("\n"),
+        "PixelML",
+      );
+    }
+
+    const envKey = resolveEnvApiKey("pixelml");
+    if (envKey) {
+      const useExisting = await params.prompter.confirm({
+        message: `Use existing PIXELML_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
+        initialValue: true,
+      });
+      if (useExisting) {
+        await setPixelmlApiKey(envKey.apiKey, params.agentDir);
+        hasCredential = true;
+      }
+    }
+    if (!hasCredential) {
+      const key = await params.prompter.text({
+        message: "Enter PixelML API key",
+        validate: validateApiKeyInput,
+      });
+      await setPixelmlApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
+    }
+    nextConfig = applyAuthProfileConfig(nextConfig, {
+      profileId: "pixelml:default",
+      provider: "pixelml",
+      mode: "api_key",
+    });
+    {
+      const applied = await applyDefaultModelChoice({
+        config: nextConfig,
+        setDefaultModel: params.setDefaultModel,
+        defaultModel: PIXELML_DEFAULT_MODEL_REF,
+        applyDefaultConfig: applyPixelmlConfig,
+        applyProviderConfig: applyPixelmlProviderConfig,
+        noteDefault: PIXELML_DEFAULT_MODEL_REF,
         noteAgentModel,
         prompter: params.prompter,
       });
