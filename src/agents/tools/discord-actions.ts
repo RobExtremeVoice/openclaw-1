@@ -1,6 +1,7 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../../config/config.js";
 import { createActionGate, readStringParam } from "./common.js";
+import { handleDiscordBotAction } from "./discord-actions-bot.js";
 import { handleDiscordGuildAction } from "./discord-actions-guild.js";
 import { handleDiscordMessagingAction } from "./discord-actions-messaging.js";
 import { handleDiscordModerationAction } from "./discord-actions-moderation.js";
@@ -51,6 +52,8 @@ const guildActions = new Set([
 
 const moderationActions = new Set(["timeout", "kick", "ban"]);
 
+const botActions = new Set(["setPresence", "setNickname"]);
+
 export async function handleDiscordAction(
   params: Record<string, unknown>,
   cfg: OpenClawConfig,
@@ -66,6 +69,9 @@ export async function handleDiscordAction(
   }
   if (moderationActions.has(action)) {
     return await handleDiscordModerationAction(action, params, isActionEnabled);
+  }
+  if (botActions.has(action)) {
+    return await handleDiscordBotAction(action, params, isActionEnabled);
   }
   throw new Error(`Unknown action: ${action}`);
 }

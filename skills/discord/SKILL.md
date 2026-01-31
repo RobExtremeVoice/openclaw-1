@@ -15,7 +15,7 @@ Use `discord` to manage messages, reactions, threads, polls, and moderation. You
 - For reactions: `channelId`, `messageId`, and an `emoji`.
 - For fetchMessage: `guildId`, `channelId`, `messageId`, or a `messageLink` like `https://discord.com/channels/<guildId>/<channelId>/<messageId>`.
 - For stickers/polls/sendMessage: a `to` target (`channel:<id>` or `user:<id>`). Optional `content` text.
-- Polls also need a `question` plus 2–10 `answers`.
+- Polls also need a `question` plus 2-10 `answers`.
 - For media: `mediaUrl` with `file:///path` for local files or `https://...` for remote.
 - For emoji uploads: `guildId`, `name`, `mediaUrl`, optional `roleIds` (limit 256KB, PNG/JPG/GIF).
 - For sticker uploads: `guildId`, `name`, `description`, `tags`, `mediaUrl` (limit 512KB, PNG/APNG/Lottie JSON).
@@ -125,19 +125,11 @@ Message context lines include `discord message id` and `channel` fields you can 
 - Post a quick poll for release decisions or meeting times.
 - Send celebratory stickers after successful deploys.
 - Upload new emojis/stickers for release moments.
-- Run weekly “priority check” polls in team channels.
-- DM stickers as acknowledgements when a user’s request is completed.
+- Run weekly "priority check" polls in team channels.
+- DM stickers as acknowledgements when a user's request is completed.
+- Update bot presence to show current activity/status.
+- Change bot nickname per-guild for different contexts.
 
-## Action gating
-
-Use `discord.actions.*` to disable action groups:
-- `reactions` (react + reactions list + emojiList)
-- `stickers`, `polls`, `permissions`, `messages`, `threads`, `pins`, `search`
-- `emojiUploads`, `stickerUploads`
-- `memberInfo`, `roleInfo`, `channelInfo`, `voiceStatus`, `events`
-- `roles` (role add/remove, default `false`)
-- `channels` (channel/category create/edit/delete/move, default `false`)
-- `moderation` (timeout/kick/ban, default `false`)
 ### Read recent messages
 
 ```json
@@ -429,6 +421,65 @@ Create, edit, delete, and move channels and categories. Enable via `discord.acti
   "durationMinutes": 10
 }
 ```
+
+### Bot presence (set status/activity)
+
+Update the bot's online status and activity. Enable via `discord.actions.presence: true`.
+
+```json
+{
+  "action": "setPresence",
+  "status": "online",
+  "activityName": "with code",
+  "activityType": "playing"
+}
+```
+
+**Status options:** `online`, `idle`, `dnd`, `invisible`
+
+**Activity types:** `playing`, `streaming`, `listening`, `watching`, `custom`, `competing`
+
+**Clear activity:**
+```json
+{
+  "action": "setPresence",
+  "status": "online"
+}
+```
+
+### Bot nickname (per-guild)
+
+Change the bot's display name in a specific server. Enable via `discord.actions.nickname: true`.
+
+```json
+{
+  "action": "setNickname",
+  "guildId": "999",
+  "nickname": "HelperBot"
+}
+```
+
+**Reset to default:**
+```json
+{
+  "action": "setNickname",
+  "guildId": "999",
+  "nickname": ""
+}
+```
+
+## Action gating
+
+Use `discord.actions.*` to disable action groups:
+- `reactions` (react + reactions list + emojiList)
+- `stickers`, `polls`, `permissions`, `messages`, `threads`, `pins`, `search`
+- `emojiUploads`, `stickerUploads`
+- `memberInfo`, `roleInfo`, `channelInfo`, `voiceStatus`, `events`
+- `roles` (role add/remove, default `false`)
+- `channels` (channel/category create/edit/delete/move, default `false`)
+- `moderation` (timeout/kick/ban, default `false`)
+- `presence` (setPresence, default `false`)
+- `nickname` (setNickname, default `false`)
 
 ## Discord Writing Style Guide
 

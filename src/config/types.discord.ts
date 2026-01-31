@@ -72,6 +72,8 @@ export type DiscordActionConfig = {
   emojiUploads?: boolean;
   stickerUploads?: boolean;
   channels?: boolean;
+  presence?: boolean;
+  nickname?: boolean;
 };
 
 export type DiscordIntentsConfig = {

@@ -53,6 +53,8 @@ export const MESSAGE_ACTION_TARGET_MODE: Record<ChannelMessageActionName, Messag
     timeout: "none",
     kick: "none",
     ban: "none",
+    presence: "none",
+    nickname: "none",
   };
 
 const ACTION_TARGET_ALIASES: Partial<Record<ChannelMessageActionName, string[]>> = {

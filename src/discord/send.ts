@@ -7,6 +7,13 @@ export {
   setChannelPermissionDiscord,
 } from "./send.channels.js";
 export {
+  setNicknameDiscord,
+  setPresenceDiscord,
+  type DiscordActivityType,
+  type DiscordPresenceStatus,
+  type DiscordPresenceUpdate,
+} from "./send.bot.js";
+export {
   listGuildEmojisDiscord,
   uploadEmojiDiscord,
   uploadStickerDiscord,
