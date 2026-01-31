@@ -1,5 +1,5 @@
-import MoltbotKit
 import Foundation
+import MoltbotKit
 import Network
 import Observation
 import OSLog
@@ -18,7 +18,9 @@ public final class GatewayDiscoveryModel {
     }
 
     public struct DiscoveredGateway: Identifiable, Equatable, Sendable {
-        public var id: String { self.stableID }
+        public var id: String {
+            self.stableID
+        }
         public var displayName: String
         public var lanHost: String?
         public var tailnetDns: String?

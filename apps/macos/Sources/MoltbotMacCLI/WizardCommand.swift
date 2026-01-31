@@ -1,7 +1,7 @@
-import MoltbotKit
-import MoltbotProtocol
 import Darwin
 import Foundation
+import MoltbotKit
+import MoltbotProtocol
 
 struct WizardCliOptions {
     var url: String?
@@ -71,13 +71,13 @@ func runWizardCommand(_ args: [String]) async {
     let opts = WizardCliOptions.parse(args)
     if opts.help {
         print("""
-        moltbot-mac wizard
+            moltbot-mac wizard
 
-        Usage:
-          moltbot-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
-                              [--mode <local|remote>] [--workspace <path>] [--json]
+            Usage:
+              moltbot-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
+                                  [--mode <local|remote>] [--workspace <path>] [--json]
 
-        Options:
+            Options:
           --url <url>        Gateway WebSocket URL (overrides config)
           --token <token>    Gateway token (if required)
           --password <pw>    Gateway password (if required)

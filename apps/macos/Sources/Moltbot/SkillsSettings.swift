@@ -142,7 +142,9 @@ private enum SkillsFilter: String, CaseIterable, Identifiable {
     case needsSetup
     case disabled
 
-    var id: String { self.rawValue }
+    var id: String {
+        self.rawValue
+    }
 
     var title: String {
         switch self {

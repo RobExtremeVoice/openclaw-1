@@ -1,5 +1,5 @@
-import MoltbotDiscovery
 import Foundation
+import MoltbotDiscovery
 
 struct DiscoveryOptions {
     var timeoutMs: Int = 2000
@@ -58,12 +58,12 @@ func runDiscover(_ args: [String]) async {
     let opts = DiscoveryOptions.parse(args)
     if opts.help {
         print("""
-        moltbot-mac discover
+            moltbot-mac discover
 
-        Usage:
-          moltbot-mac discover [--timeout <ms>] [--json] [--include-local]
+            Usage:
+              moltbot-mac discover [--timeout <ms>] [--json] [--include-local]
 
-        Options:
+            Options:
           --timeout <ms>     Discovery window in milliseconds (default: 2000)
           --json             Emit JSON
           --include-local    Include gateways considered local

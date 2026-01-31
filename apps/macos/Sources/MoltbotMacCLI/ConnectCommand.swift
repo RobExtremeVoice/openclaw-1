@@ -1,6 +1,6 @@
+import Foundation
 import MoltbotKit
 import MoltbotProtocol
-import Foundation
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -101,15 +101,15 @@ func runConnect(_ args: [String]) async {
     let opts = ConnectOptions.parse(args)
     if opts.help {
         print("""
-        moltbot-mac connect
+            moltbot-mac connect
 
-        Usage:
-          moltbot-mac connect [--url <ws://host:port>] [--token <token>] [--password <password>]
-                               [--mode <local|remote>] [--timeout <ms>] [--probe] [--json]
-                               [--client-id <id>] [--client-mode <mode>] [--display-name <name>]
-                               [--role <role>] [--scopes <a,b,c>]
+            Usage:
+              moltbot-mac connect [--url <ws://host:port>] [--token <token>] [--password <password>]
+                                   [--mode <local|remote>] [--timeout <ms>] [--probe] [--json]
+                                   [--client-id <id>] [--client-mode <mode>] [--display-name <name>]
+                                   [--role <role>] [--scopes <a,b,c>]
 
-        Options:
+            Options:
           --url <url>        Gateway WebSocket URL (overrides config)
           --token <token>    Gateway token (if required)
           --password <pw>    Gateway password (if required)
