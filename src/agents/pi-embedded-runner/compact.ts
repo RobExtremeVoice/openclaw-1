@@ -352,6 +352,7 @@ export async function compactEmbeddedPiSessionDirect(
 
     const sessionLock = await acquireSessionWriteLock({
       sessionFile: params.sessionFile,
+      timeoutMs: params.config?.agents?.defaults?.sessionWriteLockTimeoutMs,
     });
     try {
       await prewarmSessionFile(params.sessionFile);

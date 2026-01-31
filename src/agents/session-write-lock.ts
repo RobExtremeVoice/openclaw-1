@@ -107,7 +107,9 @@ export async function acquireSessionWriteLock(params: {
   release: () => Promise<void>;
 }> {
   registerCleanupHandlers();
-  const timeoutMs = params.timeoutMs ?? 10_000;
+  // Default timeout increased from 10s to 60s to prevent premature termination
+  // when multiple subagents compete for session file locks (see issue #4355)
+  const timeoutMs = params.timeoutMs ?? 60_000;
   const staleMs = params.staleMs ?? 30 * 60 * 1000;
   const sessionFile = path.resolve(params.sessionFile);
   const sessionDir = path.dirname(sessionFile);
