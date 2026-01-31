@@ -298,6 +298,21 @@ WhatsApp can automatically send emoji reactions to incoming messages immediately
 - Reaction removal semantics: see [/tools/reactions](/tools/reactions).
 - Tool gating: `channels.whatsapp.actions.reactions` (default: enabled).
 
+## Inbound reaction notifications
+
+When someone reacts to a message in a WhatsApp chat, the gateway emits a system event so the agent sees it in its next prompt. System events appear as lines like:
+
+```
+WhatsApp reaction added: 👍 by +1234567890 msg BAE5ABC123
+WhatsApp reaction removed by +1234567890 msg BAE5ABC123
+```
+
+- Reaction removals emit events with `isRemoval: true` and no emoji in the message.
+- Self-reactions in DMs are correctly attributed to the bot's own JID.
+- Group reactions include the participant who reacted.
+- Events are deduplicated by message ID, sender, and emoji to avoid repeat notifications.
+- No configuration required; inbound reactions are always surfaced when the gateway is running.
+
 ## Limits
 
 - Outbound text is chunked to `channels.whatsapp.textChunkLimit` (default 4000).
