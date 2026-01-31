@@ -242,7 +242,11 @@ Recurring, isolated job with delivery:
 ```json
 {
   "name": "Morning brief",
-  "schedule": { "kind": "cron", "expr": "0 7 * * *", "tz": "America/Los_Angeles" },
+  "schedule": {
+    "kind": "cron",
+    "expr": "0 7 * * *",
+    "tz": "America/Los_Angeles"
+  },
   "sessionTarget": "isolated",
   "wakeMode": "next-heartbeat",
   "payload": {
@@ -385,6 +389,7 @@ openclaw cron add \
 ```
 
 Agent selection (multi-agent setups):
+
 ```bash
 # Pin a job to agent "ops" (falls back to default if that agent is missing)
 openclaw cron add --name "Ops sweep" --cron "0 6 * * *" --session isolated --message "Check ops queue" --agent ops
@@ -395,6 +400,7 @@ openclaw cron edit <jobId> --clear-agent
 ```
 
 Manual run (debug):
+
 ```bash
 openclaw cron run <jobId> --force
 ```

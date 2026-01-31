@@ -227,7 +227,7 @@ describe("SearchableSelectList", () => {
       description: (t) => t,
       scrollInfo: (t) => t,
       noMatch: (t) => t,
-      searchPrompt: (t) => `search: `,
+      searchPrompt: (_) => `search: `,
       searchInput: (t) => t,
       matchHighlight: (t) => t,
     };
