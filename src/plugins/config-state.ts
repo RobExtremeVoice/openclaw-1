@@ -13,7 +13,8 @@ export type NormalizedPluginsConfig = {
   entries: Record<string, { enabled?: boolean; config?: unknown }>;
 };
 
-export const BUNDLED_ENABLED_BY_DEFAULT = new Set<string>();
+/** Bundled extensions enabled when plugins are enabled and not denied. Enables web login (web.login.start / web.login.wait). */
+export const BUNDLED_ENABLED_BY_DEFAULT = new Set<string>(["whatsapp"]);
 
 const normalizeList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];

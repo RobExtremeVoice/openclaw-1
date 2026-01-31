@@ -432,7 +432,12 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> = {
       };
     },
     buildAccountSnapshot: async ({ account, runtime }) => {
-      const linked = await getWhatsAppRuntime().channel.whatsapp.webAuthExists(account.authDir);
+      // Linked = creds exist on disk (QR was scanned). Prefer account.authDir; fallback to default
+      // auth dir so we show "linked" when creds exist in .clawdbot-dev even if config path differed.
+      const linked =
+        (await getWhatsAppRuntime().channel.whatsapp.webAuthExists(account.authDir)) ||
+        (account.accountId === DEFAULT_ACCOUNT_ID &&
+          (await getWhatsAppRuntime().channel.whatsapp.webAuthExists()));
       return {
         accountId: account.accountId,
         name: account.name,

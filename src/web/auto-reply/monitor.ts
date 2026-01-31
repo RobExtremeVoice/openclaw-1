@@ -19,6 +19,7 @@ import {
   computeBackoff,
   newConnectionId,
   resolveHeartbeatSeconds,
+  resolveMessageIdleTimeoutMs,
   resolveReconnectPolicy,
   sleepWithAbort,
 } from "../reconnect.js";
@@ -93,6 +94,7 @@ export async function monitorWebChannel(
       ? configuredMaxMb * 1024 * 1024
       : DEFAULT_WEB_MEDIA_BYTES;
   const heartbeatSeconds = resolveHeartbeatSeconds(cfg, tuning.heartbeatSeconds);
+  const messageIdleTimeoutMs = resolveMessageIdleTimeoutMs(cfg, tuning.messageIdleTimeoutMs);
   const reconnectPolicy = resolveReconnectPolicy(cfg, tuning.reconnect);
   const baseMentionConfig = buildMentionConfig(cfg);
   const groupHistoryLimit =
@@ -152,11 +154,18 @@ export async function monitorWebChannel(
     let _lastInboundMsg: WebInboundMsg | null = null;
     let unregisterUnhandled: (() => void) | null = null;
 
-    // Watchdog to detect stuck message processing (e.g., event emitter died)
-    const MESSAGE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes without any messages
+    // Watchdog to detect stuck message processing (e.g., event emitter died). 0 = indefinite (disabled).
+    const MESSAGE_TIMEOUT_MS = messageIdleTimeoutMs;
     const WATCHDOG_CHECK_MS = 60 * 1000; // Check every minute
 
     const backgroundTasks = new Set<Promise<unknown>>();
+    const onActivity = () => {
+      lastMessageAt = Date.now();
+      status.lastMessageAt = lastMessageAt;
+      status.lastEventAt = lastMessageAt;
+      emitStatus();
+    };
+
     const onMessage = createWebOnMessageHandler({
       cfg,
       verbose,
@@ -171,6 +180,7 @@ export async function monitorWebChannel(
       replyLogger,
       baseMentionConfig,
       account,
+      onActivity,
     });
 
     const inboundDebounceMs = resolveInboundDebounceMs({ cfg, channel: "whatsapp" });
@@ -278,32 +288,34 @@ export async function monitorWebChannel(
         }
       }, heartbeatSeconds * 1000);
 
-      watchdogTimer = setInterval(() => {
-        if (!lastMessageAt) return;
-        const timeSinceLastMessage = Date.now() - lastMessageAt;
-        if (timeSinceLastMessage <= MESSAGE_TIMEOUT_MS) return;
-        const minutesSinceLastMessage = Math.floor(timeSinceLastMessage / 60000);
-        heartbeatLogger.warn(
-          {
-            connectionId,
-            minutesSinceLastMessage,
-            lastMessageAt: new Date(lastMessageAt),
-            messagesHandled: handledMessages,
-          },
-          "Message timeout detected - forcing reconnect",
-        );
-        whatsappHeartbeatLog.warn(
-          `No messages received in ${minutesSinceLastMessage}m - restarting connection`,
-        );
-        void closeListener().catch((err) => {
-          logVerbose(`Close listener failed: ${formatError(err)}`);
-        });
-        listener.signalClose?.({
-          status: 499,
-          isLoggedOut: false,
-          error: "watchdog-timeout",
-        });
-      }, WATCHDOG_CHECK_MS);
+      if (MESSAGE_TIMEOUT_MS > 0) {
+        watchdogTimer = setInterval(() => {
+          if (!lastMessageAt) return;
+          const timeSinceLastMessage = Date.now() - lastMessageAt;
+          if (timeSinceLastMessage <= MESSAGE_TIMEOUT_MS) return;
+          const minutesSinceLastMessage = Math.floor(timeSinceLastMessage / 60000);
+          heartbeatLogger.warn(
+            {
+              connectionId,
+              minutesSinceLastMessage,
+              lastMessageAt: new Date(lastMessageAt),
+              messagesHandled: handledMessages,
+            },
+            "Message timeout detected - forcing reconnect",
+          );
+          whatsappHeartbeatLog.warn(
+            `No messages received in ${minutesSinceLastMessage}m - restarting connection`,
+          );
+          void closeListener().catch((err) => {
+            logVerbose(`Close listener failed: ${formatError(err)}`);
+          });
+          listener.signalClose?.({
+            status: 499,
+            isLoggedOut: false,
+            error: "watchdog-timeout",
+          });
+        }, WATCHDOG_CHECK_MS);
+      }
     }
 
     whatsappLog.info("Listening for personal WhatsApp inbound messages.");

@@ -452,6 +452,29 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
     components.push(createExecApprovalButton({ handler: execApprovalsHandler }));
   }
 
+  const gatewayPlugin = new GatewayPlugin({
+    reconnect: {
+      maxAttempts: Number.POSITIVE_INFINITY,
+    },
+    intents: resolveDiscordGatewayIntents(discordCfg.intents),
+    autoInteractions: true,
+  });
+  // Attach error listener before Client uses the plugin so Discord gateway errors (e.g. 4014 Disallowed Intents)
+  // are handled and never become uncaught; process stays up so WhatsApp and other channels keep running.
+  const pluginEmitter = getDiscordGatewayEmitter(gatewayPlugin);
+  pluginEmitter?.on("error", (err: unknown) => {
+    const msg = String(err);
+    if (msg.includes("Fatal Gateway error: 4014")) {
+      runtime.error?.(
+        danger(
+          `discord gateway: ${msg} (Discord Disallowed Intents; enable in Dev Portal or bot may not see messages).`,
+        ),
+      );
+    } else {
+      runtime.error?.(danger(`discord gateway error: ${msg}`));
+    }
+  });
+
   const client = new Client(
     {
       baseUrl: "http://localhost",
@@ -466,15 +489,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       listeners: [],
       components,
     },
-    [
-      new GatewayPlugin({
-        reconnect: {
-          maxAttempts: Number.POSITIVE_INFINITY,
-        },
-        intents: resolveDiscordGatewayIntents(discordCfg.intents),
-        autoInteractions: true,
-      }),
-    ],
+    [gatewayPlugin],
   );
 
   await deployDiscordCommands({ client, runtime, enabled: nativeEnabled });
@@ -611,6 +626,9 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       },
       shouldStopOnError: (err) => {
         const message = String(err);
+        // Don't crash the whole process for Discord config errors (4014 Disallowed Intents, etc.).
+        // Log and keep running so WhatsApp and other channels stay up.
+        if (message.includes("Fatal Gateway error: 4014")) return false;
         return (
           message.includes("Max reconnect attempts") || message.includes("Fatal Gateway error")
         );

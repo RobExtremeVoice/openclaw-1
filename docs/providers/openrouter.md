@@ -11,9 +11,24 @@ endpoint and API key. It is OpenAI-compatible, so most OpenAI SDKs work by switc
 
 ## CLI setup
 
+**1. Set the default model** (e.g. Grok 4.1 Fast):
+
 ```bash
-moltbot onboard --auth-choice apiKey --token-provider openrouter --token "$OPENROUTER_API_KEY"
+moltbot models set openrouter/x-ai/grok-4.1-fast
 ```
+
+**2. Add your OpenRouter API key** (choose one):
+
+- **Onboard wizard** (writes auth profile + optional env):
+  ```bash
+  moltbot onboard --auth-choice openrouter-api-key --openrouter-api-key "YOUR_KEY"
+  ```
+- **Environment variable** (gateway must see it):
+  ```bash
+  export OPENROUTER_API_KEY="sk-or-..."
+  ```
+
+Get an API key at [openrouter.ai](https://openrouter.ai).
 
 ## Config snippet
 
@@ -22,11 +37,13 @@ moltbot onboard --auth-choice apiKey --token-provider openrouter --token "$OPENR
   env: { OPENROUTER_API_KEY: "sk-or-..." },
   agents: {
     defaults: {
-      model: { primary: "openrouter/anthropic/claude-sonnet-4-5" }
+      model: { primary: "openrouter/x-ai/grok-4.1-fast" }
     }
   }
 }
 ```
+
+Other examples: `openrouter/anthropic/claude-sonnet-4-5`, `openrouter/meta-llama/llama-3.3-70b:free`.
 
 ## Notes
 

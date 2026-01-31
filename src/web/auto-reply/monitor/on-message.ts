@@ -29,6 +29,7 @@ export function createWebOnMessageHandler(params: {
   replyLogger: ReturnType<(typeof import("../../../logging.js"))["getChildLogger"]>;
   baseMentionConfig: MentionConfig;
   account: { authDir?: string; accountId?: string };
+  onActivity?: () => void;
 }) {
   const processForRoute = async (
     msg: WebInboundMsg,
@@ -58,6 +59,7 @@ export function createWebOnMessageHandler(params: {
       buildCombinedEchoKey: params.echoTracker.buildCombinedKey,
       groupHistory: opts?.groupHistory,
       suppressGroupHistoryClear: opts?.suppressGroupHistoryClear,
+      onActivity: params.onActivity,
     });
 
   return async (msg: WebInboundMsg) => {

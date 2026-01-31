@@ -23,8 +23,18 @@ export async function deliverWebReply(params: {
   connectionId?: string;
   skipLog?: boolean;
   tableMode?: MarkdownTableMode;
+  onActivity?: () => void;
 }) {
-  const { replyResult, msg, maxMediaBytes, textLimit, replyLogger, connectionId, skipLog } = params;
+  const {
+    replyResult,
+    msg,
+    maxMediaBytes,
+    textLimit,
+    replyLogger,
+    connectionId,
+    skipLog,
+    onActivity,
+  } = params;
   const replyStarted = Date.now();
   const tableMode = params.tableMode ?? "code";
   const chunkMode = params.chunkMode ?? "length";
@@ -67,6 +77,7 @@ export async function deliverWebReply(params: {
     for (const [index, chunk] of textChunks.entries()) {
       const chunkStarted = Date.now();
       await sendWithRetry(() => msg.reply(chunk), "text");
+      onActivity?.();
       if (!skipLog) {
         const durationMs = Date.now() - chunkStarted;
         whatsappOutboundLog.debug(
@@ -149,6 +160,7 @@ export async function deliverWebReply(params: {
           "media:document",
         );
       }
+      onActivity?.();
       whatsappOutboundLog.info(
         `Sent media reply to ${msg.from} (${(media.buffer.length / (1024 * 1024)).toFixed(2)}MB)`,
       );
@@ -177,6 +189,7 @@ export async function deliverWebReply(params: {
         if (fallbackText) {
           whatsappOutboundLog.warn(`Media skipped; sent text-only to ${msg.from}`);
           await msg.reply(fallbackText);
+          onActivity?.();
         }
       }
     }
@@ -185,5 +198,6 @@ export async function deliverWebReply(params: {
   // Remaining text chunks after media
   for (const chunk of remainingText) {
     await msg.reply(chunk);
+    onActivity?.();
   }
 }

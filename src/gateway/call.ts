@@ -158,10 +158,9 @@ export async function callGateway<T = unknown>(opts: CallGatewayOptions): Promis
       ? typeof remote?.token === "string" && remote.token.trim().length > 0
         ? remote.token.trim()
         : undefined
-      : process.env.CLAWDBOT_GATEWAY_TOKEN?.trim() ||
-        (typeof authToken === "string" && authToken.trim().length > 0
+      : (typeof authToken === "string" && authToken.trim().length > 0
           ? authToken.trim()
-          : undefined));
+          : undefined) || process.env.CLAWDBOT_GATEWAY_TOKEN?.trim());
   const password =
     (typeof opts.password === "string" && opts.password.trim().length > 0
       ? opts.password.trim()

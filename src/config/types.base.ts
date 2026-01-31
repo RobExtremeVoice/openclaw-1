@@ -154,6 +154,12 @@ export type WebConfig = {
   enabled?: boolean;
   heartbeatSeconds?: number;
   reconnect?: WebReconnectConfig;
+  /**
+   * Idle timeout: disconnect WhatsApp Web after this long with no inbound or outbound messages.
+   * Duration string (e.g. "30m", "1h"). Use "0" or "0m" for indefinite (never disconnect for idle).
+   * Default: "30m".
+   */
+  messageIdleTimeout?: string;
 };
 
 // Provider docking: allowlists keyed by provider id (and internal "webchat").

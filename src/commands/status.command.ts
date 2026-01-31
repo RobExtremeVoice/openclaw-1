@@ -531,7 +531,9 @@ export async function statusCommand(
         if (normalized.startsWith("failed")) return warn("WARN");
         if (normalized.startsWith("not configured")) return muted("OFF");
         if (normalized.startsWith("configured")) return ok("OK");
+        if (normalized.startsWith("connected")) return ok("OK");
         if (normalized.startsWith("linked")) return ok("LINKED");
+        if (normalized.startsWith("disconnected")) return warn("DISCONNECTED");
         if (normalized.startsWith("not linked")) return warn("UNLINKED");
         return warn("WARN");
       })();

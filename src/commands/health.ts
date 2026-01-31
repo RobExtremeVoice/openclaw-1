@@ -227,8 +227,10 @@ function styleHealthChannelLine(line: string): string {
 
   if (normalized.startsWith("failed")) return applyPrefix("failed", theme.error);
   if (normalized.startsWith("ok")) return applyPrefix("ok", theme.success);
+  if (normalized.startsWith("connected")) return applyPrefix("connected", theme.success);
   if (normalized.startsWith("linked")) return applyPrefix("linked", theme.success);
   if (normalized.startsWith("configured")) return applyPrefix("configured", theme.success);
+  if (normalized.startsWith("disconnected")) return applyPrefix("disconnected", theme.warn);
   if (normalized.startsWith("not linked")) return applyPrefix("not linked", theme.warn);
   if (normalized.startsWith("not configured")) return applyPrefix("not configured", theme.muted);
   if (normalized.startsWith("unknown")) return applyPrefix("unknown", theme.warn);

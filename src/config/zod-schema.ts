@@ -249,6 +249,7 @@ export const MoltbotSchema = z
       .object({
         enabled: z.boolean().optional(),
         heartbeatSeconds: z.number().int().positive().optional(),
+        messageIdleTimeout: z.string().optional(),
         reconnect: z
           .object({
             initialMs: z.number().positive().optional(),

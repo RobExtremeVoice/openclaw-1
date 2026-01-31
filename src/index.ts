@@ -83,7 +83,20 @@ if (isMain) {
   installUnhandledRejectionHandler();
 
   process.on("uncaughtException", (error) => {
-    console.error("[moltbot] Uncaught exception:", formatUncaughtError(error));
+    const msg = formatUncaughtError(error);
+    console.error("[moltbot] Uncaught exception:", msg);
+    // Don't exit for known Discord/Carbon recoverable errors so gateway stays up (e.g. WhatsApp).
+    // - 4014: Discord Disallowed Intents; Carbon may still throw from internal close/reconnect.
+    // - "zombie connection": Carbon heartbeat tries to reconnect after Discord already closed.
+    if (
+      msg.includes("Fatal Gateway error: 4014") ||
+      msg.includes("Attempted to reconnect zombie connection after disconnecting first")
+    ) {
+      console.warn(
+        "[moltbot] Suppressing exit for Discord gateway recoverable error; other channels continue.",
+      );
+      return;
+    }
     process.exit(1);
   });
 

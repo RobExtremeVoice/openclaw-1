@@ -120,6 +120,7 @@ export async function processMessage(params: {
   maxMediaTextChunkLimit?: number;
   groupHistory?: GroupHistoryEntry[];
   suppressGroupHistoryClear?: boolean;
+  onActivity?: () => void;
 }) {
   const conversationId = params.msg.conversationId ?? params.msg.from;
   const storePath = resolveStorePath(params.cfg.session?.store, {
@@ -345,6 +346,7 @@ export async function processMessage(params: {
           // Tool + block updates are noisy; skip their log lines.
           skipLog: info.kind !== "final",
           tableMode,
+          onActivity: params.onActivity,
         });
         didSendReply = true;
         if (info.kind === "tool") {

@@ -26,6 +26,8 @@ export type WebChannelStatus = {
 export type WebMonitorTuning = {
   reconnect?: Partial<ReconnectPolicy>;
   heartbeatSeconds?: number;
+  /** Override message-idle timeout in ms. 0 = indefinite (never disconnect for idle). */
+  messageIdleTimeoutMs?: number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   statusSink?: (status: WebChannelStatus) => void;
   /** WhatsApp account id. Default: "default". */

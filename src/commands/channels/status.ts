@@ -12,6 +12,18 @@ import { formatCliCommand } from "../../cli/command-format.js";
 import { theme } from "../../terminal/theme.js";
 import { type ChatChannel, formatChannelAccountLabel, requireValidConfig } from "./shared.js";
 
+/** Single connection status for display: "connected" when working, "disconnected" otherwise. Uses correct semantics (e.g. WhatsApp: linked + connected). */
+function getConnectionDisplay(account: Record<string, unknown>): "connected" | "disconnected" {
+  const linked = account.linked as boolean | undefined;
+  const connected = account.connected === true;
+  const running = account.running === true;
+  // Channels with linked (e.g. WhatsApp): connected only when linked and live session is up.
+  if (typeof linked === "boolean") {
+    return linked && connected && running ? "connected" : "disconnected";
+  }
+  return connected ? "connected" : "disconnected";
+}
+
 export type ChannelsStatusOptions = {
   json?: boolean;
   probe?: boolean;
@@ -24,21 +36,10 @@ export function formatGatewayChannelsStatusLines(payload: Record<string, unknown
   const accountLines = (provider: ChatChannel, accounts: Array<Record<string, unknown>>) =>
     accounts.map((account) => {
       const bits: string[] = [];
-      if (typeof account.enabled === "boolean") {
-        bits.push(account.enabled ? "enabled" : "disabled");
+      if (typeof account.enabled === "boolean" && !account.enabled) {
+        bits.push("disabled");
       }
-      if (typeof account.configured === "boolean") {
-        bits.push(account.configured ? "configured" : "not configured");
-      }
-      if (typeof account.linked === "boolean") {
-        bits.push(account.linked ? "linked" : "not linked");
-      }
-      if (typeof account.running === "boolean") {
-        bits.push(account.running ? "running" : "stopped");
-      }
-      if (typeof account.connected === "boolean") {
-        bits.push(account.connected ? "connected" : "disconnected");
-      }
+      bits.push(getConnectionDisplay(account));
       const inboundAt =
         typeof account.lastInboundAt === "number" && Number.isFinite(account.lastInboundAt)
           ? account.lastInboundAt
@@ -169,15 +170,10 @@ async function formatConfigChannelsStatusLines(
   const accountLines = (provider: ChatChannel, accounts: Array<Record<string, unknown>>) =>
     accounts.map((account) => {
       const bits: string[] = [];
-      if (typeof account.enabled === "boolean") {
-        bits.push(account.enabled ? "enabled" : "disabled");
+      if (typeof account.enabled === "boolean" && !account.enabled) {
+        bits.push("disabled");
       }
-      if (typeof account.configured === "boolean") {
-        bits.push(account.configured ? "configured" : "not configured");
-      }
-      if (typeof account.linked === "boolean") {
-        bits.push(account.linked ? "linked" : "not linked");
-      }
+      bits.push(getConnectionDisplay(account));
       if (typeof account.mode === "string" && account.mode.length > 0) {
         bits.push(`mode:${account.mode}`);
       }
