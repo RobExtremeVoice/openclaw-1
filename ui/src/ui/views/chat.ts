@@ -68,6 +68,9 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
+  // Delete session
+  isMainSession?: boolean;
+  onDelete?: () => void;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -361,6 +364,22 @@ export function renderChat(props: ChatProps) {
             >
               ${canAbort ? "Stop" : "New session"}
             </button>
+            ${props.onDelete
+              ? html`
+                  <button
+                    class="btn"
+                    ?disabled=${!props.connected || isBusy || props.isMainSession}
+                    @click=${() => {
+                      if (confirm(`Delete session "${props.sessionKey}"?`)) {
+                        props.onDelete!();
+                      }
+                    }}
+                    title=${props.isMainSession ? "Cannot delete main session" : "Delete this session"}
+                  >
+                    🗑
+                  </button>
+                `
+              : nothing}
             <button
               class="btn primary"
               ?disabled=${!props.connected}
