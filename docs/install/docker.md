@@ -48,7 +48,7 @@ This script:
 
 Optional env vars:
 
-- `OPENCLAW_DOCKER_APT_PACKAGES` — install extra apt packages during build
+- `OPENCLAW_DOCKER_APT_PACKAGES` — install extra apt packages during build (in addition to the built-in Chromium + fonts)
 - `OPENCLAW_EXTRA_MOUNTS` — add extra host bind mounts
 - `OPENCLAW_HOME_VOLUME` — persist `/home/node` in a named volume
 
@@ -124,7 +124,11 @@ Notes:
 
 ### Install extra apt packages (optional)
 
-If you need system packages inside the image (for example, build tools or media
+The Docker image includes a system **Chromium** + basic fonts by default (used for browser automation and PDF generation).
+
+If Chromium fails to start in your Docker environment with a sandbox error, set `browser.noSandbox=true` in your OpenClaw config (this adds `--no-sandbox`).
+
+If you need additional system packages inside the image (for example, build tools or media
 libraries), set `OPENCLAW_DOCKER_APT_PACKAGES` before running `docker-setup.sh`.
 This installs the packages during the image build, so they persist even if the
 container is deleted.
