@@ -435,7 +435,7 @@ export async function handleOpenResponsesHttpRequest(
     }
   } catch (err) {
     sendJson(res, 400, {
-      error: { message: String(err), type: "invalid_request_error" },
+      error: { message: err instanceof Error ? err.message : "Invalid request", type: "invalid_request_error" },
     });
     return true;
   }
@@ -452,7 +452,7 @@ export async function handleOpenResponsesHttpRequest(
     toolChoicePrompt = toolChoiceResult.extraSystemPrompt;
   } catch (err) {
     sendJson(res, 400, {
-      error: { message: String(err), type: "invalid_request_error" },
+      error: { message: err instanceof Error ? err.message : "Invalid request", type: "invalid_request_error" },
     });
     return true;
   }
@@ -565,13 +565,13 @@ export async function handleOpenResponsesHttpRequest(
       });
 
       sendJson(res, 200, response);
-    } catch (err) {
+    } catch {
       const response = createResponseResource({
         id: responseId,
         model,
         status: "failed",
         output: [],
-        error: { code: "api_error", message: String(err) },
+        error: { code: "api_error", message: "Internal server error" },
       });
       sendJson(res, 500, response);
     }
@@ -844,7 +844,7 @@ export async function handleOpenResponsesHttpRequest(
           delta: content,
         });
       }
-    } catch (err) {
+    } catch {
       if (closed) return;
 
       finalUsage = finalUsage ?? createEmptyUsage();
@@ -853,7 +853,7 @@ export async function handleOpenResponsesHttpRequest(
         model,
         status: "failed",
         output: [],
-        error: { code: "api_error", message: String(err) },
+        error: { code: "api_error", message: "Internal server error" },
         usage: finalUsage,
       });
 
