@@ -46,3 +46,4 @@ fs.writeFileSync(
   path.join(distDir, "build-info.json"),
   `${JSON.stringify(buildInfo, null, 2)}\n`,
 );
+fs.writeFileSync(path.join(distDir, ".buildstamp"), `${Date.now()}\n`);
