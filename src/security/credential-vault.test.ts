@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { CredentialVault } from "./credential-vault.js";
 import { FileKeyProvider } from "./key-management.js";
 import path from "node:path";

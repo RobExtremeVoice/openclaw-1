@@ -16,11 +16,15 @@ export class EnvKeyProvider implements KeyProvider {
       throw new Error(`Environment variable ${this.envVar} not set`);
     }
 
-    // If it looks like a hex key (64 hex chars = 32 bytes), use it directly
-    // Otherwise derive it using PBKDF2
-    return /^[0-9a-f]{64}$/i.test(key)
-      ? Buffer.from(key, "hex")
-      : crypto.pbkdf2Sync(key, "openclaw-salt", 100000, 32, "sha256");
+    // Require 64 hex chars = 32 bytes (256 bits) for AES-256
+    if (!/^[0-9a-f]{64}$/i.test(key)) {
+      throw new Error(
+        `${this.envVar} must be a 64-character hex string (32 bytes). ` +
+          `Generate one with: openssl rand -hex 32`,
+      );
+    }
+
+    return Buffer.from(key, "hex");
   }
 
   async isAvailable(): Promise<boolean> {
@@ -32,16 +36,44 @@ export class FileKeyProvider implements KeyProvider {
   constructor(private keyPath: string) {}
 
   async getKey(): Promise<Buffer> {
-    if (!fs.existsSync(this.keyPath)) {
-      // Generate new key and store it securely
-      const key = crypto.randomBytes(32);
-      fs.mkdirSync(path.dirname(this.keyPath), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(this.keyPath, key.toString("hex"), { mode: 0o600 });
-      return key;
+    // Try to read existing key first
+    try {
+      const keyHex = fs.readFileSync(this.keyPath, "utf8").trim();
+      return Buffer.from(keyHex, "hex");
+    } catch (err: any) {
+      if (err.code !== "ENOENT") {
+        throw err;
+      }
     }
 
-    const keyHex = fs.readFileSync(this.keyPath, "utf8").trim();
-    return Buffer.from(keyHex, "hex");
+    // Key doesn't exist - generate and save atomically
+    const key = crypto.randomBytes(32);
+    const dir = path.dirname(this.keyPath);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+
+    // Use O_CREAT | O_EXCL for atomic creation (fails if file exists)
+    const tempPath = `${this.keyPath}.${crypto.randomBytes(8).toString("hex")}.tmp`;
+    try {
+      const fd = fs.openSync(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+      fs.writeSync(fd, key.toString("hex"));
+      fs.closeSync(fd);
+      fs.renameSync(tempPath, this.keyPath);
+    } catch (err: any) {
+      // Clean up temp file on error
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      // If another process created the key, read it
+      if (err.code === "EEXIST" || fs.existsSync(this.keyPath)) {
+        const keyHex = fs.readFileSync(this.keyPath, "utf8").trim();
+        return Buffer.from(keyHex, "hex");
+      }
+      throw err;
+    }
+
+    return key;
   }
 
   async isAvailable(): Promise<boolean> {

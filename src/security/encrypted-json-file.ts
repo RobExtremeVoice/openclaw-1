@@ -24,33 +24,27 @@ export async function loadEncryptedJsonFile(pathname: string): Promise<unknown> 
   const data = loadJsonFile(pathname);
   if (!data) return data;
 
-  try {
-    const vault = await getVault();
-    if (vault && (await vault.isEncrypted(data))) {
-      return await vault.decrypt(data as any);
-    }
-    return data;
-  } catch {
-    // If decryption fails, return raw data (fallback)
-    return data;
+  const vault = await getVault();
+  if (vault && (await vault.isEncrypted(data))) {
+    // Decryption failures should propagate - don't silently return encrypted data
+    return await vault.decrypt(data as any);
   }
+  return data;
 }
 
 /**
  * Save data to a JSON file, automatically encrypting if encryption is enabled
  */
 export async function saveEncryptedJsonFile(pathname: string, data: unknown): Promise<void> {
-  try {
-    const vault = await getVault();
-    if (vault) {
-      const encrypted = await vault.encrypt(data);
-      saveJsonFile(pathname, encrypted);
-      return;
-    }
-  } catch {
-    // Fall back to plaintext if encryption fails
+  const vault = await getVault();
+  if (vault) {
+    // Encryption failures should propagate - don't silently save unencrypted
+    const encrypted = await vault.encrypt(data);
+    saveJsonFile(pathname, encrypted);
+    return;
   }
 
+  // No vault configured - save plaintext (encryption not enabled)
   saveJsonFile(pathname, data);
 }
 
@@ -61,7 +55,7 @@ export async function isFileEncrypted(pathname: string): Promise<boolean> {
   try {
     const data = loadJsonFile(pathname);
     const vault = await getVault();
-    return data && vault && (await vault.isEncrypted(data));
+    return Boolean(data && vault && (await vault.isEncrypted(data)));
   } catch {
     return false;
   }
