@@ -30,6 +30,7 @@ import {
   type SessionEntryLike,
   safeReadDir,
 } from "./state-migrations.fs.js";
+import { resolveUserPath } from "../utils.js";
 
 export type LegacyStateDetection = {
   targetAgentId: string;
@@ -307,14 +308,14 @@ function listLegacySessionFiles(params: {
   legacyStateDirs: string[];
 }): string[] {
   if (params.legacyStateDirs.length === 0) return [];
-  const legacyRoots = params.legacyStateDirs.map((dir) => path.resolve(dir));
+  const legacyRoots = params.legacyStateDirs.map((dir) => resolveUserPath(dir));
   const legacyFiles: string[] = [];
   for (const entry of Object.values(params.store)) {
     if (!entry || typeof entry !== "object") continue;
     const rec = entry as Record<string, unknown>;
     if (typeof rec.sessionFile !== "string") continue;
-    const sessionFile = path.resolve(rec.sessionFile);
-    if (legacyRoots.some((root) => sessionFile === root || sessionFile.startsWith(`${root}${path.sep}`))) {
+    const sessionFile = resolveUserPath(rec.sessionFile);
+    if (legacyRoots.some((root) => sessionFile.startsWith(`${root}${path.sep}`))) {
       legacyFiles.push(rec.sessionFile);
     }
   }
@@ -327,9 +328,9 @@ function rewriteLegacySessionFiles(params: {
   targetStateDir: string;
 }): number {
   if (params.legacyStateDirs.length === 0) return 0;
-  const targetRoot = path.resolve(params.targetStateDir);
+  const targetRoot = resolveUserPath(params.targetStateDir);
   const legacyRoots = params.legacyStateDirs
-    .map((dir) => path.resolve(dir))
+    .map((dir) => resolveUserPath(dir))
     .filter((dir) => dir !== targetRoot);
   if (legacyRoots.length === 0) return 0;
   let rewritten = 0;
@@ -337,14 +338,32 @@ function rewriteLegacySessionFiles(params: {
     if (!entry || typeof entry !== "object") continue;
     const rec = entry as Record<string, unknown>;
     if (typeof rec.sessionFile !== "string") continue;
-    const sessionFile = path.resolve(rec.sessionFile);
+    const sessionFile = resolveUserPath(rec.sessionFile);
     for (const legacyRoot of legacyRoots) {
-      if (sessionFile === legacyRoot || sessionFile.startsWith(`${legacyRoot}${path.sep}`)) {
-        const relative = path.relative(legacyRoot, sessionFile);
-        rec.sessionFile = path.join(targetRoot, relative);
-        rewritten += 1;
-        break;
+      if (!sessionFile.startsWith(`${legacyRoot}${path.sep}`)) {
+        continue;
       }
+      if (legacyRoot !== targetRoot) {
+        try {
+          const stat = fs.lstatSync(legacyRoot);
+          if (!stat.isSymbolicLink()) {
+            continue;
+          }
+          const resolved = resolveSymlinkTarget(legacyRoot);
+          if (!resolved || path.resolve(resolved) !== targetRoot) {
+            continue;
+          }
+        } catch {
+          // Allow rewrite when the legacy root is missing (likely moved).
+        }
+      }
+      const relative = path.relative(legacyRoot, sessionFile);
+      if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+        continue;
+      }
+      rec.sessionFile = path.join(targetRoot, relative);
+      rewritten += 1;
+      break;
     }
   }
   return rewritten;
