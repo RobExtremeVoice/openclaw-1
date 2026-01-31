@@ -187,6 +187,32 @@ docker compose run --rm moltbot-cli channels add --channel discord --token "<tok
 
 Docs: [WhatsApp](/channels/whatsapp), [Telegram](/channels/telegram), [Discord](/channels/discord)
 
+### Browser configuration (Docker)
+
+When running in Docker, browser automation requires headless mode since containers have no display. Configure this via the CLI or config file.
+
+Via CLI:
+```bash
+docker compose exec moltbot-gateway node dist/index.js config set browser.headless true
+```
+
+Or add to `~/.clawdbot/moltbot.json` (or `~/.moltbot/moltbot.json`):
+```json
+{
+  "browser": {
+    "headless": true,
+    "noSandbox": true
+  }
+}
+```
+
+Notes:
+- `headless: true` is required for Docker environments without a display
+- `noSandbox: true` is recommended for containerized Chrome
+- Restart the gateway after changing configuration
+
+For Playwright browser installation in custom Docker images, see [Browser Tool](/tools/browser)
+
 ### Health check
 
 ```bash
