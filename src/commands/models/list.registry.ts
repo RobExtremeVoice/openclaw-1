@@ -1,7 +1,7 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
+import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 
-import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
+// Note: resolveOpenClawAgentDir no longer needed - AuthStorage() doesn't take agentDir in pi-agent-core 0.50.4
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
 import { listProfilesForProvider } from "../../agents/auth-profiles.js";
 import {
@@ -31,28 +31,20 @@ const isLocalBaseUrl = (baseUrl: string) => {
 };
 
 const hasAuthForProvider = (provider: string, cfg: OpenClawConfig, authStore: AuthProfileStore) => {
-  if (listProfilesForProvider(authStore, provider).length > 0) {
-    return true;
-  }
-  if (provider === "amazon-bedrock" && resolveAwsSdkEnvVarName()) {
-    return true;
-  }
-  if (resolveEnvApiKey(provider)) {
-    return true;
-  }
-  if (getCustomProviderApiKey(cfg, provider)) {
-    return true;
-  }
+  if (listProfilesForProvider(authStore, provider).length > 0) return true;
+  if (provider === "amazon-bedrock" && resolveAwsSdkEnvVarName()) return true;
+  if (resolveEnvApiKey(provider)) return true;
+  if (getCustomProviderApiKey(cfg, provider)) return true;
   return false;
 };
 
 export async function loadModelRegistry(cfg: OpenClawConfig) {
   await ensureOpenClawModelsJson(cfg);
-  const agentDir = resolveOpenClawAgentDir();
-  const authStorage = discoverAuthStorage(agentDir);
-  const registry = discoverModels(authStorage, agentDir);
-  const models = registry.getAll();
-  const availableModels = registry.getAvailable();
+  // Note: agentDir no longer needed - AuthStorage() doesn't take it as parameter in pi-agent-core 0.50.4
+  const authStorage = new AuthStorage();
+  const registry = new ModelRegistry(authStorage);
+  const models = registry.getAll() as Model<Api>[];
+  const availableModels = registry.getAvailable() as Model<Api>[];
   const availableKeys = new Set(availableModels.map((model) => modelKey(model.provider, model.id)));
   return { registry, models, availableKeys };
 }
@@ -90,13 +82,9 @@ export function toModelRow(params: {
   const mergedTags = new Set(tags);
   if (aliasTags.length > 0) {
     for (const tag of mergedTags) {
-      if (tag === "alias" || tag.startsWith("alias:")) {
-        mergedTags.delete(tag);
-      }
+      if (tag === "alias" || tag.startsWith("alias:")) mergedTags.delete(tag);
     }
-    for (const tag of aliasTags) {
-      mergedTags.add(tag);
-    }
+    for (const tag of aliasTags) mergedTags.add(tag);
   }
 
   return {
