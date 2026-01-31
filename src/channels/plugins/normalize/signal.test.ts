@@ -15,6 +15,19 @@ describe("signal target normalization", () => {
     );
   });
 
+  it("preserves case for Base64 group IDs", () => {
+    // Signal group IDs are Base64-encoded and case-sensitive
+    expect(
+      normalizeSignalMessagingTarget("group:aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcdefg="),
+    ).toBe("group:aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcdefg=");
+  });
+
+  it("preserves case for group IDs with signal: prefix", () => {
+    expect(
+      normalizeSignalMessagingTarget("signal:group:aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcdefg="),
+    ).toBe("group:aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcdefg=");
+  });
+
   it("accepts uuid prefixes for target detection", () => {
     expect(looksLikeSignalTargetId("uuid:123e4567-e89b-12d3-a456-426614174000")).toBe(true);
     expect(looksLikeSignalTargetId("signal:uuid:123e4567-e89b-12d3-a456-426614174000")).toBe(true);
