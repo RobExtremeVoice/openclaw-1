@@ -438,6 +438,12 @@ export type ToolsConfig = {
     tools?: {
       allow?: string[];
       deny?: string[];
+      /**
+       * Override specific tools from the default subagent deny list.
+       * Tools listed here will be removed from the default deny list,
+       * allowing subagents to use them (e.g., ["sessions_send", "memory_search"]).
+       */
+      allowOverride?: string[];
     };
   };
   /** Sandbox tool policy defaults (deny wins). */

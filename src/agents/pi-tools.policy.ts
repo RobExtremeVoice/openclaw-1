@@ -97,10 +97,10 @@ const DEFAULT_SUBAGENT_TOOL_DENY = [
 
 export function resolveSubagentToolPolicy(cfg?: OpenClawConfig): SandboxToolPolicy {
   const configured = cfg?.tools?.subagents?.tools;
-  const deny = [
-    ...DEFAULT_SUBAGENT_TOOL_DENY,
-    ...(Array.isArray(configured?.deny) ? configured.deny : []),
-  ];
+  // Allow overriding specific tools from the default deny list via allowOverride
+  const allowOverride = Array.isArray(configured?.allowOverride) ? configured.allowOverride : [];
+  const baseDeny = DEFAULT_SUBAGENT_TOOL_DENY.filter((t) => !allowOverride.includes(t));
+  const deny = [...baseDeny, ...(Array.isArray(configured?.deny) ? configured.deny : [])];
   const allow = Array.isArray(configured?.allow) ? configured.allow : undefined;
   return { allow, deny };
 }
