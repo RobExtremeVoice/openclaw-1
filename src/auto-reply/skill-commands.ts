@@ -41,6 +41,7 @@ export function listSkillCommandsForAgents(params: {
   agentIds?: string[];
 }): SkillCommandSpec[] {
   const used = resolveReservedCommandNames();
+  const registeredSkills = new Set<string>();
   const entries: SkillCommandSpec[] = [];
   const agentIds = params.agentIds ?? listAgentIds(params.cfg);
   for (const agentId of agentIds) {
@@ -54,6 +55,10 @@ export function listSkillCommandsForAgents(params: {
       reservedNames: used,
     });
     for (const command of commands) {
+      if (registeredSkills.has(command.skillName)) {
+        continue;
+      }
+      registeredSkills.add(command.skillName);
       used.add(command.name.toLowerCase());
       entries.push(command);
     }
