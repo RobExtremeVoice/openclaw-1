@@ -1,5 +1,11 @@
 import { buildXiaomiProvider, XIAOMI_DEFAULT_MODEL_ID } from "../agents/models-config.providers.js";
 import {
+  buildFireworksModelDefinition,
+  FIREWORKS_BASE_URL,
+  FIREWORKS_DEFAULT_MODEL_REF,
+  FIREWORKS_MODEL_CATALOG,
+} from "../agents/fireworks-models.js";
+import {
   buildSyntheticModelDefinition,
   SYNTHETIC_BASE_URL,
   SYNTHETIC_DEFAULT_MODEL_REF,
@@ -12,6 +18,7 @@ import {
   VENICE_MODEL_CATALOG,
 } from "../agents/venice-models.js";
 import type { OpenClawConfig } from "../config/config.js";
+import type { ModelDefinitionConfig } from "../config/types.models.js";
 import {
   OPENROUTER_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
@@ -451,6 +458,84 @@ export function applyVeniceConfig(cfg: OpenClawConfig): OpenClawConfig {
               }
             : undefined),
           primary: VENICE_DEFAULT_MODEL_REF,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Apply Fireworks provider configuration without changing the default model.
+ * Registers Fireworks models and sets up the provider, but preserves existing model selection.
+ */
+export function applyFireworksProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
+  const models = { ...cfg.agents?.defaults?.models };
+  models[FIREWORKS_DEFAULT_MODEL_REF] = {
+    ...models[FIREWORKS_DEFAULT_MODEL_REF],
+    alias: models[FIREWORKS_DEFAULT_MODEL_REF]?.alias ?? "Kimi K2.5",
+  };
+
+  const providers = { ...cfg.models?.providers };
+  const existingProvider = providers.fireworks;
+  const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
+  const fireworksModels = FIREWORKS_MODEL_CATALOG.map(buildFireworksModelDefinition);
+  const mergedModels = [
+    ...existingModels,
+    ...fireworksModels.filter(
+      (model) =>
+        !existingModels.some((existing: ModelDefinitionConfig) => existing.id === model.id),
+    ),
+  ];
+  const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
+    string,
+    unknown
+  > as { apiKey?: string };
+  const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
+  const normalizedApiKey = resolvedApiKey?.trim();
+  providers.fireworks = {
+    ...existingProviderRest,
+    baseUrl: FIREWORKS_BASE_URL,
+    api: "openai-completions",
+    ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
+    models: mergedModels.length > 0 ? mergedModels : fireworksModels,
+  };
+
+  return {
+    ...cfg,
+    agents: {
+      ...cfg.agents,
+      defaults: {
+        ...cfg.agents?.defaults,
+        models,
+      },
+    },
+    models: {
+      mode: cfg.models?.mode ?? "merge",
+      providers,
+    },
+  };
+}
+
+/**
+ * Apply Fireworks provider configuration AND set Fireworks as the default model.
+ * Use this when Fireworks is the primary provider choice during onboarding.
+ */
+export function applyFireworksConfig(cfg: OpenClawConfig): OpenClawConfig {
+  const next = applyFireworksProviderConfig(cfg);
+  const existingModel = next.agents?.defaults?.model;
+  return {
+    ...next,
+    agents: {
+      ...next.agents,
+      defaults: {
+        ...next.agents?.defaults,
+        model: {
+          ...(existingModel && "fallbacks" in (existingModel as Record<string, unknown>)
+            ? {
+                fallbacks: (existingModel as { fallbacks?: string[] }).fallbacks,
+              }
+            : undefined),
+          primary: FIREWORKS_DEFAULT_MODEL_REF,
         },
       },
     },

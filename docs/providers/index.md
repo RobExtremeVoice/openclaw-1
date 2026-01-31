@@ -45,6 +45,7 @@ See [Venice AI](/providers/venice).
 - [Xiaomi](/providers/xiaomi)
 - [GLM models](/providers/glm)
 - [MiniMax](/providers/minimax)
+- [Fireworks AI (Fastest inference for Generative AI)](/providers/fireworks)
 - [Venius (Venice AI, privacy-focused)](/providers/venice)
 - [Ollama (local models)](/providers/ollama)
 

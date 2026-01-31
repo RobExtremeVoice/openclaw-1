@@ -8,6 +8,11 @@ import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
+  buildFireworksModelDefinition,
+  FIREWORKS_BASE_URL,
+  FIREWORKS_MODEL_CATALOG,
+} from "./fireworks-models.js";
+import {
   buildSyntheticModelDefinition,
   SYNTHETIC_BASE_URL,
   SYNTHETIC_MODEL_CATALOG,
@@ -320,6 +325,14 @@ function buildSyntheticProvider(): ProviderConfig {
   };
 }
 
+function buildFireworksProvider(): ProviderConfig {
+  return {
+    baseUrl: FIREWORKS_BASE_URL,
+    api: "openai-completions",
+    models: FIREWORKS_MODEL_CATALOG.map(buildFireworksModelDefinition),
+  };
+}
+
 export function buildXiaomiProvider(): ProviderConfig {
   return {
     baseUrl: XIAOMI_BASE_URL,
@@ -390,6 +403,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
   if (veniceKey) {
     providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
+  }
+
+  const fireworksKey =
+    resolveEnvApiKeyVarName("fireworks") ??
+    resolveApiKeyFromProfiles({ provider: "fireworks", store: authStore });
+  if (fireworksKey) {
+    providers.fireworks = { ...buildFireworksProvider(), apiKey: fireworksKey };
   }
 
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");
