@@ -30,7 +30,7 @@ import {
 import { defaultRuntime } from "../runtime.js";
 import { formatDocsLink } from "../terminal/links.js";
 import { theme } from "../terminal/theme.js";
-import { runCommandWithRuntime } from "./cli-utils.js";
+import { resolveOptionFromCommand, runCommandWithRuntime } from "./cli-utils.js";
 
 function runModelsCommand(action: () => Promise<void>) {
   return runCommandWithRuntime(defaultRuntime, action);
@@ -42,6 +42,10 @@ export function registerModelsCli(program: Command) {
     .description("Model discovery, scanning, and configuration")
     .option("--status-json", "Output JSON (alias for `models status --json`)", false)
     .option("--status-plain", "Plain output (alias for `models status --plain`)", false)
+    .option(
+      "--agent <id>",
+      "Agent id to inspect (overrides OPENCLAW_AGENT_DIR/PI_CODING_AGENT_DIR)",
+    )
     .addHelpText(
       "after",
       () =>
@@ -86,7 +90,13 @@ export function registerModelsCli(program: Command) {
     .option("--probe-timeout <ms>", "Per-probe timeout in ms")
     .option("--probe-concurrency <n>", "Concurrent probes")
     .option("--probe-max-tokens <n>", "Probe max tokens (best-effort)")
-    .action(async (opts) => {
+    .option(
+      "--agent <id>",
+      "Agent id to inspect (overrides OPENCLAW_AGENT_DIR/PI_CODING_AGENT_DIR)",
+    )
+    .action(async (opts, command) => {
+      const agent =
+        resolveOptionFromCommand<string>(command, "agent") ?? (opts.agent as string | undefined);
       await runModelsCommand(async () => {
         await modelsStatusCommand(
           {
@@ -99,6 +109,7 @@ export function registerModelsCli(program: Command) {
             probeTimeout: opts.probeTimeout as string | undefined,
             probeConcurrency: opts.probeConcurrency as string | undefined,
             probeMaxTokens: opts.probeMaxTokens as string | undefined,
+            agent,
           },
           defaultRuntime,
         );
@@ -272,6 +283,7 @@ export function registerModelsCli(program: Command) {
         {
           json: Boolean(opts?.statusJson),
           plain: Boolean(opts?.statusPlain),
+          agent: opts?.agent as string | undefined,
         },
         defaultRuntime,
       );
@@ -279,6 +291,10 @@ export function registerModelsCli(program: Command) {
   });
 
   const auth = models.command("auth").description("Manage model auth profiles");
+  auth.option("--agent <id>", "Agent id for auth order get/set/clear");
+  auth.action(() => {
+    auth.help();
+  });
 
   auth
     .command("add")
@@ -391,12 +407,14 @@ export function registerModelsCli(program: Command) {
     .requiredOption("--provider <name>", "Provider id (e.g. anthropic)")
     .option("--agent <id>", "Agent id (default: configured default agent)")
     .option("--json", "Output JSON", false)
-    .action(async (opts) => {
+    .action(async (opts, command) => {
+      const agent =
+        resolveOptionFromCommand<string>(command, "agent") ?? (opts.agent as string | undefined);
       await runModelsCommand(async () => {
         await modelsAuthOrderGetCommand(
           {
             provider: opts.provider as string,
-            agent: opts.agent as string | undefined,
+            agent,
             json: Boolean(opts.json),
           },
           defaultRuntime,
@@ -410,12 +428,14 @@ export function registerModelsCli(program: Command) {
     .requiredOption("--provider <name>", "Provider id (e.g. anthropic)")
     .option("--agent <id>", "Agent id (default: configured default agent)")
     .argument("<profileIds...>", "Auth profile ids (e.g. anthropic:default)")
-    .action(async (profileIds: string[], opts) => {
+    .action(async (profileIds: string[], opts, command) => {
+      const agent =
+        resolveOptionFromCommand<string>(command, "agent") ?? (opts.agent as string | undefined);
       await runModelsCommand(async () => {
         await modelsAuthOrderSetCommand(
           {
             provider: opts.provider as string,
-            agent: opts.agent as string | undefined,
+            agent,
             order: profileIds,
           },
           defaultRuntime,
@@ -428,12 +448,14 @@ export function registerModelsCli(program: Command) {
     .description("Clear per-agent auth order override (fall back to config/round-robin)")
     .requiredOption("--provider <name>", "Provider id (e.g. anthropic)")
     .option("--agent <id>", "Agent id (default: configured default agent)")
-    .action(async (opts) => {
+    .action(async (opts, command) => {
+      const agent =
+        resolveOptionFromCommand<string>(command, "agent") ?? (opts.agent as string | undefined);
       await runModelsCommand(async () => {
         await modelsAuthOrderClearCommand(
           {
             provider: opts.provider as string,
-            agent: opts.agent as string | undefined,
+            agent,
           },
           defaultRuntime,
         );
