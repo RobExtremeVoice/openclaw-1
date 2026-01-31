@@ -207,14 +207,15 @@ export async function launchClawdChrome(
     // Always open a blank tab to ensure a target exists.
     args.push("about:blank");
 
-    return spawn(exe.path, args, {
-      stdio: "pipe",
+    const proc = spawn(exe.path, args, {
+      stdio: ["ignore", "ignore", "ignore"],
       env: {
         ...process.env,
         // Reduce accidental sharing with the user's env.
         HOME: os.homedir(),
       },
     });
+    return proc as unknown as ChildProcessWithoutNullStreams;
   };
 
   const startedAt = Date.now();
