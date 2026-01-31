@@ -182,10 +182,11 @@ function pickLatestLegacyDirectEntry(
 }
 
 function normalizeSessionEntry(entry: SessionEntryLike): SessionEntry | null {
-  const sessionId = typeof entry.sessionId === "string" ? entry.sessionId : null;
-  if (!sessionId) {
+  const rawSessionId = typeof entry.sessionId === "string" ? entry.sessionId : null;
+  if (!rawSessionId) {
     return null;
   }
+  const sessionId = path.basename(rawSessionId, ".jsonl");
   const updatedAt =
     typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt)
       ? entry.updatedAt
@@ -196,6 +197,7 @@ function normalizeSessionEntry(entry: SessionEntryLike): SessionEntry | null {
     rec.groupChannel = rec.room;
   }
   delete rec.room;
+  delete rec.sessionFile;
   return normalized;
 }
 
