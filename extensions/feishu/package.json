@@ -1,0 +1,32 @@
+{
+  "name": "@openclaw/feishu",
+  "version": "2026.1.29",
+  "type": "module",
+  "description": "OpenClaw Feishu/Lark channel plugin",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "feishu",
+      "label": "Feishu",
+      "selectionLabel": "Feishu/Lark (飞书)",
+      "docsPath": "/channels/feishu",
+      "docsLabel": "feishu",
+      "blurb": "Feishu/Lark enterprise messaging for China and International markets.",
+      "aliases": [
+        "lark"
+      ],
+      "order": 72,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@openclaw/feishu",
+      "localPath": "extensions/feishu",
+      "defaultChoice": "npm"
+    }
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.30.0"
+  }
+}
