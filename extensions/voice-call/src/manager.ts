@@ -144,6 +144,9 @@ export class CallManager {
       processedEventIds: [],
       metadata: {
         ...(initialMessage && { initialMessage }),
+        // Store callPurpose immediately so it's available for AI context
+        // before speakInitialMessage runs (avoids race with early user speech)
+        ...(initialMessage && { callPurpose: initialMessage }),
         mode,
       },
     };

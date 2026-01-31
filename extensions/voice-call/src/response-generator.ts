@@ -22,6 +22,8 @@ export type VoiceResponseParams = {
   transcript: Array<{ speaker: "user" | "bot"; text: string }>;
   /** Latest user message */
   userMessage: string;
+  /** Optional: Purpose of this call (from intro message for outbound calls) */
+  callPurpose?: string;
 };
 
 export type VoiceResponseResult = {
@@ -41,8 +43,15 @@ type SessionEntry = {
 export async function generateVoiceResponse(
   params: VoiceResponseParams,
 ): Promise<VoiceResponseResult> {
-  const { voiceConfig, callId, from, transcript, userMessage, coreConfig } =
-    params;
+  const {
+    voiceConfig,
+    callId,
+    from,
+    transcript,
+    userMessage,
+    coreConfig,
+    callPurpose,
+  } = params;
 
   if (!coreConfig) {
     return { text: null, error: "Core config unavailable for voice response" };
@@ -116,6 +125,14 @@ export async function generateVoiceResponse(
     `You are ${agentName}, a helpful voice assistant on a phone call. Keep responses brief and conversational (1-2 sentences max). Be natural and friendly. The caller's phone number is ${from}. You have access to tools - use them when helpful.`;
 
   let extraSystemPrompt = basePrompt;
+
+  // If we have an explicit call purpose (from outbound intro message),
+  // include it so the AI knows the objective of this call
+  if (callPurpose) {
+    extraSystemPrompt += `\n\nPurpose of this call: ${callPurpose}`;
+    extraSystemPrompt += `\nYou started the call with this message. Stay focused on this topic.`;
+  }
+
   if (transcript.length > 0) {
     const history = transcript
       .map(
@@ -123,7 +140,7 @@ export async function generateVoiceResponse(
           `${entry.speaker === "bot" ? "You" : "Caller"}: ${entry.text}`,
       )
       .join("\n");
-    extraSystemPrompt = `${basePrompt}\n\nConversation so far:\n${history}`;
+    extraSystemPrompt += `\n\nConversation so far:\n${history}`;
   }
 
   // Resolve timeout

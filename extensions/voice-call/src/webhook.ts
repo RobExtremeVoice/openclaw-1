@@ -341,6 +341,7 @@ export class VoiceCallWebhookServer {
         from: call.from,
         transcript: call.transcript,
         userMessage,
+        callPurpose: call.metadata?.callPurpose as string | undefined,
       });
 
       if (result.error) {
