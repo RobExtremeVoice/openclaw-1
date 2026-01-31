@@ -322,6 +322,11 @@ Minimal `~/.openclaw/openclaw.json` (model + defaults):
 
 Details: [Security guide](https://docs.openclaw.ai/gateway/security) · [Docker + sandboxing](https://docs.openclaw.ai/install/docker) · [Sandbox config](https://docs.openclaw.ai/gateway/configuration)
 
+### Architecture Diagram
+These are the key pieces of moltbot with areas of the [Lethal Trifecta Categories](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) identified.
+
+![architecture diagram](assets/moltbot-architecture-diagram.png)
+
 ### [WhatsApp](https://docs.openclaw.ai/channels/whatsapp)
 
 - Link the device: `pnpm openclaw channels login` (stores creds in `~/.openclaw/credentials`).
