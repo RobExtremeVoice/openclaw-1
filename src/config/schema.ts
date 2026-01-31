@@ -193,6 +193,10 @@ const FIELD_LABELS: Record<string, string> = {
   "tools.web.search.maxResults": "Web Search Max Results",
   "tools.web.search.timeoutSeconds": "Web Search Timeout (sec)",
   "tools.web.search.cacheTtlMinutes": "Web Search Cache TTL (min)",
+  "tools.web.search.searxng.baseUrl": "SearXNG Base URL",
+  "tools.web.search.searxng.apiKey": "SearXNG API Key",
+  "tools.web.search.searxng.headers": "SearXNG Extra Headers",
+  "tools.web.search.searxng.params": "SearXNG Default Params",
   "tools.web.fetch.enabled": "Enable Web Fetch Tool",
   "tools.web.fetch.maxChars": "Web Fetch Max Chars",
   "tools.web.fetch.timeoutSeconds": "Web Fetch Timeout (sec)",
@@ -434,8 +438,9 @@ const FIELD_HELP: Record<string, string> = {
   "tools.message.crossContext.marker.suffix":
     'Text suffix for cross-context markers (supports "{channel}").',
   "tools.message.broadcast.enabled": "Enable broadcast action (default: true).",
-  "tools.web.search.enabled": "Enable the web_search tool (requires a provider API key).",
-  "tools.web.search.provider": 'Search provider ("brave" or "perplexity").',
+  "tools.web.search.enabled":
+    "Enable the web_search tool (requires provider configuration: API key or base URL).",
+  "tools.web.search.provider": 'Search provider ("brave", "perplexity", or "searxng").',
   "tools.web.search.apiKey": "Brave Search API key (fallback: BRAVE_API_KEY env var).",
   "tools.web.search.maxResults": "Default number of results to return (1-10).",
   "tools.web.search.timeoutSeconds": "Timeout in seconds for web_search requests.",
@@ -446,6 +451,14 @@ const FIELD_HELP: Record<string, string> = {
     "Perplexity base URL override (default: https://openrouter.ai/api/v1 or https://api.perplexity.ai).",
   "tools.web.search.perplexity.model":
     'Perplexity model override (default: "perplexity/sonar-pro").',
+  "tools.web.search.searxng.baseUrl":
+    "SearXNG instance base URL (e.g. http://localhost:8080). Fallback: SEARXNG_BASE_URL env var.",
+  "tools.web.search.searxng.apiKey":
+    "Optional SearXNG auth token; sent as Authorization header (Bearer by default).",
+  "tools.web.search.searxng.headers":
+    "Optional extra headers for SearXNG requests (e.g. for reverse-proxy auth).",
+  "tools.web.search.searxng.params":
+    "Optional default query params for SearXNG /search (merged into each request).",
   "tools.web.fetch.enabled": "Enable the web_fetch tool (lightweight HTTP fetch).",
   "tools.web.fetch.maxChars": "Max characters returned by web_fetch (truncated).",
   "tools.web.fetch.timeoutSeconds": "Timeout in seconds for web_fetch requests.",

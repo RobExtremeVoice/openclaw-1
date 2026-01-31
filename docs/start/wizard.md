@@ -27,9 +27,9 @@ Follow‑up reconfiguration:
 openclaw configure
 ```
 
-Recommended: set up a Brave Search API key so the agent can use `web_search`
-(`web_fetch` works without a key). Easiest path: `openclaw configure --section web`
-which stores `tools.web.search.apiKey`. Docs: [Web tools](/tools/web).
+Recommended: set up a `web_search` provider (Brave, Perplexity, or SearXNG) so the
+agent can search the web when needed (`web_fetch` works without a key). Easiest
+path: `openclaw configure --section web`. Docs: [Web tools](/tools/web).
 
 ## QuickStart vs Advanced
 

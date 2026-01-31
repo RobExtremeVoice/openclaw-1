@@ -266,7 +266,7 @@ export async function registerSubCliByName(program: Command, name: string): Prom
   return true;
 }
 
-function registerLazyCommand(program: Command, entry: SubCliEntry) {
+function registerLazyCommand(program: Command, entry: SubCliEntry, argvOverride?: string[]) {
   const placeholder = program.command(entry.name).description(entry.description);
   placeholder.allowUnknownOption(true);
   placeholder.allowExcessArguments(true);
@@ -275,7 +275,7 @@ function registerLazyCommand(program: Command, entry: SubCliEntry) {
     await entry.register(program);
     const actionCommand = actionArgs.at(-1) as Command | undefined;
     const root = actionCommand?.parent ?? program;
-    const rawArgs = (root as Command & { rawArgs?: string[] }).rawArgs;
+    const rawArgs = (root as Command & { rawArgs?: string[] }).rawArgs ?? argvOverride;
     const actionArgsList = resolveActionArgs(actionCommand);
     const fallbackArgv = actionCommand?.name()
       ? [actionCommand.name(), ...actionArgsList]
@@ -300,11 +300,11 @@ export function registerSubCliCommands(program: Command, argv: string[] = proces
   if (primary && shouldRegisterPrimaryOnly(argv)) {
     const entry = entries.find((candidate) => candidate.name === primary);
     if (entry) {
-      registerLazyCommand(program, entry);
+      registerLazyCommand(program, entry, argv);
       return;
     }
   }
   for (const candidate of entries) {
-    registerLazyCommand(program, candidate);
+    registerLazyCommand(program, candidate, argv);
   }
 }

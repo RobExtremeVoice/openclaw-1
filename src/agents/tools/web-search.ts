@@ -17,7 +17,7 @@ import {
   writeCache,
 } from "./web-shared.js";
 
-const SEARCH_PROVIDERS = ["brave", "perplexity"] as const;
+const SEARCH_PROVIDERS = ["brave", "perplexity", "searxng"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
@@ -39,6 +39,39 @@ const WebSearchSchema = Type.Object({
       description: "Number of results to return (1-10).",
       minimum: 1,
       maximum: MAX_SEARCH_COUNT,
+    }),
+  ),
+  categories: Type.Optional(
+    Type.String({
+      description: "Comma-separated categories to search (SearXNG only), e.g. 'general,news'.",
+    }),
+  ),
+  engines: Type.Optional(
+    Type.String({
+      description: "Comma-separated engines to search (SearXNG only), e.g. 'duckduckgo,bing'.",
+    }),
+  ),
+  language: Type.Optional(
+    Type.String({
+      description: "Language code (SearXNG), e.g. 'en', 'de'.",
+    }),
+  ),
+  time_range: Type.Optional(
+    Type.String({
+      description: "Time range (SearXNG only). Values: day, month, year.",
+    }),
+  ),
+  safesearch: Type.Optional(
+    Type.Number({
+      description: "Safe search level (SearXNG only). Values: 0, 1, 2.",
+      minimum: 0,
+      maximum: 2,
+    }),
+  ),
+  pageno: Type.Optional(
+    Type.Number({
+      description: "Search page number (SearXNG only). Default: 1.",
+      minimum: 1,
     }),
   ),
   country: Type.Optional(
@@ -90,6 +123,13 @@ type PerplexityConfig = {
   model?: string;
 };
 
+type SearxngConfig = {
+  baseUrl?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  params?: Record<string, string | number | boolean>;
+};
+
 type PerplexityApiKeySource = "config" | "perplexity_env" | "openrouter_env" | "none";
 
 type PerplexitySearchResponse = {
@@ -102,6 +142,17 @@ type PerplexitySearchResponse = {
 };
 
 type PerplexityBaseUrlHint = "direct" | "openrouter";
+
+type SearxngSearchResult = {
+  title?: string;
+  url?: string;
+  content?: string;
+  publishedDate?: string;
+};
+
+type SearxngSearchResponse = {
+  results?: SearxngSearchResult[];
+};
 
 function resolveSearchConfig(cfg?: OpenClawConfig): WebSearchConfig {
   const search = cfg?.tools?.web?.search;
@@ -137,6 +188,14 @@ function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
       docs: "https://docs.openclaw.ai/tools/web",
     };
   }
+  if (provider === "searxng") {
+    return {
+      error: "missing_searxng_base_url",
+      message:
+        "web_search (searxng) needs a base URL. Configure tools.web.search.searxng.baseUrl or set SEARXNG_BASE_URL in the Gateway environment.",
+      docs: "https://docs.openclaw.ai/tools/web",
+    };
+  }
   return {
     error: "missing_brave_api_key",
     message: `web_search needs a Brave Search API key. Run \`${formatCliCommand("openclaw configure --section web")}\` to store it, or set BRAVE_API_KEY in the Gateway environment.`,
@@ -155,6 +214,9 @@ function resolveSearchProvider(search?: WebSearchConfig): (typeof SEARCH_PROVIDE
   if (raw === "brave") {
     return "brave";
   }
+  if (raw === "searxng") {
+    return "searxng";
+  }
   return "brave";
 }
 
@@ -167,6 +229,17 @@ function resolvePerplexityConfig(search?: WebSearchConfig): PerplexityConfig {
     return {};
   }
   return perplexity as PerplexityConfig;
+}
+
+function resolveSearxngConfig(search?: WebSearchConfig): SearxngConfig {
+  if (!search || typeof search !== "object") {
+    return {};
+  }
+  const searxng = "searxng" in search ? (search as Record<string, unknown>).searxng : undefined;
+  if (!searxng || typeof searxng !== "object") {
+    return {};
+  }
+  return searxng as SearxngConfig;
 }
 
 function resolvePerplexityApiKey(perplexity?: PerplexityConfig): {
@@ -245,6 +318,42 @@ function resolvePerplexityModel(perplexity?: PerplexityConfig): string {
       ? perplexity.model.trim()
       : "";
   return fromConfig || DEFAULT_PERPLEXITY_MODEL;
+}
+
+function resolveSearxngBaseUrl(searxng?: SearxngConfig): string | undefined {
+  const fromConfig =
+    searxng && "baseUrl" in searxng && typeof searxng.baseUrl === "string" ? searxng.baseUrl : "";
+  const fromEnv = (process.env.SEARXNG_BASE_URL ?? "").trim();
+  const baseUrl = (fromConfig ?? "").trim() || fromEnv;
+  if (!baseUrl) {
+    return undefined;
+  }
+  return baseUrl.replace(/\/$/, "");
+}
+
+function resolveSearxngHeaders(searxng?: SearxngConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+
+  if (!searxng || typeof searxng !== "object") {
+    return headers;
+  }
+
+  if (searxng.headers && typeof searxng.headers === "object") {
+    for (const [key, value] of Object.entries(searxng.headers)) {
+      if (typeof value === "string" && value.trim()) {
+        headers[key] = value;
+      }
+    }
+  }
+
+  const apiKey = typeof searxng.apiKey === "string" ? searxng.apiKey.trim() : "";
+  if (apiKey) {
+    headers.Authorization = apiKey.includes(" ") ? apiKey : `Bearer ${apiKey}`;
+  }
+
+  return headers;
 }
 
 function resolveSearchCount(value: unknown, fallback: number): number {
@@ -350,6 +459,86 @@ async function runPerplexitySearch(params: {
   return { content, citations };
 }
 
+function addSearxngParams(
+  searchParams: URLSearchParams,
+  params?: Record<string, string | number | boolean>,
+): void {
+  if (!params) {
+    return;
+  }
+  for (const [key, value] of Object.entries(params)) {
+    if (!key.trim()) {
+      continue;
+    }
+    if (value === undefined) {
+      continue;
+    }
+    searchParams.set(key, String(value));
+  }
+}
+
+async function runSearxngSearch(params: {
+  query: string;
+  baseUrl: string;
+  count: number;
+  timeoutSeconds: number;
+  searchParams?: Record<string, string | number | boolean>;
+  headers?: Record<string, string>;
+  categories?: string;
+  engines?: string;
+  language?: string;
+  time_range?: string;
+  safesearch?: number;
+  pageno?: number;
+}): Promise<{ results: Array<Record<string, unknown>> }> {
+  const url = new URL(`${params.baseUrl.replace(/\/$/, "")}/search`);
+  addSearxngParams(url.searchParams, params.searchParams);
+  url.searchParams.set("q", params.query);
+  url.searchParams.set("format", "json");
+
+  if (params.categories) {
+    url.searchParams.set("categories", params.categories);
+  }
+  if (params.engines) {
+    url.searchParams.set("engines", params.engines);
+  }
+  if (params.language) {
+    url.searchParams.set("language", params.language);
+  }
+  if (params.time_range) {
+    url.searchParams.set("time_range", params.time_range);
+  }
+  if (typeof params.safesearch === "number" && Number.isFinite(params.safesearch)) {
+    url.searchParams.set("safesearch", String(params.safesearch));
+  }
+  if (typeof params.pageno === "number" && Number.isFinite(params.pageno) && params.pageno > 0) {
+    url.searchParams.set("pageno", String(Math.floor(params.pageno)));
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: params.headers,
+    signal: withTimeout(undefined, params.timeoutSeconds * 1000),
+  });
+
+  if (!res.ok) {
+    const detail = await readResponseText(res);
+    throw new Error(`SearXNG API error (${res.status}): ${detail || res.statusText}`);
+  }
+
+  const data = (await res.json()) as SearxngSearchResponse;
+  const results = Array.isArray(data.results) ? data.results : [];
+  const mapped = results.slice(0, params.count).map((entry) => ({
+    title: entry.title ?? "",
+    url: entry.url ?? "",
+    description: entry.content ?? "",
+    published: entry.publishedDate ?? undefined,
+    siteName: resolveSiteName(entry.url ?? ""),
+  }));
+
+  return { results: mapped };
+}
+
 async function runWebSearch(params: {
   query: string;
   count: number;
@@ -363,11 +552,22 @@ async function runWebSearch(params: {
   freshness?: string;
   perplexityBaseUrl?: string;
   perplexityModel?: string;
+  searxngBaseUrl?: string;
+  searxngHeaders?: Record<string, string>;
+  searxngParams?: Record<string, string | number | boolean>;
+  categories?: string;
+  engines?: string;
+  language?: string;
+  time_range?: string;
+  safesearch?: number;
+  pageno?: number;
 }): Promise<Record<string, unknown>> {
   const cacheKey = normalizeCacheKey(
     params.provider === "brave"
       ? `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}:${params.freshness || "default"}`
-      : `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
+      : params.provider === "searxng"
+        ? `${params.provider}:${params.query}:${params.count}:${params.categories || "default"}:${params.engines || "default"}:${params.language || "default"}:${params.time_range || "default"}:${String(params.safesearch ?? "default")}:${String(params.pageno ?? "default")}`
+        : `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}`,
   );
   const cached = readCache(SEARCH_CACHE, cacheKey);
   if (cached) {
@@ -392,6 +592,33 @@ async function runWebSearch(params: {
       tookMs: Date.now() - start,
       content,
       citations,
+    };
+    writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+    return payload;
+  }
+
+  if (params.provider === "searxng") {
+    const { results } = await runSearxngSearch({
+      query: params.query,
+      baseUrl: params.searxngBaseUrl ?? "",
+      count: params.count,
+      timeoutSeconds: params.timeoutSeconds,
+      searchParams: params.searxngParams,
+      headers: params.searxngHeaders,
+      categories: params.categories,
+      engines: params.engines,
+      language: params.language,
+      time_range: params.time_range,
+      safesearch: params.safesearch,
+      pageno: params.pageno,
+    });
+
+    const payload = {
+      query: params.query,
+      provider: params.provider,
+      count: results.length,
+      tookMs: Date.now() - start,
+      results,
     };
     writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
     return payload;
@@ -463,11 +690,14 @@ export function createWebSearchTool(options?: {
 
   const provider = resolveSearchProvider(search);
   const perplexityConfig = resolvePerplexityConfig(search);
+  const searxngConfig = resolveSearxngConfig(search);
 
   const description =
     provider === "perplexity"
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
-      : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+      : provider === "searxng"
+        ? "Search the web using a self-hosted SearXNG instance. Returns titles, URLs, and snippets for fast research."
+        : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
     label: "Web Search",
@@ -479,14 +709,28 @@ export function createWebSearchTool(options?: {
         provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
       const apiKey =
         provider === "perplexity" ? perplexityAuth?.apiKey : resolveSearchApiKey(search);
+      const searxngBaseUrl =
+        provider === "searxng" ? resolveSearxngBaseUrl(searxngConfig) : undefined;
 
-      if (!apiKey) {
+      if (provider === "searxng") {
+        if (!searxngBaseUrl) {
+          return jsonResult(missingSearchKeyPayload(provider));
+        }
+      } else if (!apiKey) {
         return jsonResult(missingSearchKeyPayload(provider));
       }
       const params = args as Record<string, unknown>;
       const query = readStringParam(params, "query", { required: true });
       const count =
         readNumberParam(params, "count", { integer: true }) ?? search?.maxResults ?? undefined;
+      const categories = readStringParam(params, "categories");
+      const engines = readStringParam(params, "engines");
+      const language =
+        readStringParam(params, "language") ??
+        (provider === "searxng" ? readStringParam(params, "search_lang") : undefined);
+      const time_range = readStringParam(params, "time_range");
+      const safesearch = readNumberParam(params, "safesearch", { integer: true });
+      const pageno = readNumberParam(params, "pageno", { integer: true });
       const country = readStringParam(params, "country");
       const search_lang = readStringParam(params, "search_lang");
       const ui_lang = readStringParam(params, "ui_lang");
@@ -510,7 +754,7 @@ export function createWebSearchTool(options?: {
       const result = await runWebSearch({
         query,
         count: resolveSearchCount(count, DEFAULT_SEARCH_COUNT),
-        apiKey,
+        apiKey: apiKey ?? "",
         timeoutSeconds: resolveTimeoutSeconds(search?.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS),
         cacheTtlMs: resolveCacheTtlMs(search?.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
         provider,
@@ -524,6 +768,15 @@ export function createWebSearchTool(options?: {
           perplexityAuth?.apiKey,
         ),
         perplexityModel: resolvePerplexityModel(perplexityConfig),
+        searxngBaseUrl,
+        searxngHeaders: provider === "searxng" ? resolveSearxngHeaders(searxngConfig) : undefined,
+        searxngParams: provider === "searxng" ? searxngConfig.params : undefined,
+        categories,
+        engines,
+        language,
+        time_range,
+        safesearch: typeof safesearch === "number" ? safesearch : undefined,
+        pageno: typeof pageno === "number" ? pageno : undefined,
       });
       return jsonResult(result);
     },
@@ -534,4 +787,6 @@ export const __testing = {
   inferPerplexityBaseUrlFromApiKey,
   resolvePerplexityBaseUrl,
   normalizeFreshness,
+  resolveSearxngBaseUrl,
+  resolveSearxngHeaders,
 } as const;

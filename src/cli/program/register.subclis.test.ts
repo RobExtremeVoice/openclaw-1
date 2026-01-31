@@ -18,7 +18,17 @@ const { nodesAction, registerNodesCli } = vi.hoisted(() => {
   return { nodesAction: action, registerNodesCli: register };
 });
 
+const { gatewayRunAction, registerGatewayCli } = vi.hoisted(() => {
+  const action = vi.fn();
+  const register = vi.fn((program: Command) => {
+    const gateway = program.command("gateway");
+    gateway.command("run").option("--port <port>").action(action);
+  });
+  return { gatewayRunAction: action, registerGatewayCli: register };
+});
+
 vi.mock("../acp-cli.js", () => ({ registerAcpCli }));
+vi.mock("../gateway-cli.js", () => ({ registerGatewayCli }));
 vi.mock("../nodes-cli.js", () => ({ registerNodesCli }));
 
 const { registerSubCliByName, registerSubCliCommands } = await import("./register.subclis.js");
@@ -32,6 +42,8 @@ describe("registerSubCliCommands", () => {
     delete process.env.OPENCLAW_DISABLE_LAZY_SUBCOMMANDS;
     registerAcpCli.mockClear();
     acpAction.mockClear();
+    registerGatewayCli.mockClear();
+    gatewayRunAction.mockClear();
     registerNodesCli.mockClear();
     nodesAction.mockClear();
   });
@@ -77,6 +89,24 @@ describe("registerSubCliCommands", () => {
 
     expect(registerNodesCli).toHaveBeenCalledTimes(1);
     expect(nodesAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves options for lazy subcommands", async () => {
+    process.argv = ["node", "openclaw", "gateway", "run", "--port", "18889"];
+    const program = new Command();
+    program.name("openclaw");
+    registerSubCliCommands(program, process.argv);
+
+    expect(program.commands.map((cmd) => cmd.name())).toEqual(["gateway"]);
+
+    await program.parseAsync(process.argv);
+
+    expect(registerGatewayCli).toHaveBeenCalledTimes(1);
+    expect(gatewayRunAction).toHaveBeenCalledTimes(1);
+    expect(gatewayRunAction).toHaveBeenCalledWith(
+      expect.objectContaining({ port: "18889" }),
+      expect.anything(),
+    );
   });
 
   it("replaces placeholder when registering a subcommand by name", async () => {

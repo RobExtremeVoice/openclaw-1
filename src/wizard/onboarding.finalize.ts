@@ -432,29 +432,101 @@ export async function finalizeOnboardingWizard(options: FinalizeOnboardingOption
     );
   }
 
-  const webSearchKey = (nextConfig.tools?.web?.search?.apiKey ?? "").trim();
-  const webSearchEnv = (process.env.BRAVE_API_KEY ?? "").trim();
-  const hasWebSearchKey = Boolean(webSearchKey || webSearchEnv);
+  const webSearch = nextConfig.tools?.web?.search;
+  const webSearchProviderRaw =
+    webSearch &&
+    typeof webSearch === "object" &&
+    "provider" in webSearch &&
+    typeof webSearch.provider === "string"
+      ? webSearch.provider.trim().toLowerCase()
+      : "";
+  const webSearchProvider =
+    webSearchProviderRaw === "perplexity"
+      ? "perplexity"
+      : webSearchProviderRaw === "searxng"
+        ? "searxng"
+        : "brave";
+
+  const readTrimmedString = (value: unknown): string =>
+    typeof value === "string" ? value.trim() : "";
+
+  const braveKey =
+    webSearch && typeof webSearch === "object" && "apiKey" in webSearch
+      ? readTrimmedString(webSearch.apiKey)
+      : "";
+  const braveEnv = (process.env.BRAVE_API_KEY ?? "").trim();
+  const hasBraveKey = Boolean(braveKey || braveEnv);
+
+  const perplexityKey =
+    webSearch &&
+    typeof webSearch === "object" &&
+    "perplexity" in webSearch &&
+    webSearch.perplexity &&
+    typeof webSearch.perplexity === "object" &&
+    "apiKey" in webSearch.perplexity
+      ? readTrimmedString((webSearch.perplexity as Record<string, unknown>).apiKey)
+      : "";
+  const perplexityEnv = (process.env.PERPLEXITY_API_KEY ?? "").trim();
+  const openrouterEnv = (process.env.OPENROUTER_API_KEY ?? "").trim();
+  const hasPerplexityKey = Boolean(perplexityKey || perplexityEnv || openrouterEnv);
+
+  const searxngBaseUrl =
+    webSearch &&
+    typeof webSearch === "object" &&
+    "searxng" in webSearch &&
+    webSearch.searxng &&
+    typeof webSearch.searxng === "object" &&
+    "baseUrl" in webSearch.searxng
+      ? readTrimmedString((webSearch.searxng as Record<string, unknown>).baseUrl)
+      : "";
+  const searxngEnv = (process.env.SEARXNG_BASE_URL ?? "").trim();
+  const hasSearxngBaseUrl = Boolean(searxngBaseUrl || searxngEnv);
+
+  const hasWebSearchSetup =
+    webSearchProvider === "perplexity"
+      ? hasPerplexityKey
+      : webSearchProvider === "searxng"
+        ? hasSearxngBaseUrl
+        : hasBraveKey;
   await prompter.note(
-    hasWebSearchKey
+    hasWebSearchSetup
       ? [
           "Web search is enabled, so your agent can look things up online when needed.",
           "",
-          webSearchKey
-            ? "API key: stored in config (tools.web.search.apiKey)."
-            : "API key: provided via BRAVE_API_KEY env var (Gateway environment).",
+          `Provider: ${webSearchProvider}`,
+          webSearchProvider === "searxng"
+            ? searxngBaseUrl
+              ? "Base URL: stored in config (tools.web.search.searxng.baseUrl)."
+              : "Base URL: provided via SEARXNG_BASE_URL env var (Gateway environment)."
+            : webSearchProvider === "perplexity"
+              ? perplexityKey
+                ? "API key: stored in config (tools.web.search.perplexity.apiKey)."
+                : perplexityEnv
+                  ? "API key: provided via PERPLEXITY_API_KEY env var (Gateway environment)."
+                  : "API key: provided via OPENROUTER_API_KEY env var (Gateway environment)."
+              : braveKey
+                ? "API key: stored in config (tools.web.search.apiKey)."
+                : "API key: provided via BRAVE_API_KEY env var (Gateway environment).",
           "Docs: https://docs.openclaw.ai/tools/web",
         ].join("\n")
       : [
-          "If you want your agent to be able to search the web, you’ll need an API key.",
+          "If you want your agent to be able to search the web, you’ll need to configure a provider.",
           "",
-          "OpenClaw uses Brave Search for the `web_search` tool. Without a Brave Search API key, web search won’t work.",
+          `OpenClaw uses ${webSearchProvider} for the \`web_search\` tool.`,
           "",
           "Set it up interactively:",
           `- Run: ${formatCliCommand("openclaw configure --section web")}`,
-          "- Enable web_search and paste your Brave Search API key",
+          webSearchProvider === "searxng"
+            ? "- Enable web_search and set your SearXNG base URL"
+            : webSearchProvider === "perplexity"
+              ? "- Enable web_search and set your Perplexity/OpenRouter API key"
+              : "- Enable web_search and paste your Brave Search API key",
           "",
-          "Alternative: set BRAVE_API_KEY in the Gateway environment (no config changes).",
+          webSearchProvider === "searxng"
+            ? "Alternative: set SEARXNG_BASE_URL in the Gateway environment (no config changes)."
+            : webSearchProvider === "perplexity"
+              ? "Alternative: set PERPLEXITY_API_KEY or OPENROUTER_API_KEY in the Gateway environment (no config changes)."
+              : "Alternative: set BRAVE_API_KEY in the Gateway environment (no config changes).",
           "Docs: https://docs.openclaw.ai/tools/web",
         ].join("\n"),
     "Web search (optional)",

@@ -1,16 +1,17 @@
 ---
-summary: "Web search + fetch tools (Brave Search API, Perplexity direct/OpenRouter)"
+summary: "Web search + fetch tools (Brave Search API, Perplexity direct/OpenRouter, SearXNG)"
 read_when:
   - You want to enable web_search or web_fetch
   - You need Brave Search API key setup
   - You want to use Perplexity Sonar for web search
+  - You want to use SearXNG for web search
 ---
 
 # Web tools
 
 OpenClaw ships two lightweight web tools:
 
-- `web_search` — Search the web via Brave Search API (default) or Perplexity Sonar (direct or via OpenRouter).
+- `web_search` — Search the web via Brave Search API (default), Perplexity Sonar (direct or via OpenRouter), or a self-hosted SearXNG instance.
 - `web_fetch` — HTTP fetch + readable extraction (HTML → markdown/text).
 
 These are **not** browser automation. For JS-heavy sites or logins, use the
@@ -21,6 +22,7 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 - `web_search` calls your configured provider and returns results.
   - **Brave** (default): returns structured results (title, URL, snippet).
   - **Perplexity**: returns AI-synthesized answers with citations from real-time web search.
+  - **SearXNG**: returns structured results (title, URL, snippet) from your own meta-search instance.
 - Results are cached by query for 15 minutes (configurable).
 - `web_fetch` does a plain HTTP GET and extracts readable content
   (HTML → markdown/text). It does **not** execute JavaScript.
@@ -32,6 +34,7 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 | ------------------- | -------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
 | **Brave** (default) | Fast, structured results, free tier          | Traditional search results               | `BRAVE_API_KEY`                              |
 | **Perplexity**      | AI-synthesized answers, citations, real-time | Requires Perplexity or OpenRouter access | `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` |
+| **SearXNG**         | Self-hosted, works in private environments   | Requires running SearXNG + JSON format   | None (needs base URL)                        |
 
 See [Brave Search setup](/brave-search) and [Perplexity Sonar](/perplexity) for provider-specific details.
 
@@ -42,7 +45,7 @@ Set the provider in config:
   tools: {
     web: {
       search: {
-        provider: "brave", // or "perplexity"
+        provider: "brave", // or "perplexity" or "searxng"
       },
     },
   },
@@ -61,6 +64,34 @@ Example: switch to Perplexity Sonar (direct API):
           apiKey: "pplx-...",
           baseUrl: "https://api.perplexity.ai",
           model: "perplexity/sonar-pro",
+        },
+      },
+    },
+  },
+}
+```
+
+## Using SearXNG
+
+SearXNG exposes a simple HTTP API at `/search`. To get JSON results you need
+`format=json` enabled on your instance; some public instances disable it and will
+return `403 Forbidden`.
+
+Example config:
+
+```json5
+{
+  tools: {
+    web: {
+      search: {
+        enabled: true,
+        provider: "searxng",
+        searxng: {
+          baseUrl: "http://localhost:8080",
+          // Optional extra query params merged into each request:
+          // params: { categories: "general", safesearch: 1 }
+          // Optional auth via headers (for reverse-proxy auth):
+          // headers: { "X-Api-Key": "..." }
         },
       },
     },
@@ -145,9 +176,10 @@ Search the web using your configured provider.
 ### Requirements
 
 - `tools.web.search.enabled` must not be `false` (default: enabled)
-- API key for your chosen provider:
+- Provider setup:
   - **Brave**: `BRAVE_API_KEY` or `tools.web.search.apiKey`
   - **Perplexity**: `OPENROUTER_API_KEY`, `PERPLEXITY_API_KEY`, or `tools.web.search.perplexity.apiKey`
+  - **SearXNG**: `tools.web.search.searxng.baseUrl` or `SEARXNG_BASE_URL`
 
 ### Config
 
@@ -175,6 +207,12 @@ Search the web using your configured provider.
 - `search_lang` (optional): ISO language code for search results (e.g., "de", "en", "fr")
 - `ui_lang` (optional): ISO language code for UI elements
 - `freshness` (optional, Brave only): filter by discovery time (`pd`, `pw`, `pm`, `py`, or `YYYY-MM-DDtoYYYY-MM-DD`)
+- `categories` (optional, SearXNG only): comma-separated categories
+- `engines` (optional, SearXNG only): comma-separated engines
+- `language` (optional, SearXNG only): language code (if omitted, falls back to `search_lang`)
+- `time_range` (optional, SearXNG only): `day`, `month`, `year`
+- `safesearch` (optional, SearXNG only): `0`, `1`, `2`
+- `pageno` (optional, SearXNG only): page number (default `1`)
 
 **Examples:**
 
