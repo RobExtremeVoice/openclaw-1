@@ -8,7 +8,7 @@
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 24px;
   animation: rise 0.35s var(--ease-out) backwards;
   transition: border-color var(--duration-normal) var(--ease-out);
 }
@@ -36,17 +36,12 @@
    =========================================== */
 
 .stat {
-  background: var(--card);
+  background: var(--bg-elevated);
   border-radius: var(--radius-md);
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  transition: border-color var(--duration-normal) var(--ease-out);
+  border: none;
   min-width: 0;
   overflow: hidden;
-}
-
-.stat:hover {
-  border-color: var(--border-hover);
 }
 
 .stat-label {
@@ -454,15 +449,12 @@
 .field input,
 .field textarea,
 .field select {
-  border: 1px solid var(--input);
-  background: var(--card);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
   border-radius: var(--radius-md);
   padding: 8px 12px;
   outline: none;
-  box-shadow: inset 0 1px 0 var(--card-highlight);
-  transition:
-    border-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
 .field input:focus,
@@ -556,8 +548,8 @@
 :root[data-theme="light"] .field input,
 :root[data-theme="light"] .field textarea,
 :root[data-theme="light"] .field select {
-  background: var(--card);
-  border-color: var(--input);
+  background: var(--bg);
+  border-color: var(--border);
 }
 
 :root[data-theme="light"] .btn {
@@ -856,13 +848,12 @@ kbd + kbd {
   background: var(--bg);
 }
 
-/* Light theme cards - subtle shadow for elevation */
 :root[data-theme="light"] .card:hover {
   border-color: var(--border-hover);
 }
 
-:root[data-theme="light"] .stat:hover {
-  border-color: var(--border-hover);
+:root[data-theme="light"] .stat {
+  background: var(--bg-accent);
 }
 
 /* ===========================================
@@ -1599,12 +1590,9 @@ kbd + kbd {
   white-space: pre-wrap;
   font-family: var(--font-body);
   line-height: 1.5;
-  border: 1px solid var(--input);
-  background: var(--card);
-  box-shadow: inset 0 1px 0 var(--card-highlight);
-  transition:
-    border-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition: border-color var(--duration-fast) ease;
 }
 
 .chat-compose__field textarea:focus {
