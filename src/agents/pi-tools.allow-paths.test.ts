@@ -122,7 +122,7 @@ describe("tool allowPaths", () => {
       const readTool = tools.find((tool) => tool.name === "read");
       expect(readTool).toBeDefined();
 
-      const result = await readTool?.execute("agent-read", { path: "agent/read.txt" });
+      const result = await readTool?.execute("agent-read", { path: "global/agent/read.txt" });
       expect(getTextContent(result)).toContain("agent read");
 
       await expect(readTool?.execute("agent-deny", { path: "global/read.txt" })).rejects.toThrow(
@@ -179,6 +179,192 @@ describe("tool allowPaths", () => {
 
       const result = await readTool?.execute("full-read", { path: "other/read.txt" });
       expect(getTextContent(result)).toContain("other read");
+    });
+  });
+
+  it("blocks denyPaths for read/write/edit in full security mode", async () => {
+    await withTempDir("openclaw-denypaths-full-", async (workspaceDir) => {
+      await fs.writeFile(path.join(workspaceDir, "blocked.txt"), "blocked", "utf8");
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: { security: "full", denyPaths: ["blocked.txt"] },
+          write: { security: "full", denyPaths: ["blocked.txt"] },
+          edit: { security: "full", denyPaths: ["blocked.txt"] },
+        },
+      };
+
+      const tools = createOpenClawCodingTools({ workspaceDir, config: cfg });
+      const readTool = tools.find((tool) => tool.name === "read");
+      const writeTool = tools.find((tool) => tool.name === "write");
+      const editTool = tools.find((tool) => tool.name === "edit");
+
+      expect(readTool).toBeDefined();
+      expect(writeTool).toBeDefined();
+      expect(editTool).toBeDefined();
+
+      await expect(readTool?.execute("deny-read", { path: "blocked.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+
+      await expect(
+        writeTool?.execute("deny-write", { path: "blocked.txt", content: "nope" }),
+      ).rejects.toThrow(/denyPaths|blocked/i);
+
+      await expect(
+        editTool?.execute("deny-edit", {
+          path: "blocked.txt",
+          oldText: "blocked",
+          newText: "nope",
+        }),
+      ).rejects.toThrow(/denyPaths|blocked/i);
+    });
+  });
+
+  it("blocks absolute denyPaths entries", async () => {
+    await withTempDir("openclaw-denypaths-absolute-", async (workspaceDir) => {
+      const blockedPath = path.join(workspaceDir, "blocked.txt");
+      await fs.writeFile(blockedPath, "blocked", "utf8");
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: { security: "full", denyPaths: [blockedPath] },
+        },
+      };
+
+      const tools = createOpenClawCodingTools({ workspaceDir, config: cfg });
+      const readTool = tools.find((tool) => tool.name === "read");
+      expect(readTool).toBeDefined();
+
+      await expect(readTool?.execute("deny-absolute", { path: "blocked.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+    });
+  });
+
+  it("blocks denyPaths directories and nested files", async () => {
+    await withTempDir("openclaw-denypaths-dir-", async (workspaceDir) => {
+      const denyDir = path.join(workspaceDir, "deny");
+      await fs.mkdir(denyDir, { recursive: true });
+      await fs.writeFile(path.join(denyDir, "read.txt"), "blocked read", "utf8");
+      await fs.writeFile(path.join(denyDir, "edit.txt"), "blocked edit", "utf8");
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: { security: "full", denyPaths: ["deny"] },
+          write: { security: "full", denyPaths: ["deny"] },
+          edit: { security: "full", denyPaths: ["deny"] },
+        },
+      };
+
+      const tools = createOpenClawCodingTools({ workspaceDir, config: cfg });
+      const readTool = tools.find((tool) => tool.name === "read");
+      const writeTool = tools.find((tool) => tool.name === "write");
+      const editTool = tools.find((tool) => tool.name === "edit");
+
+      await expect(readTool?.execute("deny-read", { path: "deny/read.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+
+      await expect(
+        writeTool?.execute("deny-write", { path: "deny/write.txt", content: "blocked" }),
+      ).rejects.toThrow(/denyPaths|blocked/i);
+
+      await expect(
+        editTool?.execute("deny-edit", { path: "deny/edit.txt", oldText: "edit", newText: "no" }),
+      ).rejects.toThrow(/denyPaths|blocked/i);
+    });
+  });
+
+  it("applies denyPaths within allowPaths", async () => {
+    await withTempDir("openclaw-denypaths-allowlist-", async (workspaceDir) => {
+      const allowedDir = path.join(workspaceDir, "allowed");
+      await fs.mkdir(allowedDir, { recursive: true });
+      await fs.writeFile(path.join(allowedDir, "allowed.txt"), "ok", "utf8");
+      await fs.writeFile(path.join(allowedDir, "blocked.txt"), "blocked", "utf8");
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: {
+            security: "allowlist",
+            allowPaths: [allowedDir],
+            denyPaths: ["allowed/blocked.txt"],
+          },
+        },
+      };
+
+      const tools = createOpenClawCodingTools({ workspaceDir, config: cfg });
+      const readTool = tools.find((tool) => tool.name === "read");
+      expect(readTool).toBeDefined();
+
+      const allowedResult = await readTool?.execute("allow-read", { path: "allowed/allowed.txt" });
+      expect(getTextContent(allowedResult)).toContain("ok");
+
+      await expect(readTool?.execute("deny-read", { path: "allowed/blocked.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+    });
+  });
+
+  it("unions agent and global denyPaths", async () => {
+    await withTempDir("openclaw-denypaths-union-", async (workspaceDir) => {
+      await fs.writeFile(path.join(workspaceDir, "global.txt"), "global", "utf8");
+      await fs.writeFile(path.join(workspaceDir, "agent.txt"), "agent", "utf8");
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: { security: "full", denyPaths: ["global.txt"] },
+        },
+        agents: {
+          list: [
+            {
+              id: "restricted",
+              tools: {
+                read: { security: "full", denyPaths: ["agent.txt"] },
+              },
+            },
+          ],
+        },
+      };
+
+      const tools = createOpenClawCodingTools({
+        config: cfg,
+        sessionKey: "agent:restricted:main",
+        workspaceDir,
+      });
+      const readTool = tools.find((tool) => tool.name === "read");
+      expect(readTool).toBeDefined();
+
+      await expect(readTool?.execute("deny-global", { path: "global.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+      await expect(readTool?.execute("deny-agent", { path: "agent.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
+    });
+  });
+
+  it("blocks symlink access to denied paths", async () => {
+    await withTempDir("openclaw-denypaths-symlink-", async (workspaceDir) => {
+      const secretDir = path.join(workspaceDir, "secret");
+      const linkDir = path.join(workspaceDir, "link");
+      await fs.mkdir(secretDir, { recursive: true });
+      await fs.writeFile(path.join(secretDir, "secret.txt"), "secret", "utf8");
+      await fs.symlink(secretDir, linkDir);
+
+      const cfg: OpenClawConfig = {
+        tools: {
+          read: { security: "full", denyPaths: ["secret/secret.txt"] },
+        },
+      };
+
+      const tools = createOpenClawCodingTools({ workspaceDir, config: cfg });
+      const readTool = tools.find((tool) => tool.name === "read");
+      expect(readTool).toBeDefined();
+
+      await expect(readTool?.execute("deny-symlink", { path: "link/secret.txt" })).rejects.toThrow(
+        /denyPaths|blocked/i,
+      );
     });
   });
 
@@ -301,5 +487,17 @@ describe("tool allowPaths", () => {
       read: { security: "allowlist", allowPaths: [] },
     });
     expect(agentToolsResult.success).toBe(false);
+  });
+
+  it("accepts denyPaths without allowPaths when security is full", () => {
+    const toolsResult = ToolsSchema.safeParse({
+      read: { security: "full", denyPaths: ["blocked.txt"] },
+    });
+    expect(toolsResult.success).toBe(true);
+
+    const agentToolsResult = AgentToolsSchema.safeParse({
+      read: { security: "full", denyPaths: ["blocked.txt"] },
+    });
+    expect(agentToolsResult.success).toBe(true);
   });
 });

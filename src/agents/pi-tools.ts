@@ -40,6 +40,7 @@ import {
   patchToolSchemaForClaudeCompatibility,
   wrapToolParamNormalization,
   wrapAllowPathsGuard,
+  wrapDenyPathsGuard,
 } from "./pi-tools.read.js";
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "./pi-tools.schema.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
@@ -117,6 +118,16 @@ function pickAllowPaths(agentPaths?: string[], globalPaths?: string[], cwd?: str
   return normalizedAgent.filter((candidate) =>
     normalizedGlobal.some((root) => isWithin(candidate, root)),
   );
+}
+
+function pickDenyPaths(agentPaths?: string[], globalPaths?: string[]) {
+  const merged = [
+    ...(Array.isArray(globalPaths) ? globalPaths : []),
+    ...(Array.isArray(agentPaths) ? agentPaths : []),
+  ]
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
+  return merged.length > 0 ? Array.from(new Set(merged)) : undefined;
 }
 
 function pickSecurity(
@@ -227,6 +238,10 @@ export function createOpenClawCodingTools(options?: {
     globalToolsConfig?.read?.allowPaths,
     workspaceRoot,
   );
+  const readDenyPaths = pickDenyPaths(
+    agentToolsConfig?.read?.denyPaths,
+    globalToolsConfig?.read?.denyPaths,
+  );
   const readSecurity =
     pickSecurity(agentToolsConfig?.read?.security, globalToolsConfig?.read?.security) ?? "full";
   const writeAllowPaths = pickAllowPaths(
@@ -234,12 +249,20 @@ export function createOpenClawCodingTools(options?: {
     globalToolsConfig?.write?.allowPaths,
     workspaceRoot,
   );
+  const writeDenyPaths = pickDenyPaths(
+    agentToolsConfig?.write?.denyPaths,
+    globalToolsConfig?.write?.denyPaths,
+  );
   const writeSecurity =
     pickSecurity(agentToolsConfig?.write?.security, globalToolsConfig?.write?.security) ?? "full";
   const editAllowPaths = pickAllowPaths(
     agentToolsConfig?.edit?.allowPaths,
     globalToolsConfig?.edit?.allowPaths,
     workspaceRoot,
+  );
+  const editDenyPaths = pickDenyPaths(
+    agentToolsConfig?.edit?.denyPaths,
+    globalToolsConfig?.edit?.denyPaths,
   );
   const editSecurity =
     pickSecurity(agentToolsConfig?.edit?.security, globalToolsConfig?.edit?.security) ?? "full";
@@ -289,15 +312,21 @@ export function createOpenClawCodingTools(options?: {
     if (tool.name === readTool.name) {
       if (readSecurity === "deny") return [];
       if (sandboxRoot) {
-        return [createSandboxedReadTool(sandboxRoot, readAllowPaths, readSecurity)];
+        return [createSandboxedReadTool(sandboxRoot, readAllowPaths, readDenyPaths, readSecurity)];
       }
       const freshReadTool = createReadTool(workspaceRoot);
       return [
-        wrapAllowPathsGuard(createOpenClawReadTool(freshReadTool), {
-          allowPaths: readAllowPaths,
-          cwd: workspaceRoot,
-          security: readSecurity,
-        }),
+        wrapAllowPathsGuard(
+          wrapDenyPathsGuard(createOpenClawReadTool(freshReadTool), {
+            denyPaths: readDenyPaths,
+            cwd: workspaceRoot,
+          }),
+          {
+            allowPaths: readAllowPaths,
+            cwd: workspaceRoot,
+            security: readSecurity,
+          },
+        ),
       ];
     }
     if (tool.name === "bash" || tool.name === execToolName) return [];
@@ -307,7 +336,13 @@ export function createOpenClawCodingTools(options?: {
       // Wrap with param normalization for Claude Code compatibility
       return [
         wrapAllowPathsGuard(
-          wrapToolParamNormalization(createWriteTool(workspaceRoot), CLAUDE_PARAM_GROUPS.write),
+          wrapDenyPathsGuard(
+            wrapToolParamNormalization(createWriteTool(workspaceRoot), CLAUDE_PARAM_GROUPS.write),
+            {
+              denyPaths: writeDenyPaths,
+              cwd: workspaceRoot,
+            },
+          ),
           { allowPaths: writeAllowPaths, cwd: workspaceRoot, security: writeSecurity },
         ),
       ];
@@ -318,7 +353,13 @@ export function createOpenClawCodingTools(options?: {
       // Wrap with param normalization for Claude Code compatibility
       return [
         wrapAllowPathsGuard(
-          wrapToolParamNormalization(createEditTool(workspaceRoot), CLAUDE_PARAM_GROUPS.edit),
+          wrapDenyPathsGuard(
+            wrapToolParamNormalization(createEditTool(workspaceRoot), CLAUDE_PARAM_GROUPS.edit),
+            {
+              denyPaths: editDenyPaths,
+              cwd: workspaceRoot,
+            },
+          ),
           { allowPaths: editAllowPaths, cwd: workspaceRoot, security: editSecurity },
         ),
       ];
@@ -372,10 +413,19 @@ export function createOpenClawCodingTools(options?: {
         ? [
             ...(editSecurity === "deny"
               ? []
-              : [createSandboxedEditTool(sandboxRoot, editAllowPaths, editSecurity)]),
+              : [
+                  createSandboxedEditTool(sandboxRoot, editAllowPaths, editDenyPaths, editSecurity),
+                ]),
             ...(writeSecurity === "deny"
               ? []
-              : [createSandboxedWriteTool(sandboxRoot, writeAllowPaths, writeSecurity)]),
+              : [
+                  createSandboxedWriteTool(
+                    sandboxRoot,
+                    writeAllowPaths,
+                    writeDenyPaths,
+                    writeSecurity,
+                  ),
+                ]),
           ]
         : []
       : []),

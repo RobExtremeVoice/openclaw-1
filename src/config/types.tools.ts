@@ -212,6 +212,8 @@ export type AgentToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict reads to these directories. */
     allowPaths?: string[];
+    /** Deny reads from these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   /** Write tool configuration. */
   write?: {
@@ -219,6 +221,8 @@ export type AgentToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict writes to these directories. */
     allowPaths?: string[];
+    /** Deny writes to these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   /** Edit tool configuration. */
   edit?: {
@@ -226,6 +230,8 @@ export type AgentToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict edits to these directories. */
     allowPaths?: string[];
+    /** Deny edits to these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   /** Per-agent elevated exec gate (can only further restrict global tools.elevated). */
   elevated?: {
@@ -361,6 +367,8 @@ export type ToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict reads to these directories. */
     allowPaths?: string[];
+    /** Deny reads from these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   /** Write tool configuration. */
   write?: {
@@ -368,6 +376,8 @@ export type ToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict writes to these directories. */
     allowPaths?: string[];
+    /** Deny writes to these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   /** Edit tool configuration. */
   edit?: {
@@ -375,6 +385,8 @@ export type ToolsConfig = {
     security?: FileToolSecurity;
     /** Restrict edits to these directories. */
     allowPaths?: string[];
+    /** Deny edits to these files/directories (applies even when security is full). */
+    denyPaths?: string[];
   };
   web?: {
     search?: {

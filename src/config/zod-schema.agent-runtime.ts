@@ -248,6 +248,7 @@ const FileToolAccessSchema = z
   .object({
     security: z.enum(["deny", "allowlist", "full"]).optional(),
     allowPaths: z.array(z.string()).optional(),
+    denyPaths: z.array(z.string()).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
