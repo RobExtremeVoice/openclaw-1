@@ -2,16 +2,32 @@
   "id": "memory-lancedb",
   "kind": "memory",
   "uiHints": {
+    "embedding.provider": {
+      "label": "Embedding Provider",
+      "help": "Choose 'openai' for remote embeddings or 'local' for on-device embeddings using node-llama-cpp"
+    },
     "embedding.apiKey": {
       "label": "OpenAI API Key",
       "sensitive": true,
       "placeholder": "sk-proj-...",
-      "help": "API key for OpenAI embeddings (or use ${OPENAI_API_KEY})"
+      "help": "API key for OpenAI embeddings (required if provider is 'openai', or use ${OPENAI_API_KEY})"
     },
     "embedding.model": {
       "label": "Embedding Model",
       "placeholder": "text-embedding-3-small",
-      "help": "OpenAI embedding model to use"
+      "help": "Model to use for embeddings. For OpenAI: text-embedding-3-small/large. For local: HuggingFace GGUF path."
+    },
+    "embedding.local.modelPath": {
+      "label": "Local Model Path",
+      "placeholder": "hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf",
+      "help": "Path to local GGUF embedding model",
+      "advanced": true
+    },
+    "embedding.local.modelCacheDir": {
+      "label": "Model Cache Directory",
+      "placeholder": "~/.cache/node-llama-cpp",
+      "help": "Directory to cache downloaded models",
+      "advanced": true
     },
     "dbPath": {
       "label": "Database Path",
@@ -35,15 +51,29 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["openai", "local"]
+          },
           "apiKey": {
             "type": "string"
           },
           "model": {
-            "type": "string",
-            "enum": ["text-embedding-3-small", "text-embedding-3-large"]
+            "type": "string"
+          },
+          "local": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "modelPath": {
+                "type": "string"
+              },
+              "modelCacheDir": {
+                "type": "string"
+              }
+            }
           }
-        },
-        "required": ["apiKey"]
+        }
       },
       "dbPath": {
         "type": "string"
@@ -55,6 +85,8 @@
         "type": "boolean"
       }
     },
-    "required": ["embedding"]
+    "required": [
+      "embedding"
+    ]
   }
 }
