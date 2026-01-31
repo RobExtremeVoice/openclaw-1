@@ -166,6 +166,7 @@ export async function getReplyFromConfig(
     typing,
     opts,
     skillFilter: opts?.skillFilter,
+    channelModelOverride: opts?.channelModelOverride,
   });
   if (directiveResult.kind === "reply") {
     return directiveResult.reply;

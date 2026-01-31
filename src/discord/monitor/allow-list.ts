@@ -33,8 +33,10 @@ export type DiscordGuildEntryResolved = {
       users?: Array<string | number>;
       systemPrompt?: string;
       autoThread?: boolean;
+      model?: string;
     }
   >;
+  model?: string;
 };
 
 export type DiscordChannelConfigResolved = {
@@ -47,6 +49,7 @@ export type DiscordChannelConfigResolved = {
   autoThread?: boolean;
   matchKey?: string;
   matchSource?: ChannelMatchSource;
+  model?: string;
 };
 
 export function normalizeDiscordAllowList(
@@ -243,6 +246,7 @@ function resolveDiscordChannelConfigEntry(
     users: entry.users,
     systemPrompt: entry.systemPrompt,
     autoThread: entry.autoThread,
+    model: entry.model,
   };
   return resolved;
 }

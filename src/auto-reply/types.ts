@@ -39,6 +39,8 @@ export type GetReplyOptions = {
   skillFilter?: string[];
   /** Mutable ref to track if a reply was sent (for Slack "first" threading mode). */
   hasRepliedRef?: { value: boolean };
+  /** Channel-level model override (fallback when no session override). */
+  channelModelOverride?: string;
 };
 
 export type ReplyPayload = {

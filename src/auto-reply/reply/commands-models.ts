@@ -257,3 +257,35 @@ export const handleModelsCommand: CommandHandler = async (params, allowTextComma
   }
   return { reply, shouldContinue: false };
 };
+
+export const handleModelChannelCommand: CommandHandler = async (params, allowTextCommands) => {
+  if (!allowTextCommands) return null;
+
+  const { resolveModelChannelCommandReply } = await import("./commands-model-channel.js");
+  const reply = await resolveModelChannelCommandReply({
+    cfg: params.cfg,
+    commandBodyNormalized: params.command.commandBodyNormalized,
+    provider: params.ctx.Provider,
+    surface: params.ctx.Surface,
+    accountId: params.ctx.AccountId,
+    groupSpace: params.ctx.GroupSpace,
+    groupChannel: params.ctx.GroupChannel,
+    channelId: extractChannelIdFromTo(params.ctx.To),
+    commandAuthorized: params.command.isAuthorizedSender,
+  });
+  if (!reply) return null;
+  return { reply, shouldContinue: false };
+};
+
+function extractChannelIdFromTo(to?: string): string | undefined {
+  if (!to) return undefined;
+  // Handle "channel:<id>" format
+  if (to.startsWith("channel:")) {
+    return to.slice("channel:".length);
+  }
+  // Handle "discord:channel:<id>" format
+  if (to.startsWith("discord:channel:")) {
+    return to.slice("discord:channel:".length);
+  }
+  return undefined;
+}

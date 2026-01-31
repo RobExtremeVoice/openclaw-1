@@ -516,6 +516,20 @@ function buildChatCommands(): ChatCommandDefinition[] {
       ],
     }),
     defineChatCommand({
+      key: "model_channel",
+      nativeName: "model_channel",
+      description: "Set or clear the default model for this channel.",
+      textAlias: "/model-channel",
+      category: "options",
+      args: [
+        {
+          name: "model",
+          description: "Model id (provider/model or id), or 'clear' to remove override",
+          type: "string",
+        },
+      ],
+    }),
+    defineChatCommand({
       key: "models",
       nativeName: "models",
       description: "List model providers or provider models.",

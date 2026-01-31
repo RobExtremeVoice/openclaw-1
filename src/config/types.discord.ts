@@ -37,6 +37,8 @@ export type DiscordGuildChannelConfig = {
   users?: Array<string | number>;
   /** Optional system prompt snippet for this channel. */
   systemPrompt?: string;
+  /** Optional model override for this channel. */
+  model?: string;
 };
 
 export type DiscordReactionNotificationMode = "off" | "own" | "all" | "allowlist";
@@ -51,6 +53,8 @@ export type DiscordGuildEntry = {
   reactionNotifications?: DiscordReactionNotificationMode;
   users?: Array<string | number>;
   channels?: Record<string, DiscordGuildChannelConfig>;
+  /** Optional model override for this guild. */
+  model?: string;
 };
 
 export type DiscordActionConfig = {
