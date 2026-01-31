@@ -70,7 +70,7 @@ import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
-import { formatUncaughtError } from "../infra/errors.js";
+import { installUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
@@ -90,22 +90,9 @@ const logPlugins = log.child("plugins");
 const logWsControl = log.child("ws");
 const canvasRuntime = runtimeForLogger(logCanvas);
 
-process.on("unhandledRejection", (reason) => {
-  try {
-    log.error("Unhandled promise rejection", { error: formatUncaughtError(reason) });
-  } catch {
-    // Fallback: ensure we don't throw from the handler
-    log.error("Unhandled promise rejection (formatting failed)", { error: String(reason) });
-  }
-});
-
-process.on("uncaughtException", (err) => {
-  try {
-    log.error("Uncaught exception", { error: formatUncaughtError(err) });
-  } catch {
-    log.error("Uncaught exception (formatting failed)", { error: String(err) });
-  }
-});
+// Use the infra-level handler so transient fetch/network errors are classified and
+// handled consistently (exit vs non-exit). Pass the subsystem logger for structured logs.
+installUnhandledRejectionHandler({ log });
 
 export type GatewayServer = {
   close: (opts?: { reason?: string; restartExpectedMs?: number | null }) => Promise<void>;
