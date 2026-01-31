@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -108,5 +109,40 @@ describe("CallManager", () => {
 
     expect(provider.playTtsCalls).toHaveLength(1);
     expect(provider.playTtsCalls[0]?.text).toBe("Hello there");
+  });
+
+  it("restores verified calls on initialize", async () => {
+    const config = VoiceCallConfigSchema.parse({
+      enabled: true,
+      provider: "plivo",
+      fromNumber: "+15550000000",
+    });
+
+    const storePath = path.join(os.tmpdir(), `openclaw-voice-call-test-${Date.now()}`);
+    fs.mkdirSync(storePath, { recursive: true });
+
+    const callId = "call-restore-1";
+    const record = {
+      callId,
+      providerCallId: "active-call",
+      provider: "plivo",
+      direction: "outbound",
+      state: "active",
+      from: "+15550000000",
+      to: "+15550000001",
+      startedAt: Date.now(),
+      transcript: [],
+      processedEventIds: [],
+    };
+
+    fs.writeFileSync(
+      path.join(storePath, "calls.jsonl"),
+      `${JSON.stringify(record)}\n`,
+    );
+
+    const manager = new CallManager(config, storePath);
+    await manager.initialize(new FakeProvider(), "https://example.com/voice/webhook");
+
+    expect(manager.getCall(callId)).toBeTruthy();
   });
 });

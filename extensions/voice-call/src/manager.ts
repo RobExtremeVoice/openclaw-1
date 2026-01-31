@@ -69,14 +69,15 @@ export class CallManager {
    * Initialize the call manager with a provider.
    */
   async initialize(provider: VoiceCallProvider, webhookUrl: string): Promise<void> {
-    this.provider = provider;
     this.webhookUrl = webhookUrl;
 
     // Ensure store directory exists
     fs.mkdirSync(this.storePath, { recursive: true });
 
     // Load any persisted active calls (verifying with provider)
-    await this.loadActiveCalls();
+    await this.loadActiveCalls(provider);
+
+    this.provider = provider;
   }
 
   /**
@@ -813,7 +814,7 @@ export class CallManager {
    * Load active calls from persistence (for crash recovery).
    * Verifies with provider that calls are still active before loading.
    */
-  private async loadActiveCalls(): Promise<void> {
+  private async loadActiveCalls(provider: VoiceCallProvider): Promise<void> {
     const logPath = path.join(this.storePath, "calls.jsonl");
     if (!fs.existsSync(logPath)) {
       return;
@@ -870,7 +871,7 @@ export class CallManager {
       }
 
       // If there's no provider call ID or provider, keep as-is
-      if (!call.providerCallId || !this.provider) {
+      if (!call.providerCallId) {
         registerActiveCall(callId, call);
         continue;
       }
@@ -878,7 +879,7 @@ export class CallManager {
       verificationQueue.push([callId, call]);
     }
 
-    if (!this.provider || verificationQueue.length === 0) return;
+    if (verificationQueue.length === 0) return;
 
     const concurrency = Math.min(5, verificationQueue.length);
     let nextIndex = 0;
@@ -898,7 +899,7 @@ export class CallManager {
         }
 
         try {
-          const status = await this.provider.getCallStatus({
+          const status = await provider.getCallStatus({
             providerCallId: call.providerCallId!,
           });
 
