@@ -55,6 +55,10 @@ export type LegacyStateDetection = {
     targetDir: string;
     hasLegacy: boolean;
   };
+  multiAccount: {
+    hasLegacy: boolean;
+    legacyKeys: string[];
+  };
   preview: string[];
 };
 
@@ -90,6 +94,44 @@ function isLegacyGroupKey(key: string): boolean {
     return true;
   }
   return false;
+}
+
+function resolveMultiAccountMigrationKey(key: string, entry: SessionEntryLike): string | null {
+  const rec = entry as Record<string, unknown>;
+  const rawAccountId =
+    rec.lastAccountId ?? (rec.deliveryContext as Record<string, unknown>)?.accountId;
+  const accountId = typeof rawAccountId === "string" ? rawAccountId.trim() : "";
+
+  if (!accountId || accountId === DEFAULT_ACCOUNT_ID) {
+    return null;
+  }
+
+  const parts = key.split(":");
+  if (parts.length < 3 || parts[0] !== "agent") {
+    return null;
+  }
+
+  // agent:id:main (3) -> agent:id:main:accountId
+  if (parts.length === 3) {
+    return `${key}:${accountId}`;
+  }
+
+  // agent:id:dm:peer (4) -> agent:id:dm:peer:accountId
+  if (parts.length === 4 && parts[2] === "dm") {
+    return `${key}:${accountId}`;
+  }
+
+  // agent:id:channel:group|channel:peer (5) -> agent:id:channel:group|channel:peer:accountId
+  if (parts.length === 5 && (parts[3] === "group" || parts[3] === "channel")) {
+    return `${key}:${accountId}`;
+  }
+
+  // agent:id:channel:dm:peer (5) -> agent:id:channel:accountId:dm:peer
+  if (parts.length === 5 && parts[3] === "dm") {
+    return `agent:${parts[1]}:${parts[2]}:${accountId}:dm:${parts[4]}`;
+  }
+
+  return null;
 }
 
 function canonicalizeSessionKeyForAgent(params: {
@@ -553,6 +595,15 @@ export async function detectLegacyStateMigrations(params: {
     fileExists(path.join(oauthDir, "creds.json")) &&
     !fileExists(path.join(targetWhatsAppAuthDir, "creds.json"));
 
+  const multiAccountKeys: string[] = [];
+  if (targetSessionParsed.ok) {
+    for (const [key, entry] of Object.entries(targetSessionParsed.store)) {
+      if (resolveMultiAccountMigrationKey(key, entry)) {
+        multiAccountKeys.push(key);
+      }
+    }
+  }
+
   const preview: string[] = [];
   if (hasLegacySessions) {
     preview.push(`- Sessions: ${sessionsLegacyDir} → ${sessionsTargetDir}`);
@@ -565,6 +616,11 @@ export async function detectLegacyStateMigrations(params: {
   }
   if (hasLegacyWhatsAppAuth) {
     preview.push(`- WhatsApp auth: ${oauthDir} → ${targetWhatsAppAuthDir} (keep oauth.json)`);
+  }
+  if (multiAccountKeys.length > 0) {
+    preview.push(
+      `- Sessions: migrate ${multiAccountKeys.length} multi-account keys in ${sessionsTargetStorePath}`,
+    );
   }
 
   return {
@@ -590,6 +646,10 @@ export async function detectLegacyStateMigrations(params: {
       legacyDir: oauthDir,
       targetDir: targetWhatsAppAuthDir,
       hasLegacy: hasLegacyWhatsAppAuth,
+    },
+    multiAccount: {
+      hasLegacy: multiAccountKeys.length > 0,
+      legacyKeys: multiAccountKeys,
     },
     preview,
   };
@@ -805,6 +865,60 @@ async function migrateLegacyWhatsAppAuth(
   return { changes, warnings };
 }
 
+export async function migrateMultiAccountSessions(
+  detected: LegacyStateDetection,
+): Promise<{ changes: string[]; warnings: string[] }> {
+  const changes: string[] = [];
+  const warnings: string[] = [];
+  if (!detected.multiAccount.hasLegacy) {
+    return { changes, warnings };
+  }
+
+  ensureDir(detected.sessions.targetDir);
+
+  const targetParsed = fileExists(detected.sessions.targetStorePath)
+    ? readSessionStoreJson5(detected.sessions.targetStorePath)
+    : { store: {}, ok: true };
+
+  if (!targetParsed.ok) {
+    warnings.push(`Target sessions store unreadable at ${detected.sessions.targetStorePath}`);
+    return { changes, warnings };
+  }
+
+  const store = targetParsed.store;
+  let migratedCount = 0;
+  const nextStore = { ...store };
+  let hasChanges = false;
+
+  for (const [key, entry] of Object.entries(store)) {
+    const newKey = resolveMultiAccountMigrationKey(key, entry);
+    if (newKey && newKey !== key) {
+      const existing = nextStore[newKey];
+      const merged = mergeSessionEntry({ existing, incoming: entry });
+      nextStore[newKey] = merged;
+      delete nextStore[key];
+      hasChanges = true;
+      migratedCount++;
+    }
+  }
+
+  if (hasChanges) {
+    const normalized: Record<string, SessionEntry> = {};
+    for (const [key, entry] of Object.entries(nextStore)) {
+      const norm = normalizeSessionEntry(entry);
+      if (norm) {
+        normalized[key] = norm;
+      }
+    }
+    await saveSessionStore(detected.sessions.targetStorePath, normalized);
+    changes.push(
+      `Migrated ${migratedCount} multi-account session keys in ${detected.sessions.targetStorePath}`,
+    );
+  }
+
+  return { changes, warnings };
+}
+
 export async function runLegacyStateMigrations(params: {
   detected: LegacyStateDetection;
   now?: () => number;
@@ -814,9 +928,20 @@ export async function runLegacyStateMigrations(params: {
   const sessions = await migrateLegacySessions(detected, now);
   const agentDir = await migrateLegacyAgentDir(detected, now);
   const whatsappAuth = await migrateLegacyWhatsAppAuth(detected);
+  const multiAccount = await migrateMultiAccountSessions(detected);
   return {
-    changes: [...sessions.changes, ...agentDir.changes, ...whatsappAuth.changes],
-    warnings: [...sessions.warnings, ...agentDir.warnings, ...whatsappAuth.warnings],
+    changes: [
+      ...sessions.changes,
+      ...agentDir.changes,
+      ...whatsappAuth.changes,
+      ...multiAccount.changes,
+    ],
+    warnings: [
+      ...sessions.warnings,
+      ...agentDir.warnings,
+      ...whatsappAuth.warnings,
+      ...multiAccount.warnings,
+    ],
   };
 }
 
@@ -872,7 +997,11 @@ export async function autoMigrateLegacyState(params: {
     env,
     homedir: params.homedir,
   });
-  if (!detected.sessions.hasLegacy && !detected.agentDir.hasLegacy) {
+  if (
+    !detected.sessions.hasLegacy &&
+    !detected.agentDir.hasLegacy &&
+    !detected.multiAccount.hasLegacy
+  ) {
     return {
       migrated: stateDirResult.migrated,
       skipped: false,
@@ -884,8 +1013,19 @@ export async function autoMigrateLegacyState(params: {
   const now = params.now ?? (() => Date.now());
   const sessions = await migrateLegacySessions(detected, now);
   const agentDir = await migrateLegacyAgentDir(detected, now);
-  const changes = [...stateDirResult.changes, ...sessions.changes, ...agentDir.changes];
-  const warnings = [...stateDirResult.warnings, ...sessions.warnings, ...agentDir.warnings];
+  const multiAccount = await migrateMultiAccountSessions(detected);
+  const changes = [
+    ...stateDirResult.changes,
+    ...sessions.changes,
+    ...agentDir.changes,
+    ...multiAccount.changes,
+  ];
+  const warnings = [
+    ...stateDirResult.warnings,
+    ...sessions.warnings,
+    ...agentDir.warnings,
+    ...multiAccount.warnings,
+  ];
 
   const logger = params.log ?? createSubsystemLogger("state-migrations");
   if (changes.length > 0) {

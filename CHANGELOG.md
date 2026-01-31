@@ -116,6 +116,7 @@ Docs: https://docs.openclaw.ai
 ### Breaking
 
 - **BREAKING:** Gateway auth mode "none" is removed; gateway now requires token/password (Tailscale Serve identity still allowed).
+- **BREAKING:** Multi-account: session keys for group/channel conversations now include the account ID for non-default accounts. Existing history for these accounts will be reset.
 
 ### Fixes
 

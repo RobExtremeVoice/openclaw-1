@@ -1,0 +1,54 @@
+import { describe, it, expect } from "vitest";
+import { resolveAgentRoute, type ResolveAgentRouteInput } from "./resolve-route.js";
+import type { MoltbotConfig } from "../config/config.js";
+
+const mockConfig: MoltbotConfig = {
+  agents: { list: [{ id: "main" }] },
+  channels: {
+    discord: {
+      enabled: true,
+      accounts: {
+        bot_a: { token: "token_a" },
+        bot_b: { token: "token_b" },
+      },
+    },
+  },
+};
+
+describe("resolveAgentRoute - Shared Channel", () => {
+  it("should generate distinct keys for SAME channel on DIFFERENT bots", () => {
+    const inputA: ResolveAgentRouteInput = {
+      cfg: mockConfig,
+      channel: "discord",
+      accountId: "bot_a",
+      peer: { kind: "channel", id: "channel_123" },
+    };
+
+    const inputB: ResolveAgentRouteInput = {
+      cfg: mockConfig,
+      channel: "discord",
+      accountId: "bot_b",
+      peer: { kind: "channel", id: "channel_123" },
+    };
+
+    const routeA = resolveAgentRoute(inputA);
+    const routeB = resolveAgentRoute(inputB);
+
+    expect(routeA.sessionKey).not.toEqual(routeB.sessionKey);
+    expect(routeA.sessionKey).toContain(":bot_a");
+    expect(routeB.sessionKey).toContain(":bot_b");
+  });
+
+  it("should preserve backward compatibility for default bot in channel", () => {
+    const input: ResolveAgentRouteInput = {
+      cfg: mockConfig,
+      channel: "discord",
+      accountId: "default",
+      peer: { kind: "channel", id: "channel_123" },
+    };
+
+    const route = resolveAgentRoute(input);
+
+    expect(route.sessionKey).toBe("agent:main:discord:channel:channel_123");
+  });
+});
