@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b5619b24-d348-4f24-bdac-5f222d6b3f34" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;zxs1633079383&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/openclaw/openclaw.git&quot;,
+    &quot;accountId&quot;: &quot;cbdd1266-ca8e-4604-bf80-42aecbfb1903&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="3908Qm3aIbeI2cGOyZhbP2offuS" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "feature-im",
+    "last_opened_file_path": "/Users/mac28/workspace/java/ai/openclaw",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "pnpm",
+    "settings.editor.selected.configurable": "configurable.group.appearance",
+    "ts.external.directory.path": "/Users/mac28/workspace/java/ai/openclaw/node_modules/typescript/lib",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-WS-252.26830.93" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b5619b24-d348-4f24-bdac-5f222d6b3f34" name="Changes" comment="" />
+      <created>1769821613697</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1769821613697</updated>
+      <workItem from="1769821615011" duration="2044000" />
+      <workItem from="1769824307061" duration="6002000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+    <option name="exactExcludedFiles">
+      <list>
+        <option value="$PROJECT_DIR$/extensions/signal/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/signal/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/signal/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/signal/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/signal/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/signal/src/channel.js.map" />
+        <option value="$PROJECT_DIR$/scripts/canvas-a2ui-copy.js" />
+        <option value="$PROJECT_DIR$/scripts/canvas-a2ui-copy.d.ts" />
+        <option value="$PROJECT_DIR$/scripts/canvas-a2ui-copy.js.map" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/imessage/src/channel.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/telnyx.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/base.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/plivo.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/plivo.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/plivo.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/base.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/stt-openai-realtime.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/stt-openai-realtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/mock.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/stt-openai-realtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/telnyx.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/telnyx.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/base.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/mock.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/mock.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/api.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/api.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/webhook.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/webhook.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/api.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/providers/twilio/webhook.js.map" />
+        <option value="$PROJECT_DIR$/test/mocks/baileys.js.map" />
+        <option value="$PROJECT_DIR$/test/mocks/baileys.js" />
+        <option value="$PROJECT_DIR$/test/mocks/baileys.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/discord/src/channel.js.map" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/slack/src/channel.js.map" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/whatsapp/src/channel.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/response-generator.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/cli.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/voice-mapping.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/manager.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/response-generator.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/core-bridge.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/manager.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/response-generator.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/voice-mapping.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/manager.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/config.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-tts.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook-security.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-tts.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/media-stream.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook-security.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/utils.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/utils.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/media-stream.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/tunnel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/tunnel.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/voice-mapping.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-tts.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/cli.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-audio.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/types.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/cli.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/core-bridge.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/webhook-security.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/types.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-audio.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/utils.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/telephony-audio.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/core-bridge.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/tunnel.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/types.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/config.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/media-stream.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/src/config.js" />
+        <option value="$PROJECT_DIR$/test/helpers/envelope-timestamp.js.map" />
+        <option value="$PROJECT_DIR$/test/helpers/envelope-timestamp.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/inbound-contract.js.map" />
+        <option value="$PROJECT_DIR$/test/helpers/temp-home.js.map" />
+        <option value="$PROJECT_DIR$/test/helpers/normalize-text.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/paths.js" />
+        <option value="$PROJECT_DIR$/test/helpers/poll.js.map" />
+        <option value="$PROJECT_DIR$/test/helpers/poll.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/temp-home.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/inbound-contract.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/paths.js.map" />
+        <option value="$PROJECT_DIR$/test/helpers/envelope-timestamp.js" />
+        <option value="$PROJECT_DIR$/test/helpers/inbound-contract.js" />
+        <option value="$PROJECT_DIR$/test/helpers/paths.d.ts" />
+        <option value="$PROJECT_DIR$/test/helpers/temp-home.js" />
+        <option value="$PROJECT_DIR$/test/helpers/normalize-text.js" />
+        <option value="$PROJECT_DIR$/test/helpers/poll.js" />
+        <option value="$PROJECT_DIR$/test/helpers/normalize-text.js.map" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/index.js" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/index.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/voice-call/index.js.map" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/runtime.js" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/channel.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/runtime.d.ts" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/runtime.js.map" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/channel.js" />
+        <option value="$PROJECT_DIR$/extensions/telegram/src/channel.js.map" />
+      </list>
+    </option>
+  </component>
+</project>

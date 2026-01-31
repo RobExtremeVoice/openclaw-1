@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openclaw.ai/schemas/plugin.json",
+  "id": "universal-im",
+  "name": "Universal IM",
+  "description": "Universal IM channel plugin - unified messaging integration via webhooks and custom providers",
+  "version": "2026.1.31",
+  "main": "./index.ts",
+  "configSchema": {},
+  "channels": ["universal-im"],
+  "channel": {
+    "id": "universal-im",
+    "label": "Universal IM",
+    "selectionLabel": "Universal IM (plugin)",
+    "docsPath": "/channels/universal-im",
+    "blurb": "unified IM integration via webhooks and custom providers"
+  }
+}

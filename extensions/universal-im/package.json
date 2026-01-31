@@ -1,0 +1,33 @@
+{
+  "name": "@openclaw/universal-im",
+  "version": "2026.1.31",
+  "type": "module",
+  "description": "OpenClaw Universal IM channel plugin - unified messaging integration",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "universal-im",
+      "label": "Universal IM",
+      "selectionLabel": "Universal IM (plugin)",
+      "docsPath": "/channels/universal-im",
+      "docsLabel": "universal-im",
+      "blurb": "unified IM integration via webhooks and custom providers; install the plugin to enable.",
+      "order": 70
+    },
+    "install": {
+      "npmSpec": "@openclaw/universal-im",
+      "localPath": "extensions/universal-im",
+      "defaultChoice": "npm"
+    }
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  }
+}
