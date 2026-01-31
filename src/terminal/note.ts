@@ -85,5 +85,11 @@ export function wrapNoteMessage(
 }
 
 export function note(message: string, title?: string) {
+  // MCP servers must keep stdout clean for JSON-RPC protocol
+  if (process.argv.includes("mcp-server")) {
+    const prefix = title ? `[${title}] ` : "";
+    console.error(prefix + message);
+    return;
+  }
   clackNote(wrapNoteMessage(message), stylePromptTitle(title));
 }
