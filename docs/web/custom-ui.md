@@ -94,6 +94,10 @@ common requests:
 
 ### Models
 
+Capture your target model lineup (for example, Gemini 2.5 Pro/Flash, DeepSeek
+V3/R1, Perplexity, OpenRouter, GLM, and planned local models) and then confirm
+provider support and credentials in Gateway configuration before wiring the UI.
+Start in [Gateway configuration](/gateway/configuration).
 Model providers and credentials live in Gateway configuration; verify the
 providers you plan to use are supported in your deployment. Start in
 [Gateway configuration](/gateway/configuration).
@@ -109,6 +113,21 @@ logic. See [Webhooks](/automation/webhook).
 - Browser tooling: [Browser tool](/tools/browser)
 - Canvas and screen automation: [Canvas](/platforms/mac/canvas)
 - Voice wake and talk mode: [Voice wake](/nodes/voicewake)
+- Talk mode: [Talk mode](/nodes/talk)
+- Cron scheduling: [Cron jobs](/automation/cron-jobs)
+- Webhooks: [Webhooks](/automation/webhook)
+
+If you plan to add weather, 1Password, or email tools, define the tool surface
+first so the UI can call a single Gateway tool rather than embedding provider
+logic in the front end.
+
+### Media and creative
+
+- Image generation and visual tools should map to model/tool surfaces; document
+  the provider and tool names used.
+- Camera capture: [Camera node](/nodes/camera)
+- Image understanding and attachments: [Images](/nodes/images)
+- Peekaboo UI automation: [Peekaboo](/platforms/mac/peekaboo)
 - Cron scheduling: [Cron jobs](/automation/cron-jobs)
 - Webhooks: [Webhooks](/automation/webhook)
 
@@ -121,3 +140,15 @@ logic. See [Webhooks](/automation/webhook).
 
 Confirm your UI runs on the intended platforms (for example, Windows) and uses
 the Gateway WebSocket as the shared control plane.
+
+### Community showcase
+
+If you plan to mirror community demos (for example, Tesco Shop Autopilot),
+review the examples in [Community showcase](/start/showcase) and map the same
+capabilities through Gateway tools.
+
+### Admin-only surface
+
+If the UI is admin-only (Control UI style), keep it behind the same auth
+requirements described in [Web surfaces](/web). Avoid exposing the control
+plane publicly.
