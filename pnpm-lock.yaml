@@ -423,6 +423,13 @@ importers:
       '@urbit/http-api':
         specifier: ^3.0.0
         version: 3.0.0
+    devDependencies:
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.0.10)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
   extensions/twitch:
     dependencies:

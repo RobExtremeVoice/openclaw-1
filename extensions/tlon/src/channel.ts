@@ -2,7 +2,7 @@ import type {
   ChannelOutboundAdapter,
   ChannelPlugin,
   ChannelSetupInput,
-  OpenClawConfig,
+  MoltbotConfig,
 } from "openclaw/plugin-sdk";
 import {
   applyAccountNameToChannelSection,
@@ -13,10 +13,52 @@ import {
 import { resolveTlonAccount, listTlonAccountIds } from "./types.js";
 import { formatTargetHint, normalizeShip, parseTlonTarget } from "./targets.js";
 import { ensureUrbitConnectPatched, Urbit } from "./urbit/http-api.js";
-import { buildMediaText, sendDm, sendGroupMessage } from "./urbit/send.js";
+import { buildMediaText, buildMediaStory, sendDm, sendGroupMessage, sendDmWithStory, sendGroupMessageWithStory } from "./urbit/send.js";
 import { monitorTlonProvider } from "./monitor/index.js";
 import { tlonChannelConfigSchema } from "./config-schema.js";
 import { tlonOnboardingAdapter } from "./onboarding.js";
+import { authenticate } from "./urbit/auth.js";
+
+// Simple HTTP-only poke that doesn't open an EventSource (avoids conflict with monitor's SSE)
+async function createHttpPokeApi(params: { url: string; code: string; ship: string }) {
+  const cookie = await authenticate(params.url, params.code);
+  const channelId = `${Math.floor(Date.now() / 1000)}-${Math.random().toString(36).substring(2, 8)}`;
+  const channelUrl = `${params.url}/~/channel/${channelId}`;
+  const shipName = params.ship.replace(/^~/, "");
+
+  return {
+    poke: async (pokeParams: { app: string; mark: string; json: unknown }) => {
+      const pokeId = Date.now();
+      const pokeData = {
+        id: pokeId,
+        action: "poke",
+        ship: shipName,
+        app: pokeParams.app,
+        mark: pokeParams.mark,
+        json: pokeParams.json,
+      };
+
+      const response = await fetch(channelUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie.split(";")[0],
+        },
+        body: JSON.stringify([pokeData]),
+      });
+
+      if (!response.ok && response.status !== 204) {
+        const errorText = await response.text();
+        throw new Error(`Poke failed: ${response.status} - ${errorText}`);
+      }
+
+      return pokeId;
+    },
+    delete: async () => {
+      // No-op for HTTP-only client
+    },
+  };
+}
 
 const TLON_CHANNEL_ID = "tlon" as const;
 
@@ -30,10 +72,10 @@ type TlonSetupInput = ChannelSetupInput & {
 };
 
 function applyTlonSetupConfig(params: {
-  cfg: OpenClawConfig;
+  cfg: MoltbotConfig;
   accountId: string;
   input: TlonSetupInput;
-}): OpenClawConfig {
+}): MoltbotConfig {
   const { cfg, accountId, input } = params;
   const useDefault = accountId === DEFAULT_ACCOUNT_ID;
   const namedConfig = applyAccountNameToChannelSection({
@@ -108,7 +150,7 @@ const tlonOutbound: ChannelOutboundAdapter = {
     return { ok: true, to: parsed.nest };
   },
   sendText: async ({ cfg, to, text, accountId, replyToId, threadId }) => {
-    const account = resolveTlonAccount(cfg as OpenClawConfig, accountId ?? undefined);
+    const account = resolveTlonAccount(cfg as MoltbotConfig, accountId ?? undefined);
     if (!account.configured || !account.ship || !account.url || !account.code) {
       throw new Error("Tlon account not configured");
     }
@@ -118,12 +160,11 @@ const tlonOutbound: ChannelOutboundAdapter = {
       throw new Error(`Invalid Tlon target. Use ${formatTargetHint()}`);
     }
 
-    ensureUrbitConnectPatched();
-    const api = await Urbit.authenticate({
-      ship: account.ship.replace(/^~/, ""),
+    // Use HTTP-only poke (no EventSource) to avoid conflicts with monitor's SSE connection
+    const api = await createHttpPokeApi({
       url: account.url,
+      ship: account.ship,
       code: account.code,
-      verbose: false,
     });
 
     try {
@@ -154,15 +195,50 @@ const tlonOutbound: ChannelOutboundAdapter = {
     }
   },
   sendMedia: async ({ cfg, to, text, mediaUrl, accountId, replyToId, threadId }) => {
-    const mergedText = buildMediaText(text, mediaUrl);
-    return await tlonOutbound.sendText({
-      cfg,
-      to,
-      text: mergedText,
-      accountId,
-      replyToId,
-      threadId,
+    const account = resolveTlonAccount(cfg as ClawdbotConfig, accountId ?? undefined);
+    if (!account.configured || !account.ship || !account.url || !account.code) {
+      throw new Error("Tlon account not configured");
+    }
+
+    const parsed = parseTlonTarget(to);
+    if (!parsed) {
+      throw new Error(`Invalid Tlon target. Use ${formatTargetHint()}`);
+    }
+
+    const api = await createHttpPokeApi({
+      url: account.url,
+      ship: account.ship,
+      code: account.code,
     });
+
+    try {
+      const fromShip = normalizeShip(account.ship);
+      const story = buildMediaStory(text, mediaUrl);
+
+      if (parsed.kind === "dm") {
+        return await sendDmWithStory({
+          api,
+          fromShip,
+          toShip: parsed.ship,
+          story,
+        });
+      }
+      const replyId = (replyToId ?? threadId) ? String(replyToId ?? threadId) : undefined;
+      return await sendGroupMessageWithStory({
+        api,
+        fromShip,
+        hostShip: parsed.hostShip,
+        channelName: parsed.channelName,
+        story,
+        replyToId: replyId,
+      });
+    } finally {
+      try {
+        await api.delete();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
   },
 };
 
@@ -188,8 +264,8 @@ export const tlonPlugin: ChannelPlugin = {
   reload: { configPrefixes: ["channels.tlon"] },
   configSchema: tlonChannelConfigSchema,
   config: {
-    listAccountIds: (cfg) => listTlonAccountIds(cfg as OpenClawConfig),
-    resolveAccount: (cfg, accountId) => resolveTlonAccount(cfg as OpenClawConfig, accountId ?? undefined),
+    listAccountIds: (cfg) => listTlonAccountIds(cfg as MoltbotConfig),
+    resolveAccount: (cfg, accountId) => resolveTlonAccount(cfg as MoltbotConfig, accountId ?? undefined),
     defaultAccountId: () => "default",
     setAccountEnabled: ({ cfg, accountId, enabled }) => {
       const useDefault = !accountId || accountId === "default";
@@ -203,7 +279,7 @@ export const tlonPlugin: ChannelPlugin = {
               enabled,
             },
           },
-        } as OpenClawConfig;
+        } as MoltbotConfig;
       }
       return {
         ...cfg,
@@ -220,7 +296,7 @@ export const tlonPlugin: ChannelPlugin = {
             },
           },
         },
-      } as OpenClawConfig;
+      } as MoltbotConfig;
     },
     deleteAccount: ({ cfg, accountId }) => {
       const useDefault = !accountId || accountId === "default";
@@ -232,7 +308,7 @@ export const tlonPlugin: ChannelPlugin = {
             ...cfg.channels,
             tlon: rest,
           },
-        } as OpenClawConfig;
+        } as MoltbotConfig;
       }
       const { [accountId]: removed, ...remainingAccounts } = cfg.channels?.tlon?.accounts ?? {};
       return {
@@ -244,7 +320,7 @@ export const tlonPlugin: ChannelPlugin = {
             accounts: remainingAccounts,
           },
         },
-      } as OpenClawConfig;
+      } as MoltbotConfig;
     },
     isConfigured: (account) => account.configured,
     describeAccount: (account) => ({
@@ -260,14 +336,14 @@ export const tlonPlugin: ChannelPlugin = {
     resolveAccountId: ({ accountId }) => normalizeAccountId(accountId),
     applyAccountName: ({ cfg, accountId, name }) =>
       applyAccountNameToChannelSection({
-        cfg: cfg as OpenClawConfig,
+        cfg: cfg as MoltbotConfig,
         channelKey: "tlon",
         accountId,
         name,
       }),
     validateInput: ({ cfg, accountId, input }) => {
       const setupInput = input as TlonSetupInput;
-      const resolved = resolveTlonAccount(cfg as OpenClawConfig, accountId ?? undefined);
+      const resolved = resolveTlonAccount(cfg as MoltbotConfig, accountId ?? undefined);
       const ship = setupInput.ship?.trim() || resolved.ship;
       const url = setupInput.url?.trim() || resolved.url;
       const code = setupInput.code?.trim() || resolved.code;
@@ -278,7 +354,7 @@ export const tlonPlugin: ChannelPlugin = {
     },
     applyAccountConfig: ({ cfg, accountId, input }) =>
       applyTlonSetupConfig({
-        cfg: cfg as OpenClawConfig,
+        cfg: cfg as MoltbotConfig,
         accountId,
         input: input as TlonSetupInput,
       }),

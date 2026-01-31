@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk";
+import type { MoltbotConfig } from "openclaw/plugin-sdk";
 
 export type TlonResolvedAccount = {
   accountId: string;
@@ -10,11 +10,15 @@ export type TlonResolvedAccount = {
   code: string | null;
   groupChannels: string[];
   dmAllowlist: string[];
+  /** Ships allowed to invite us to groups (security: prevent malicious group invites) */
+  groupInviteAllowlist: string[];
   autoDiscoverChannels: boolean | null;
   showModelSignature: boolean | null;
+  autoAcceptDmInvites: boolean | null;
+  autoAcceptGroupInvites: boolean | null;
 };
 
-export function resolveTlonAccount(cfg: OpenClawConfig, accountId?: string | null): TlonResolvedAccount {
+export function resolveTlonAccount(cfg: MoltbotConfig, accountId?: string | null): TlonResolvedAccount {
   const base = cfg.channels?.tlon as
     | {
         name?: string;
@@ -24,8 +28,11 @@ export function resolveTlonAccount(cfg: OpenClawConfig, accountId?: string | nul
         code?: string;
         groupChannels?: string[];
         dmAllowlist?: string[];
+        groupInviteAllowlist?: string[];
         autoDiscoverChannels?: boolean;
         showModelSignature?: boolean;
+        autoAcceptDmInvites?: boolean;
+        autoAcceptGroupInvites?: boolean;
         accounts?: Record<string, Record<string, unknown>>;
       }
     | undefined;
@@ -41,8 +48,11 @@ export function resolveTlonAccount(cfg: OpenClawConfig, accountId?: string | nul
       code: null,
       groupChannels: [],
       dmAllowlist: [],
+      groupInviteAllowlist: [],
       autoDiscoverChannels: null,
       showModelSignature: null,
+      autoAcceptDmInvites: null,
+      autoAcceptGroupInvites: null,
     };
   }
 
@@ -54,10 +64,15 @@ export function resolveTlonAccount(cfg: OpenClawConfig, accountId?: string | nul
   const code = (account?.code ?? base.code ?? null) as string | null;
   const groupChannels = (account?.groupChannels ?? base.groupChannels ?? []) as string[];
   const dmAllowlist = (account?.dmAllowlist ?? base.dmAllowlist ?? []) as string[];
+  const groupInviteAllowlist = (account?.groupInviteAllowlist ?? base.groupInviteAllowlist ?? []) as string[];
   const autoDiscoverChannels =
     (account?.autoDiscoverChannels ?? base.autoDiscoverChannels ?? null) as boolean | null;
   const showModelSignature =
     (account?.showModelSignature ?? base.showModelSignature ?? null) as boolean | null;
+  const autoAcceptDmInvites =
+    (account?.autoAcceptDmInvites ?? base.autoAcceptDmInvites ?? null) as boolean | null;
+  const autoAcceptGroupInvites =
+    (account?.autoAcceptGroupInvites ?? base.autoAcceptGroupInvites ?? null) as boolean | null;
   const configured = Boolean(ship && url && code);
 
   return {
@@ -70,12 +85,15 @@ export function resolveTlonAccount(cfg: OpenClawConfig, accountId?: string | nul
     code,
     groupChannels,
     dmAllowlist,
+    groupInviteAllowlist,
     autoDiscoverChannels,
     showModelSignature,
+    autoAcceptDmInvites,
+    autoAcceptGroupInvites,
   };
 }
 
-export function listTlonAccountIds(cfg: OpenClawConfig): string[] {
+export function listTlonAccountIds(cfg: MoltbotConfig): string[] {
   const base = cfg.channels?.tlon as
     | { ship?: string; accounts?: Record<string, Record<string, unknown>> }
     | undefined;
