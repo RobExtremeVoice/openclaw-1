@@ -91,3 +91,42 @@ export function buildMoonshotModelDefinition(): ModelDefinitionConfig {
     maxTokens: MOONSHOT_DEFAULT_MAX_TOKENS,
   };
 }
+
+export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+export const DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat";
+export const DEEPSEEK_REASONER_MODEL_ID = "deepseek-reasoner";
+export const DEEPSEEK_DEFAULT_MODEL_REF = `deepseek/${DEEPSEEK_CHAT_MODEL_ID}`;
+export const DEEPSEEK_REASONER_MODEL_REF = `deepseek/${DEEPSEEK_REASONER_MODEL_ID}`;
+
+// DeepSeek pricing (per 1M tokens )
+const DEEPSEEK_DEFAULT_COST = {
+  input: 0.28, // Input (Cache Miss)
+  output: 0.42, // Output
+  cacheRead: 0.028, // Input (Cache Hit)
+  cacheWrite: 0.28, // Treat same as regular input for write
+};
+
+export function buildDeepSeekModelDefinition(modelId: string): ModelDefinitionConfig {
+  if (modelId === DEEPSEEK_CHAT_MODEL_ID) {
+    return {
+      id: DEEPSEEK_CHAT_MODEL_ID,
+      name: "DeepSeek Chat (V3.2)",
+      reasoning: false,
+      input: ["text"],
+      cost: DEEPSEEK_DEFAULT_COST,
+      contextWindow: 128000,
+      maxTokens: 8192,
+    };
+  } else if (modelId === DEEPSEEK_REASONER_MODEL_ID) {
+    return {
+      id: DEEPSEEK_REASONER_MODEL_ID,
+      name: "DeepSeek Reasoner (V3.2)",
+      reasoning: true,
+      input: ["text"],
+      cost: DEEPSEEK_DEFAULT_COST,
+      contextWindow: 128000,
+      maxTokens: 64000,
+    };
+  }
+  throw new Error(`Unknown DeepSeek model: ${modelId}`);
+}

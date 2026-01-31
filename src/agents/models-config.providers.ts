@@ -76,6 +76,21 @@ const OLLAMA_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+const DEEPSEEK_API_BASE_URL = "https://api.deepseek.com";
+const DEEPSEEK_CHAT_MODEL_ID = "deepseek-chat";
+const DEEPSEEK_REASONER_MODEL_ID = "deepseek-reasoner";
+const DEEPSEEK_DEFAULT_CONTEXT_WINDOW = 128000;
+const DEEPSEEK_CHAT_MAX_TOKENS = 8192;
+const DEEPSEEK_REASONER_MAX_TOKENS = 64000;
+// DeepSeek pricing (per 1M tokens ) - Updated 2026-01-29
+// https://api-docs.deepseek.com/quick_start/pricing
+const DEEPSEEK_API_COST = {
+  input: 0.28, // Input (Cache Miss ): $0.28 per 1M tokens
+  output: 0.42, // Output: $0.42 per 1M tokens
+  cacheRead: 0.028, // Input (Cache Hit): $0.028 per 1M tokens
+  cacheWrite: 0.28, // Treat same as regular input for write
+};
+
 interface OllamaModel {
   name: string;
   modified_at: string;
@@ -394,6 +409,33 @@ async function buildOllamaProvider(): Promise<ProviderConfig> {
   };
 }
 
+function buildDeepSeekProvider(): ProviderConfig {
+  return {
+    baseUrl: DEEPSEEK_API_BASE_URL,
+    api: "openai-completions",
+    models: [
+      {
+        id: DEEPSEEK_CHAT_MODEL_ID,
+        name: "DeepSeek Chat (V3.2)",
+        reasoning: false,
+        input: ["text"],
+        cost: DEEPSEEK_API_COST,
+        contextWindow: DEEPSEEK_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: DEEPSEEK_CHAT_MAX_TOKENS,
+      },
+      {
+        id: DEEPSEEK_REASONER_MODEL_ID,
+        name: "DeepSeek Reasoner (V3.2)",
+        reasoning: true,
+        input: ["text"],
+        cost: DEEPSEEK_API_COST,
+        contextWindow: DEEPSEEK_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: DEEPSEEK_REASONER_MAX_TOKENS,
+      },
+    ],
+  };
+}
+
 export async function resolveImplicitProviders(params: {
   agentDir: string;
 }): Promise<ModelsConfig["providers"]> {
@@ -459,6 +501,14 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
   if (ollamaKey) {
     providers.ollama = { ...(await buildOllamaProvider()), apiKey: ollamaKey };
+  }
+
+  // DeepSeek provider
+  const deepseekKey =
+    resolveEnvApiKeyVarName("deepseek") ??
+    resolveApiKeyFromProfiles({ provider: "deepseek", store: authStore });
+  if (deepseekKey) {
+    providers.deepseek = { ...buildDeepSeekProvider(), apiKey: deepseekKey };
   }
 
   return providers;
