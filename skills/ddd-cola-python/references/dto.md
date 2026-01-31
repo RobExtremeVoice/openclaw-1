@@ -14,11 +14,11 @@ class Response:
     success: bool = True
     err_code: Optional[str] = None
     err_message: Optional[str] = None
-    
+
     @classmethod
     def build_success(cls) -> "Response":
         return cls(success=True)
-    
+
     @classmethod
     def build_failure(cls, err_code: str, err_message: str) -> "Response":
         return cls(success=False, err_code=err_code, err_message=err_message)
@@ -26,7 +26,7 @@ class Response:
 @dataclass
 class SingleResponse(Response, Generic[T]):
     data: Optional[T] = None
-    
+
     @classmethod
     def of(cls, data: T) -> "SingleResponse[T]":
         return cls(success=True, data=data)
@@ -34,7 +34,7 @@ class SingleResponse(Response, Generic[T]):
 @dataclass
 class MultiResponse(Response, Generic[T]):
     data: List[T] = field(default_factory=list)
-    
+
     @classmethod
     def of(cls, data: List[T]) -> "MultiResponse[T]":
         return cls(success=True, data=data)

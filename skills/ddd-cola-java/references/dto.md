@@ -8,13 +8,13 @@ public class Response extends DTO {
     private boolean success;
     private String errCode;
     private String errMessage;
-    
+
     public static Response buildSuccess() {
         Response response = new Response();
         response.setSuccess(true);
         return response;
     }
-    
+
     public static Response buildFailure(String errCode, String errMessage) {
         Response response = new Response();
         response.setSuccess(false);
@@ -27,7 +27,7 @@ public class Response extends DTO {
 // SingleResponse - Single object response
 public class SingleResponse<T> extends Response {
     private T data;
-    
+
     public static <T> SingleResponse<T> of(T data) {
         SingleResponse<T> response = new SingleResponse<>();
         response.setSuccess(true);
@@ -39,7 +39,7 @@ public class SingleResponse<T> extends Response {
 // MultiResponse - Multiple objects response
 public class MultiResponse<T> extends Response {
     private Collection<T> data;
-    
+
     public static <T> MultiResponse<T> of(Collection<T> data) {
         MultiResponse<T> response = new MultiResponse<>();
         response.setSuccess(true);
@@ -63,7 +63,7 @@ public class PageResponse<T> extends Response {
 // client/dto/command/UserAddCmd.java
 public class UserAddCmd extends Command {
     private UserCO userCO;
-    
+
     public UserCO getUserCO() { return userCO; }
     public void setUserCO(UserCO userCO) { this.userCO = userCO; }
 }
@@ -77,7 +77,7 @@ public class UserListQry extends Query {
     private String keyword;
     private int pageIndex = 1;
     private int pageSize = 10;
-    
+
     // getters and setters
 }
 ```

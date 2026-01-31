@@ -28,14 +28,14 @@ from domain.user.entity import User
 class UserAddCmdExe:
     def __init__(self, user_gateway: UserGateway):
         self.user_gateway = user_gateway
-    
+
     def execute(self, cmd: UserAddCmd) -> Response:
         if not cmd.user_co.email:
             return Response.build_failure("PARAM_ERROR", "Email cannot be empty")
-        
+
         if self.user_gateway.exists_by_email(cmd.user_co.email):
             return Response.build_failure("EMAIL_EXISTS", "Email already exists")
-        
+
         user = User(name=cmd.user_co.name, email=cmd.user_co.email)
         self.user_gateway.save(user)
         return Response.build_success()
@@ -55,7 +55,7 @@ class UserListQryExe:
     def __init__(self, user_gateway: UserGateway, convertor: UserConvertor):
         self.user_gateway = user_gateway
         self.convertor = convertor
-    
+
     def execute(self, qry: UserListQry) -> MultiResponse[UserCO]:
         users = self.user_gateway.list_by_condition(
             qry.keyword, qry.page_index, qry.page_size
@@ -89,11 +89,11 @@ class UserService:
     def __init__(self, user_add_cmd_exe, user_list_qry_exe):
         self.user_add_cmd_exe = user_add_cmd_exe
         self.user_list_qry_exe = user_list_qry_exe
-    
+
     @catch_and_log
     def add_user(self, cmd):
         return self.user_add_cmd_exe.execute(cmd)
-    
+
     @catch_and_log
     def list_users(self, qry):
         return self.user_list_qry_exe.execute(qry)

@@ -2,7 +2,7 @@
 name: ddd-cola-java
 description: Java COLA Architecture Guide - Alibaba's Clean Object-Oriented and Layered Architecture framework. For DDD layered architecture design, code structure standards, and application architecture refactoring in Java/Spring Boot projects. Triggers on COLA, Java DDD, Spring Boot architecture, layered architecture, clean architecture, hexagonal architecture, onion architecture, code layering, module organization, Gateway pattern, Repository pattern, CQRS, architecture refactoring, separation of concerns, Maven multi-module. Automatically applies COLA directory structure and naming conventions when creating Java files.
 homepage: https://github.com/alibaba/COLA
-metadata: {"openclaw":{"emoji":"☕"}}
+metadata: { "openclaw": { "emoji": "☕" } }
 ---
 
 # Java COLA Architecture
@@ -47,13 +47,13 @@ Adapter → App → Domain ← Infrastructure
                Client
 ```
 
-| Layer | Responsibility | Implementation |
-|-------|----------------|----------------|
-| **Adapter** | Receive external requests | Controller, Scheduler, Consumer |
-| **App** | Use case orchestration | ServiceImpl, CmdExe, QryExe |
-| **Domain** | Core business logic | Entity, ValueObject, Gateway, Ability |
-| **Infrastructure** | Technical implementation | GatewayImpl, Mapper, Config |
-| **Client** | DTO definitions | Command, Query, CO, ServiceI |
+| Layer              | Responsibility            | Implementation                        |
+| ------------------ | ------------------------- | ------------------------------------- |
+| **Adapter**        | Receive external requests | Controller, Scheduler, Consumer       |
+| **App**            | Use case orchestration    | ServiceImpl, CmdExe, QryExe           |
+| **Domain**         | Core business logic       | Entity, ValueObject, Gateway, Ability |
+| **Infrastructure** | Technical implementation  | GatewayImpl, Mapper, Config           |
+| **Client**         | DTO definitions           | Command, Query, CO, ServiceI          |
 
 ## Directory Structure
 
@@ -86,19 +86,19 @@ project-name/
 
 ## Naming Conventions
 
-| Type | Suffix | Location |
-|------|--------|----------|
-| Command | `Cmd` | client/dto/command |
-| Query | `Qry` | client/dto/query |
-| Command Executor | `CmdExe` | app/command |
-| Query Executor | `QryExe` | app/command/query |
-| Client Object | `CO` | client/dto/clientobject |
-| Data Object | `DO` | infrastructure |
-| Service Interface | `ServiceI` | client/api |
-| Service Implementation | `ServiceImpl` | app/service |
-| Gateway Interface | `Gateway` | domain/gateway |
+| Type                   | Suffix        | Location                   |
+| ---------------------- | ------------- | -------------------------- |
+| Command                | `Cmd`         | client/dto/command         |
+| Query                  | `Qry`         | client/dto/query           |
+| Command Executor       | `CmdExe`      | app/command                |
+| Query Executor         | `QryExe`      | app/command/query          |
+| Client Object          | `CO`          | client/dto/clientobject    |
+| Data Object            | `DO`          | infrastructure             |
+| Service Interface      | `ServiceI`    | client/api                 |
+| Service Implementation | `ServiceImpl` | app/service                |
+| Gateway Interface      | `Gateway`     | domain/gateway             |
 | Gateway Implementation | `GatewayImpl` | infrastructure/gatewayimpl |
-| Converter | `Convertor` | infrastructure/convertor |
+| Converter              | `Convertor`   | infrastructure/convertor   |
 
 ## Quick Project Setup
 
@@ -120,6 +120,7 @@ mvn archetype:generate \
 ```
 
 Generated structure:
+
 ```
 my-web-app/
 ├── my-web-app-adapter/      # Controller, schedulers, message listeners
@@ -146,6 +147,7 @@ mvn archetype:generate \
 ```
 
 Generated structure:
+
 ```
 my-service/
 ├── my-service-app/          # Service implementation, executors
@@ -157,20 +159,21 @@ my-service/
 
 ## COLA Components
 
-| Component | Function |
-|-----------|----------|
-| `cola-component-dto` | Response, Command, Query, PageResponse |
-| `cola-component-exception` | BizException, SysException, ErrorCode |
-| `cola-component-catchlog-starter` | @CatchAndLog exception catching and logging |
+| Component                          | Function                                           |
+| ---------------------------------- | -------------------------------------------------- |
+| `cola-component-dto`               | Response, Command, Query, PageResponse             |
+| `cola-component-exception`         | BizException, SysException, ErrorCode              |
+| `cola-component-catchlog-starter`  | @CatchAndLog exception catching and logging        |
 | `cola-component-extension-starter` | Extension point mechanism (multi-business support) |
-| `cola-component-statemachine` | State machine (order flow, etc.) |
-| `cola-component-domain-starter` | Spring-managed domain entities |
-| `cola-component-ruleengine` | Rule engine |
-| `cola-component-test-container` | Test container |
+| `cola-component-statemachine`      | State machine (order flow, etc.)                   |
+| `cola-component-domain-starter`    | Spring-managed domain entities                     |
+| `cola-component-ruleengine`        | Rule engine                                        |
+| `cola-component-test-container`    | Test container                                     |
 
 ## Code Templates
 
 For detailed code examples, see:
+
 - **DTO and Response**: [references/dto.md](references/dto.md)
 - **Service and Executors**: [references/service.md](references/service.md)
 - **Gateway Pattern**: [references/gateway.md](references/gateway.md)

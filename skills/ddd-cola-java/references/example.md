@@ -7,20 +7,20 @@
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
-    
+
     @Autowired
     private UserServiceI userService;
-    
+
     @PostMapping
     public Response addUser(@RequestBody UserAddCmd cmd) {
         return userService.addUser(cmd);
     }
-    
+
     @GetMapping
     public MultiResponse<UserCO> listUsers(UserListQry qry) {
         return userService.listUsers(qry);
     }
-    
+
     @GetMapping("/{id}")
     public SingleResponse<UserCO> getUser(@PathVariable Long id) {
         UserGetQry qry = new UserGetQry();
@@ -125,7 +125,7 @@ throw new SysException("DATABASE_ERROR", "Database connection failed");
 public enum ErrorCode implements ErrorCodeI {
     USER_NOT_FOUND("USER_NOT_FOUND", "User not found"),
     EMAIL_EXISTS("EMAIL_EXISTS", "Email already exists");
-    
+
     private String errCode;
     private String errDesc;
 }
@@ -134,7 +134,7 @@ public enum ErrorCode implements ErrorCodeI {
 ## State Machine
 
 ```java
-StateMachineBuilder<OrderState, OrderEvent, Order> builder = 
+StateMachineBuilder<OrderState, OrderEvent, Order> builder =
     StateMachineBuilderFactory.create();
 
 builder.externalTransition()
@@ -144,7 +144,7 @@ builder.externalTransition()
     .when(checkCondition())
     .perform(doAction());
 
-StateMachine<OrderState, OrderEvent, Order> stateMachine = 
+StateMachine<OrderState, OrderEvent, Order> stateMachine =
     builder.build("orderStateMachine");
 
 // Trigger state transition
@@ -172,7 +172,7 @@ public class VipOrderExt implements OrderExtPt {
 @Autowired
 private ExtensionExecutor extensionExecutor;
 
-extensionExecutor.executeVoid(OrderExtPt.class, 
-    BizScenario.valueOf("vip", "order"), 
+extensionExecutor.executeVoid(OrderExtPt.class,
+    BizScenario.valueOf("vip", "order"),
     ext -> ext.beforeCreate(order));
 ```

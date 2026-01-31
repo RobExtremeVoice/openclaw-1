@@ -2,7 +2,7 @@
 name: ddd-cola-python
 description: Python COLA Architecture Guide - Adapting Alibaba's Clean Object-Oriented and Layered Architecture to Python/Flask/FastAPI projects. For Python backend DDD layered architecture design, code structure standards, and application architecture refactoring. Triggers on Python DDD, Flask architecture, FastAPI architecture, Python layered architecture, clean architecture, hexagonal architecture, onion architecture, COLA, code layering, module organization, Gateway pattern, Repository pattern, CQRS, architecture refactoring, separation of concerns. Automatically applies COLA directory structure and naming conventions when creating Python files.
 homepage: https://github.com/alibaba/COLA
-metadata: {"openclaw":{"emoji":"🐍"}}
+metadata: { "openclaw": { "emoji": "🐍" } }
 ---
 
 # Python COLA Architecture
@@ -17,13 +17,13 @@ Adapter → Application → Domain ← Infrastructure
                      Client
 ```
 
-| Layer | Responsibility | Python Implementation |
-|-------|----------------|----------------------|
-| **Adapter** | Receive external requests | Flask Blueprint / FastAPI Router |
-| **Application** | Use case orchestration | Service, CmdExe, QryExe |
-| **Domain** | Core business logic | Entity, ValueObject, Gateway interface |
-| **Infrastructure** | Technical implementation | Gateway implementation, SQLAlchemy |
-| **Client** | DTO definitions | Command, Query, CO |
+| Layer              | Responsibility            | Python Implementation                  |
+| ------------------ | ------------------------- | -------------------------------------- |
+| **Adapter**        | Receive external requests | Flask Blueprint / FastAPI Router       |
+| **Application**    | Use case orchestration    | Service, CmdExe, QryExe                |
+| **Domain**         | Core business logic       | Entity, ValueObject, Gateway interface |
+| **Infrastructure** | Technical implementation  | Gateway implementation, SQLAlchemy     |
+| **Client**         | DTO definitions           | Command, Query, CO                     |
 
 ## Directory Structure
 
@@ -52,18 +52,18 @@ project/
 
 ## Naming Conventions
 
-| Type | Suffix | Location |
-|------|--------|----------|
-| Command | `_cmd` | client/dto/command |
-| Query | `_qry` | client/dto/query |
-| Command Executor | `_cmd_exe` | application/command |
-| Query Executor | `_qry_exe` | application/query |
-| Client Object | `_co` | client/dto/co |
-| Service Interface | `_service_i` | client/api |
-| Service Implementation | `_service` | application/service |
-| Gateway Interface | `_gateway` | domain/gateway |
+| Type                   | Suffix          | Location                    |
+| ---------------------- | --------------- | --------------------------- |
+| Command                | `_cmd`          | client/dto/command          |
+| Query                  | `_qry`          | client/dto/query            |
+| Command Executor       | `_cmd_exe`      | application/command         |
+| Query Executor         | `_qry_exe`      | application/query           |
+| Client Object          | `_co`           | client/dto/co               |
+| Service Interface      | `_service_i`    | client/api                  |
+| Service Implementation | `_service`      | application/service         |
+| Gateway Interface      | `_gateway`      | domain/gateway              |
 | Gateway Implementation | `_gateway_impl` | infrastructure/gateway_impl |
-| Converter | `_convertor` | infrastructure/convertor |
+| Converter              | `_convertor`    | infrastructure/convertor    |
 
 ## Core Principles
 
@@ -74,6 +74,7 @@ project/
 ## Code Templates
 
 For detailed code examples, see:
+
 - **Response and DTO**: [references/dto.md](references/dto.md)
 - **Service and Executors**: [references/service.md](references/service.md)
 - **Gateway Pattern**: [references/gateway.md](references/gateway.md)
@@ -90,10 +91,10 @@ For detailed code examples, see:
 
 ## Python vs Java Comparison
 
-| Java | Python |
-|------|--------|
-| `interface` | `Protocol` or `ABC` |
-| `@Autowired` | Constructor injection |
-| `@CatchAndLog` | `@catch_and_log` decorator |
-| `@Data` | `@dataclass` |
+| Java              | Python                           |
+| ----------------- | -------------------------------- |
+| `interface`       | `Protocol` or `ABC`              |
+| `@Autowired`      | Constructor injection            |
+| `@CatchAndLog`    | `@catch_and_log` decorator       |
+| `@Data`           | `@dataclass`                     |
 | `@RestController` | Flask Blueprint / FastAPI Router |

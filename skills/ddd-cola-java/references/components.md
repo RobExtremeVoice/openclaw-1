@@ -2,16 +2,16 @@
 
 ## Components Overview
 
-| Component | Maven ArtifactId | Function |
-|-----------|------------------|----------|
-| DTO Component | `cola-component-dto` | Response, Command, Query, PageResponse |
-| Exception Component | `cola-component-exception` | BizException, SysException, ErrorCode |
-| CatchLog Component | `cola-component-catchlog-starter` | @CatchAndLog exception catching and logging |
-| Extension Component | `cola-component-extension-starter` | Extension point mechanism |
-| StateMachine Component | `cola-component-statemachine` | State machine |
-| Domain Component | `cola-component-domain-starter` | Spring-managed domain entities |
-| RuleEngine Component | `cola-component-ruleengine` | Rule engine |
-| Test Component | `cola-component-test-container` | Test container |
+| Component              | Maven ArtifactId                   | Function                                    |
+| ---------------------- | ---------------------------------- | ------------------------------------------- |
+| DTO Component          | `cola-component-dto`               | Response, Command, Query, PageResponse      |
+| Exception Component    | `cola-component-exception`         | BizException, SysException, ErrorCode       |
+| CatchLog Component     | `cola-component-catchlog-starter`  | @CatchAndLog exception catching and logging |
+| Extension Component    | `cola-component-extension-starter` | Extension point mechanism                   |
+| StateMachine Component | `cola-component-statemachine`      | State machine                               |
+| Domain Component       | `cola-component-domain-starter`    | Spring-managed domain entities              |
+| RuleEngine Component   | `cola-component-ruleengine`        | Rule engine                                 |
+| Test Component         | `cola-component-test-container`    | Test container                              |
 
 ---
 
@@ -88,13 +88,13 @@ public enum ErrorCode implements ErrorCodeI {
     USER_NOT_FOUND("USER_NOT_FOUND", "User not found"),
     EMAIL_EXISTS("EMAIL_EXISTS", "Email already exists"),
     PARAM_ERROR("PARAM_ERROR", "Parameter error");
-    
+
     private String errCode;
     private String errDesc;
-    
+
     @Override
     public String getErrCode() { return errCode; }
-    
+
     @Override
     public String getErrDesc() { return errDesc; }
 }
@@ -120,7 +120,7 @@ throw new BizException(ErrorCode.USER_NOT_FOUND);
 @Service
 @CatchAndLog  // Automatically catch exceptions and log
 public class UserServiceImpl implements UserServiceI {
-    
+
     @Override
     public Response addUser(UserAddCmd cmd) {
         // BizException → Response.buildFailure()
@@ -162,7 +162,7 @@ public class NormalOrderExt implements OrderExtPt {
     public void beforeCreate(Order order) {
         // Normal order logic
     }
-    
+
     @Override
     public BigDecimal calculateDiscount(Order order) {
         return BigDecimal.ZERO;
@@ -176,7 +176,7 @@ public class VipOrderExt implements OrderExtPt {
     public void beforeCreate(Order order) {
         // VIP order logic
     }
-    
+
     @Override
     public BigDecimal calculateDiscount(Order order) {
         return order.getAmount().multiply(new BigDecimal("0.1")); // 10% discount
@@ -189,25 +189,25 @@ public class VipOrderExt implements OrderExtPt {
 ```java
 @Service
 public class OrderServiceImpl {
-    
+
     @Autowired
     private ExtensionExecutor extensionExecutor;
-    
+
     public void createOrder(Order order, String bizId) {
         // Execute extension point (no return value)
         extensionExecutor.executeVoid(
-            OrderExtPt.class, 
+            OrderExtPt.class,
             BizScenario.valueOf(bizId),
             ext -> ext.beforeCreate(order)
         );
-        
+
         // Execute extension point (with return value)
         BigDecimal discount = extensionExecutor.execute(
             OrderExtPt.class,
             BizScenario.valueOf(bizId),
             ext -> ext.calculateDiscount(order)
         );
-        
+
         order.setDiscount(discount);
         orderRepository.save(order);
     }
@@ -257,12 +257,12 @@ public enum OrderEvent {
 ```java
 @Configuration
 public class OrderStateMachineConfig {
-    
+
     @Bean
     public StateMachine<OrderState, OrderEvent, Order> orderStateMachine() {
-        StateMachineBuilder<OrderState, OrderEvent, Order> builder = 
+        StateMachineBuilder<OrderState, OrderEvent, Order> builder =
             StateMachineBuilderFactory.create();
-        
+
         // INIT -> PAID (on PAY)
         builder.externalTransition()
             .from(OrderState.INIT)
@@ -270,35 +270,35 @@ public class OrderStateMachineConfig {
             .on(OrderEvent.PAY)
             .when(this::checkPayCondition)
             .perform(this::doPayAction);
-        
+
         // PAID -> SHIPPED (on SHIP)
         builder.externalTransition()
             .from(OrderState.PAID)
             .to(OrderState.SHIPPED)
             .on(OrderEvent.SHIP)
             .perform(this::doShipAction);
-        
+
         // SHIPPED -> RECEIVED (on RECEIVE)
         builder.externalTransition()
             .from(OrderState.SHIPPED)
             .to(OrderState.RECEIVED)
             .on(OrderEvent.RECEIVE)
             .perform(this::doReceiveAction);
-        
+
         // Any state -> CANCELLED (on CANCEL)
         builder.externalTransitions()
             .fromAmong(OrderState.INIT, OrderState.PAID)
             .to(OrderState.CANCELLED)
             .on(OrderEvent.CANCEL)
             .perform(this::doCancelAction);
-        
+
         return builder.build("orderStateMachine");
     }
-    
+
     private boolean checkPayCondition(Order order) {
         return order.getAmount().compareTo(BigDecimal.ZERO) > 0;
     }
-    
+
     private void doPayAction(OrderState from, OrderState to, OrderEvent event, Order order) {
         order.setPaidTime(LocalDateTime.now());
         log.info("Order {} paid", order.getId());
@@ -311,10 +311,10 @@ public class OrderStateMachineConfig {
 ```java
 @Service
 public class OrderServiceImpl {
-    
+
     @Autowired
     private StateMachine<OrderState, OrderEvent, Order> orderStateMachine;
-    
+
     public void payOrder(Order order) {
         // Trigger state transition
         OrderState newState = orderStateMachine.fireEvent(
@@ -322,7 +322,7 @@ public class OrderServiceImpl {
             OrderEvent.PAY,    // Event
             order              // Context
         );
-        
+
         order.setState(newState);
         orderRepository.save(order);
     }
@@ -361,13 +361,13 @@ public class DomainConfig {
 // Domain entities can inject Spring Beans
 @Entity
 public class Order {
-    
+
     @Autowired
     private OrderRepository orderRepository;
-    
+
     @Autowired
     private EventPublisher eventPublisher;
-    
+
     public void save() {
         orderRepository.save(this);
         eventPublisher.publish(new OrderCreatedEvent(this));
@@ -397,9 +397,9 @@ public class Order {
 
 ## Component Selection Guide
 
-| Scenario | Recommended Components |
-|----------|------------------------|
-| Basic project | dto + exception + catchlog |
-| Multi-business lines | + extension |
-| Complex state flow | + statemachine |
-| Domain-driven design | + domain |
+| Scenario             | Recommended Components     |
+| -------------------- | -------------------------- |
+| Basic project        | dto + exception + catchlog |
+| Multi-business lines | + extension                |
+| Complex state flow   | + statemachine             |
+| Domain-driven design | + domain                   |
