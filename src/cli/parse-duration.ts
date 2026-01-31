@@ -37,3 +37,9 @@ export function parseDurationMs(raw: string, opts?: DurationMsParseOptions): num
   }
   return ms;
 }
+
+/**
+ * Alias for parseDurationMs
+ * @deprecated Use parseDurationMs instead
+ */
+export const parseDuration = parseDurationMs;

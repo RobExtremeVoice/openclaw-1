@@ -37,6 +37,7 @@ Docs: https://docs.openclaw.ai
 ## 2026.1.29
 
 ### Changes
+- Security: add comprehensive security shield with rate limiting, intrusion detection, IP blocklist/allowlist, firewall integration (iptables/ufw), Telegram alerting, and security event logging. Enabled by default (opt-out mode).
 - Rebrand: rename the npm package/CLI to `openclaw`, add a `openclaw` compatibility shim, and move extensions to the `@openclaw/*` scope.
 - Onboarding: strengthen security warning copy for beta + access control expectations.
 - Onboarding: add Venice API key to non-interactive flow. (#1893) Thanks @jonisjongithub.

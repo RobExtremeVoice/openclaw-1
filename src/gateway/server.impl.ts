@@ -58,6 +58,9 @@ import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { NodeRegistry } from "./node-registry.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
 import { safeParseJson } from "./server-methods/nodes.helpers.js";
+import { initSecurityShield } from "../security/shield.js";
+import { initFirewallManager } from "../security/firewall/manager.js";
+import { initAlertManager } from "../security/alerting/manager.js";
 import { loadGatewayPlugins } from "./server-plugins.js";
 import { createGatewayReloadHandlers } from "./server-reload-handlers.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
@@ -215,6 +218,24 @@ export async function startGatewayServer(
     startDiagnosticHeartbeat();
   }
   setGatewaySigusr1RestartPolicy({ allowExternal: cfgAtStart.commands?.restart === true });
+
+  // Initialize security shield with configuration
+  initSecurityShield(cfgAtStart.security?.shield);
+
+  // Initialize firewall integration
+  if (cfgAtStart.security?.shield?.ipManagement?.firewall?.enabled) {
+    await initFirewallManager({
+      enabled: true,
+      backend: cfgAtStart.security.shield.ipManagement.firewall.backend ?? "iptables",
+      dryRun: false,
+    });
+  }
+
+  // Initialize alert manager
+  if (cfgAtStart.security?.alerting) {
+    initAlertManager(cfgAtStart.security.alerting);
+  }
+
   initSubagentRegistry();
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);

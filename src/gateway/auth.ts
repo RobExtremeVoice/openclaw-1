@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import type { GatewayAuthConfig, GatewayTailscaleMode } from "../config/config.js";
 import { readTailscaleWhoisIdentity, type TailscaleWhoisIdentity } from "../infra/tailscale.js";
 import { isTrustedProxyAddress, parseForwardedForClientIp, resolveGatewayClientIp } from "./net.js";
+import { checkAuthRateLimit, logAuthFailure } from "../security/middleware.js";
 export type ResolvedGatewayAuthMode = "token" | "password";
 
 export type ResolvedGatewayAuth = {
@@ -241,10 +242,22 @@ export async function authorizeGatewayConnect(params: {
   req?: IncomingMessage;
   trustedProxies?: string[];
   tailscaleWhois?: TailscaleWhoisLookup;
+  deviceId?: string;
 }): Promise<GatewayAuthResult> {
-  const { auth, connectAuth, req, trustedProxies } = params;
+  const { auth, connectAuth, req, trustedProxies, deviceId } = params;
   const tailscaleWhois = params.tailscaleWhois ?? readTailscaleWhoisIdentity;
   const localDirect = isLocalDirectRequest(req, trustedProxies);
+
+  // Security: Check auth rate limit
+  if (req) {
+    const rateCheck = checkAuthRateLimit(req, deviceId);
+    if (!rateCheck.allowed) {
+      return {
+        ok: false,
+        reason: rateCheck.reason ?? "rate_limit_exceeded",
+      };
+    }
+  }
 
   if (auth.allowTailscale && !localDirect) {
     const tailscaleCheck = await resolveVerifiedTailscaleUser({
@@ -268,6 +281,10 @@ export async function authorizeGatewayConnect(params: {
       return { ok: false, reason: "token_missing" };
     }
     if (!safeEqual(connectAuth.token, auth.token)) {
+      // Security: Log failed auth for intrusion detection
+      if (req) {
+        logAuthFailure(req, "token_mismatch", deviceId);
+      }
       return { ok: false, reason: "token_mismatch" };
     }
     return { ok: true, method: "token" };
@@ -282,10 +299,18 @@ export async function authorizeGatewayConnect(params: {
       return { ok: false, reason: "password_missing" };
     }
     if (!safeEqual(password, auth.password)) {
+      // Security: Log failed auth for intrusion detection
+      if (req) {
+        logAuthFailure(req, "password_mismatch", deviceId);
+      }
       return { ok: false, reason: "password_mismatch" };
     }
     return { ok: true, method: "password" };
   }
 
+  // Security: Log unauthorized attempts
+  if (req) {
+    logAuthFailure(req, "unauthorized", deviceId);
+  }
   return { ok: false, reason: "unauthorized" };
 }
