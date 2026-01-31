@@ -1,5 +1,6 @@
 import { formatLocationText, type NormalizedLocation } from "../../channels/location.js";
 import type { TelegramAccountConfig } from "../../config/types.telegram.js";
+import { lookupMediaByMessageId } from "../../media/store.js";
 import type {
   TelegramForwardChat,
   TelegramForwardOrigin,
@@ -188,13 +189,26 @@ export type TelegramReplyTarget = {
   sender: string;
   body: string;
   kind: "reply" | "quote";
+  /** Path to cached media file from replied-to message, if available. */
+  mediaPath?: string;
+  /** Content type of the cached media. */
+  mediaType?: string;
 };
 
-export function describeReplyTarget(msg: TelegramMessage): TelegramReplyTarget | null {
+/**
+ * Extract reply/quote target info from a Telegram message.
+ * If the replied-to message contained media, attempts to look up the cached file.
+ */
+export async function describeReplyTarget(
+  msg: TelegramMessage,
+  chatId?: string | number,
+): Promise<TelegramReplyTarget | null> {
   const reply = msg.reply_to_message;
   const quote = msg.quote;
   let body = "";
   let kind: TelegramReplyTarget["kind"] = "reply";
+  let mediaPath: string | undefined;
+  let mediaType: string | undefined;
 
   if (quote?.text) {
     body = quote.text.trim();
@@ -207,6 +221,10 @@ export function describeReplyTarget(msg: TelegramMessage): TelegramReplyTarget |
     const replyBody = (reply.text ?? reply.caption ?? "").trim();
     body = replyBody;
     if (!body) {
+      // Check for media and attempt to look up cached file
+      const replyMessageId = reply.message_id;
+      const effectiveChatId = chatId ?? msg.chat?.id;
+
       if (reply.photo) {
         body = "<media:image>";
       } else if (reply.video) {
@@ -219,6 +237,23 @@ export function describeReplyTarget(msg: TelegramMessage): TelegramReplyTarget |
         const locationData = extractTelegramLocation(reply);
         if (locationData) {
           body = formatLocationText(locationData);
+        }
+      }
+
+      // Look up cached media if we have message context
+      if (body.startsWith("<media:") && effectiveChatId != null && replyMessageId != null) {
+        try {
+          const cached = await lookupMediaByMessageId(
+            "telegram",
+            effectiveChatId,
+            replyMessageId,
+          );
+          if (cached) {
+            mediaPath = cached.path;
+            mediaType = cached.contentType;
+          }
+        } catch {
+          // Ignore lookup errors - media may have been cleaned up
         }
       }
     }
@@ -234,6 +269,8 @@ export function describeReplyTarget(msg: TelegramMessage): TelegramReplyTarget |
     sender: senderLabel,
     body,
     kind,
+    mediaPath,
+    mediaType,
   };
 }
 
