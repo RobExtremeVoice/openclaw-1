@@ -320,6 +320,12 @@ importers:
 
   extensions/imessage: {}
 
+  extensions/kakao:
+    dependencies:
+      openclaw:
+        specifier: workspace:*
+        version: link:../..
+
   extensions/line:
     devDependencies:
       openclaw:

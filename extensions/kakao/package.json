@@ -1,0 +1,33 @@
+{
+  "name": "@openclaw/kakao",
+  "version": "2026.1.30",
+  "type": "module",
+  "description": "OpenClaw KakaoTalk channel plugin",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "kakao",
+      "label": "KakaoTalk",
+      "selectionLabel": "KakaoTalk (Open Builder)",
+      "docsPath": "/channels/kakao",
+      "docsLabel": "kakao",
+      "blurb": "Korea's #1 messaging platform via Kakao i Open Builder.",
+      "aliases": [
+        "kk",
+        "kakaotalk"
+      ],
+      "order": 85,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@openclaw/kakao",
+      "localPath": "extensions/kakao",
+      "defaultChoice": "npm"
+    }
+  },
+  "dependencies": {
+    "openclaw": "workspace:*"
+  }
+}
