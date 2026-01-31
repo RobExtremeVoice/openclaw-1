@@ -22,6 +22,7 @@ export {
 
 // Entity/relation extraction
 export {
+  extractAndIndexEntities,
   extractFromChunk,
   persistEntities,
   persistRelations,
@@ -29,6 +30,7 @@ export {
   type ExtractedEntity,
   type ExtractedRelation,
   type ExtractorOptions,
+  type IndexedChunk,
 } from "./extractor.js";
 
 // Entity resolution

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Entity, EntityType, Relation, RelationType, SourceType } from "./schema.js";
 import { generateId } from "./schema.js";
+import { recordProvenance, getDefaultTrustScore } from "../trust/provenance.js";
 
 /**
  * Entity and relation extraction from text chunks.
@@ -228,4 +229,73 @@ export function persistRelations(
   }
 
   return persisted;
+}
+
+/**
+ * Indexed chunk information passed from the memory manager.
+ */
+export interface IndexedChunk {
+  id: string;
+  text: string;
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
+type MemorySource = "memory" | "sessions";
+
+/**
+ * Maps memory source to provenance source type.
+ * - "memory" files are user-curated → user_stated
+ * - "sessions" are conversation transcripts → inferred
+ */
+function mapSourceType(source: MemorySource): SourceType {
+  switch (source) {
+    case "memory":
+      return "user_stated";
+    case "sessions":
+      return "inferred";
+    default:
+      return "inferred";
+  }
+}
+
+/**
+ * Extracts and indexes entities from a batch of chunks.
+ * Called from MemoryIndexManager.indexFile() after chunks are stored.
+ *
+ * This function:
+ * 1. Records provenance for each chunk
+ * 2. Extracts entities and relations from chunk text
+ * 3. Persists entities, relations, and mentions to the KG tables
+ */
+export async function extractAndIndexEntities(
+  db: DatabaseSync,
+  chunks: IndexedChunk[],
+  source: MemorySource,
+): Promise<void> {
+  const sourceType = mapSourceType(source);
+  const trustScore = getDefaultTrustScore(sourceType);
+
+  for (const chunk of chunks) {
+    // Record provenance for this chunk
+    recordProvenance(db, chunk.id, sourceType, chunk.path, trustScore);
+
+    // Extract entities and relations from chunk text
+    const result = await extractFromChunk(chunk.id, chunk.text, {
+      db,
+      sourceType,
+      trustScore,
+    });
+
+    // Persist extracted entities (creates entity_mentions linking to chunk)
+    if (result.entities.length > 0) {
+      persistEntities(db, result.entities, chunk.id, sourceType, trustScore);
+    }
+
+    // Persist extracted relations
+    if (result.relations.length > 0) {
+      persistRelations(db, result.relations, chunk.id, sourceType, trustScore);
+    }
+  }
 }
