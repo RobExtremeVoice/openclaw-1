@@ -16,6 +16,11 @@ import {
   type GroupToolPolicyConfig,
   type ChannelMeta,
   type ReplyPayload,
+  type ChannelOnboardingAdapter,
+  type ChannelOnboardingDmPolicy,
+  type DmPolicy,
+  addWildcardAllowFrom,
+  promptAccountId,
 } from "../../../src/plugin-sdk/index.js";
 
 import { getFeishuRuntime } from "./runtime.js";
@@ -452,6 +457,181 @@ export const feishuPlugin: ChannelPlugin = {
           },
         },
       };
+    },
+  },
+
+  onboarding: {
+    channel: "feishu",
+    getStatus: async ({ cfg }) => {
+      const ids = getFeishuRuntime().channel.feishu.listFeishuAccountIds(cfg);
+      const configured = ids.some((id) => {
+        const acc = getFeishuRuntime().channel.feishu.resolveFeishuAccount({ cfg, accountId: id });
+        return Boolean(acc.appId && acc.appSecret);
+      });
+      return {
+        channel: "feishu",
+        configured,
+        statusLines: [`Feishu: ${configured ? "configured" : "needs credentials"}`],
+        selectionHint: "requires Feishu open platform app",
+        quickstartScore: configured ? 1 : 5,
+      };
+    },
+    configure: async ({ cfg, prompter, accountOverrides, shouldPromptAccountIds }) => {
+      const override = accountOverrides.feishu?.trim();
+      const defaultAccountId = DEFAULT_ACCOUNT_ID;
+      let accountId = override
+        ? getFeishuRuntime().channel.feishu.normalizeAccountId(override)
+        : defaultAccountId;
+
+      if (shouldPromptAccountIds && !override) {
+        accountId = await promptAccountId({
+          cfg,
+          prompter,
+          label: "Feishu",
+          currentId: accountId,
+          listAccountIds: getFeishuRuntime().channel.feishu.listFeishuAccountIds,
+          defaultAccountId,
+        });
+      }
+
+      // Check existing
+      let next = cfg;
+      let existingAppId: string | undefined;
+      let existingAppSecret: string | undefined;
+
+      try {
+        const acc = getFeishuRuntime().channel.feishu.resolveFeishuAccount({ cfg, accountId });
+        existingAppId = acc.appId;
+        existingAppSecret = acc.appSecret;
+      } catch {
+        // ignore
+      }
+
+      if (existingAppId && existingAppSecret) {
+        const keep = await prompter.confirm({
+          message: "Feishu credentials already configured. Keep them?",
+          initialValue: true,
+        });
+        if (keep) {
+          // Ensure enabled
+          return {
+            cfg: feishuPlugin.setup!.applyAccountConfig!({
+              cfg,
+              accountId,
+              input: { appId: existingAppId, appSecret: existingAppSecret },
+            }),
+            accountId,
+          };
+        }
+      }
+
+      await prompter.note(
+        "You need a Feishu Custom App (Enterprise Self-built App).\nCreate one at https://open.feishu.cn/app",
+        "Feishu Setup",
+      );
+
+      const appId = String(
+        await prompter.text({
+          message: "Enter App ID",
+          placeholder: "cli_a...",
+          validate: (v) => (v?.trim().startsWith("cli_") ? undefined : "Should start with cli_"),
+        }),
+      ).trim();
+
+      const appSecret = String(
+        await prompter.text({
+          message: "Enter App Secret",
+          validate: (v) => (v?.trim() ? undefined : "Required"),
+        }),
+      ).trim();
+
+      const encryptKey = String(
+        await prompter.text({
+          message: "Enter Encrypt Key (optional, press Enter to skip)",
+          initialValue: "",
+        }),
+      ).trim();
+
+      // Apply config
+      // We reuse the setup adapter's helper but we need to inject our values
+      // Manually constructing config patch because applyAccountConfig doesn't support encryptKey yet in this snippet
+      // Actually let's use the define logic inline or extend applyAccountConfig.
+      // For now, let's just stick to standard appId/appSecret. If user needs encryptKey they can edit json.
+      // Or we can add it to the account config.
+
+      const namedConfig = applyAccountNameToChannelSection({
+        cfg,
+        channelKey: "feishu",
+        accountId,
+      });
+
+      const accountPatch = {
+        enabled: true,
+        appId,
+        appSecret,
+        ...(encryptKey ? { encryptKey } : {}),
+      };
+
+      if (accountId === DEFAULT_ACCOUNT_ID) {
+        next = {
+          ...namedConfig,
+          channels: {
+            ...namedConfig.channels,
+            feishu: {
+              ...namedConfig.channels?.feishu,
+              ...accountPatch,
+            },
+          },
+        };
+      } else {
+        next = {
+          ...namedConfig,
+          channels: {
+            ...namedConfig.channels,
+            feishu: {
+              ...namedConfig.channels?.feishu,
+              enabled: true,
+              accounts: {
+                ...namedConfig.channels?.feishu?.accounts,
+                [accountId]: {
+                  ...namedConfig.channels?.feishu?.accounts?.[accountId],
+                  ...accountPatch,
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return { cfg: next, accountId };
+    },
+    disable: (cfg) => ({
+      ...cfg,
+      channels: {
+        ...cfg.channels,
+        feishu: { ...cfg.channels?.feishu, enabled: false },
+      },
+    }),
+    dmPolicy: {
+      label: "Feishu",
+      channel: "feishu",
+      policyKey: "channels.feishu.dmPolicy",
+      allowFromKey: "channels.feishu.allowFrom",
+      getCurrent: (cfg) => cfg.channels?.feishu?.dmPolicy ?? "pairing",
+      setPolicy: (cfg, policy: DmPolicy) => {
+        const allowFrom = policy === "open" ? addWildcardAllowFrom(cfg.channels?.feishu?.allowFrom) : undefined;
+        return {
+          ...cfg,
+          channels: {
+            ...cfg.channels,
+            feishu: {
+              ...cfg.channels?.feishu,
+              dmPolicy: policy,
+              ...(allowFrom ? { allowFrom } : {}),
+            }
+          }
+        }
+      },
     },
   },
 
