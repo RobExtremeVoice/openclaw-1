@@ -4,13 +4,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-import { ensureKGSchema, generateId, type Entity } from "./schema.js";
+import { ensureKGSchema, generateId } from "./schema.js";
 import { extractFromChunk, persistEntities, persistRelations } from "./extractor.js";
 import { resolveEntity, mergeEntities, findPotentialDuplicates } from "./resolver.js";
 import {
   findEntity,
   findEntitiesByType,
-  findRelationsBetween,
   findRelatedEntities,
   searchEntities,
   getEntityChunks,
@@ -290,10 +289,10 @@ describe("kg/integration", () => {
       const neighbors = findNeighbors("A", 2, { db });
 
       // 1 hop: B, E
-      expect(neighbors.get(1)?.map((e) => e.name).sort()).toEqual(["B", "E"]);
+      expect(neighbors.get(1)?.map((e) => e.name).toSorted()).toEqual(["B", "E"]);
 
       // 2 hops: C (via B), F (via E)
-      expect(neighbors.get(2)?.map((e) => e.name).sort()).toEqual(["C", "F"]);
+      expect(neighbors.get(2)?.map((e) => e.name).toSorted()).toEqual(["C", "F"]);
     });
 
     it("finds shortest path between entities", () => {

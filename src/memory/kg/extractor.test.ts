@@ -10,7 +10,6 @@ import {
   type ExtractedRelation,
 } from "./extractor.js";
 import { ensureKGSchema } from "./schema.js";
-import { ensureProvenanceSchema } from "../trust/provenance.js";
 
 describe("kg/extractor", () => {
   describe("extractWithPatterns", () => {

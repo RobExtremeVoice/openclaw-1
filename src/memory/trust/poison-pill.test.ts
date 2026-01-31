@@ -137,7 +137,7 @@ describe("trust/poison-pill security", () => {
     it("prevents low-trust content from being used for high-trust operations", () => {
       // Record external doc with low trust
       recordProvenance(db, "chunk1", "external_doc");
-      const provScore = getDefaultTrustScore("external_doc"); // 0.3
+      const _provScore = getDefaultTrustScore("external_doc"); // 0.3, unused but documents expected value
 
       // Try to validate for high-trust operation
       const result = validateTrustLevel(db, "chunk1", 0.7);
