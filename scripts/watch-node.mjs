@@ -5,8 +5,11 @@ import process from "node:process";
 const args = process.argv.slice(2);
 const env = { ...process.env };
 const cwd = process.cwd();
+const compilerOverride = env.OPENCLAW_TS_COMPILER ?? env.CLAWDBOT_TS_COMPILER;
+const compiler = compilerOverride === "tsc" ? "tsc" : "tsgo";
+const projectArgs = ["--project", "tsconfig.json"];
 
-const initialBuild = spawnSync("pnpm", ["build"], {
+const initialBuild = spawnSync("pnpm", ["exec", compiler, ...projectArgs], {
   cwd,
   env,
   stdio: "inherit",
@@ -16,7 +19,12 @@ if (initialBuild.status !== 0) {
   process.exit(initialBuild.status ?? 1);
 }
 
-const compilerProcess = spawn("pnpm", ["tsdown", '--watch', 'src/'], {
+const watchArgs =
+  compiler === "tsc"
+    ? [...projectArgs, "--watch", "--preserveWatchOutput"]
+    : [...projectArgs, "--watch"];
+
+const compilerProcess = spawn("pnpm", ["exec", compiler, ...watchArgs], {
   cwd,
   env,
   stdio: "inherit",
