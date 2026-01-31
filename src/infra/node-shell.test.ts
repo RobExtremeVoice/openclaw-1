@@ -1,40 +1,48 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { buildNodeShellCommand } from "./node-shell.js";
+vi.mock("./windows-shell.js", () => ({
+  POWERSHELL_ARGS: ["-NoProfile", "-NonInteractive", "-Command"],
+  resolvePowerShellPath: () => "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+  wrapPowerShellUtf8Command: (command: string) => `wrapped:${command}`,
+}));
 
 describe("buildNodeShellCommand", () => {
-  it("uses cmd.exe for win32", () => {
+  it("uses PowerShell for win32", async () => {
+    const { buildNodeShellCommand } = await import("./node-shell.js");
     expect(buildNodeShellCommand("echo hi", "win32")).toEqual([
-      "cmd.exe",
-      "/d",
-      "/s",
-      "/c",
-      "echo hi",
+      "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "wrapped:echo hi",
     ]);
   });
 
-  it("uses cmd.exe for windows labels", () => {
+  it("uses PowerShell for windows labels", async () => {
+    const { buildNodeShellCommand } = await import("./node-shell.js");
     expect(buildNodeShellCommand("echo hi", "windows")).toEqual([
-      "cmd.exe",
-      "/d",
-      "/s",
-      "/c",
-      "echo hi",
+      "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "wrapped:echo hi",
     ]);
     expect(buildNodeShellCommand("echo hi", "Windows 11")).toEqual([
-      "cmd.exe",
-      "/d",
-      "/s",
-      "/c",
-      "echo hi",
+      "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "wrapped:echo hi",
     ]);
   });
 
-  it("uses /bin/sh for darwin", () => {
+  it("uses /bin/sh for darwin", async () => {
+    const { buildNodeShellCommand } = await import("./node-shell.js");
     expect(buildNodeShellCommand("echo hi", "darwin")).toEqual(["/bin/sh", "-lc", "echo hi"]);
   });
 
-  it("uses /bin/sh when platform missing", () => {
+  it("uses /bin/sh when platform missing", async () => {
+    const { buildNodeShellCommand } = await import("./node-shell.js");
     expect(buildNodeShellCommand("echo hi")).toEqual(["/bin/sh", "-lc", "echo hi"]);
   });
 });

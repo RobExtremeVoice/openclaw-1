@@ -2,20 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-function resolvePowerShellPath(): string {
-  const systemRoot = process.env.SystemRoot || process.env.WINDIR;
-  if (systemRoot) {
-    const candidate = path.join(
-      systemRoot,
-      "System32",
-      "WindowsPowerShell",
-      "v1.0",
-      "powershell.exe",
-    );
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return "powershell.exe";
-}
+import { POWERSHELL_ARGS, resolvePowerShellPath } from "../infra/windows-shell.js";
 
 export function getShellConfig(): { shell: string; args: string[] } {
   if (process.platform === "win32") {
@@ -26,7 +13,7 @@ export function getShellConfig(): { shell: string; args: string[] } {
     // PowerShell properly captures and redirects their output to stdout.
     return {
       shell: resolvePowerShellPath(),
-      args: ["-NoProfile", "-NonInteractive", "-Command"],
+      args: [...POWERSHELL_ARGS],
     };
   }
 
