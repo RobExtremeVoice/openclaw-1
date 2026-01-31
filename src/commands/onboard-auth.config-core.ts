@@ -1,3 +1,9 @@
+import {
+  buildBasetenModelDefinition,
+  BASETEN_BASE_URL,
+  BASETEN_DEFAULT_MODEL_REF,
+  BASETEN_MODEL_CATALOG,
+} from "../agents/baseten-models.js";
 import { buildXiaomiProvider, XIAOMI_DEFAULT_MODEL_ID } from "../agents/models-config.providers.js";
 import {
   buildSyntheticModelDefinition,
@@ -451,6 +457,83 @@ export function applyVeniceConfig(cfg: OpenClawConfig): OpenClawConfig {
               }
             : undefined),
           primary: VENICE_DEFAULT_MODEL_REF,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Apply Baseten provider configuration without changing the default model.
+ * Registers Baseten models and sets up the provider, but preserves existing model selection.
+ */
+export function applyBasetenProviderConfig(cfg: MoltbotConfig): MoltbotConfig {
+  const models = { ...cfg.agents?.defaults?.models };
+  models[BASETEN_DEFAULT_MODEL_REF] = {
+    ...models[BASETEN_DEFAULT_MODEL_REF],
+    alias: models[BASETEN_DEFAULT_MODEL_REF]?.alias ?? "DeepSeek V3.2",
+  };
+
+  const providers = { ...cfg.models?.providers };
+  const existingProvider = providers.baseten;
+  const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
+  const basetenModels = BASETEN_MODEL_CATALOG.map(buildBasetenModelDefinition);
+  const mergedModels = [
+    ...existingModels,
+    ...basetenModels.filter(
+      (model) => !existingModels.some((existing) => existing.id === model.id),
+    ),
+  ];
+  const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
+    string,
+    unknown
+  > as { apiKey?: string };
+  const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
+  const normalizedApiKey = resolvedApiKey?.trim();
+  providers.baseten = {
+    ...existingProviderRest,
+    baseUrl: BASETEN_BASE_URL,
+    api: "openai-completions",
+    ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
+    models: mergedModels.length > 0 ? mergedModels : basetenModels,
+  };
+
+  return {
+    ...cfg,
+    agents: {
+      ...cfg.agents,
+      defaults: {
+        ...cfg.agents?.defaults,
+        models,
+      },
+    },
+    models: {
+      mode: cfg.models?.mode ?? "merge",
+      providers,
+    },
+  };
+}
+
+/**
+ * Apply Baseten provider configuration AND set Baseten as the default model.
+ * Use this when Baseten is the primary provider choice during onboarding.
+ */
+export function applyBasetenConfig(cfg: MoltbotConfig): MoltbotConfig {
+  const next = applyBasetenProviderConfig(cfg);
+  const existingModel = next.agents?.defaults?.model;
+  return {
+    ...next,
+    agents: {
+      ...next.agents,
+      defaults: {
+        ...next.agents?.defaults,
+        model: {
+          ...(existingModel && "fallbacks" in (existingModel as Record<string, unknown>)
+            ? {
+                fallbacks: (existingModel as { fallbacks?: string[] }).fallbacks,
+              }
+            : undefined),
+          primary: BASETEN_DEFAULT_MODEL_REF,
         },
       },
     },

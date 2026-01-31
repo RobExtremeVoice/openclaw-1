@@ -1037,6 +1037,7 @@
           "providers/minimax",
           "providers/vercel-ai-gateway",
           "providers/openrouter",
+          "providers/baseten",
           "providers/synthetic",
           "providers/opencode",
           "providers/glm",

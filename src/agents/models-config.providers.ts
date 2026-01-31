@@ -8,6 +8,11 @@ import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
+  buildBasetenModelDefinition,
+  BASETEN_BASE_URL,
+  BASETEN_MODEL_CATALOG,
+} from "./baseten-models.js";
+import {
   buildSyntheticModelDefinition,
   SYNTHETIC_BASE_URL,
   SYNTHETIC_MODEL_CATALOG,
@@ -338,6 +343,15 @@ export function buildXiaomiProvider(): ProviderConfig {
   };
 }
 
+function buildBasetenProvider(): ProviderConfig {
+  return {
+    baseUrl: BASETEN_BASE_URL,
+    api: "openai-completions",
+    // Baseten Inference API accepts standard Bearer tokens (OpenAI-compatible)
+    models: BASETEN_MODEL_CATALOG.map(buildBasetenModelDefinition),
+  };
+}
+
 async function buildVeniceProvider(): Promise<ProviderConfig> {
   const models = await discoverVeniceModels();
   return {
@@ -390,6 +404,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
   if (veniceKey) {
     providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
+  }
+
+  const basetenKey =
+    resolveEnvApiKeyVarName("baseten") ??
+    resolveApiKeyFromProfiles({ provider: "baseten", store: authStore });
+  if (basetenKey) {
+    providers.baseten = { ...buildBasetenProvider(), apiKey: basetenKey };
   }
 
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");
