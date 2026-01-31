@@ -8,7 +8,11 @@ import {
   syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings";
-import { observeTopbar, scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
+import {
+  observeTopbar,
+  scheduleChatScroll,
+  scheduleLogsScroll,
+} from "./app-scroll";
 import {
   startLogsPolling,
   startNodesPolling,
@@ -17,6 +21,8 @@ import {
   startDebugPolling,
   stopDebugPolling,
 } from "./app-polling";
+
+import type { UiSettings } from "./storage";
 
 type LifecycleHost = {
   basePath: string;
@@ -31,6 +37,7 @@ type LifecycleHost = {
   logsEntries: unknown[];
   popStateHandler: () => void;
   topbarObserver: ResizeObserver | null;
+  settings: UiSettings;
 };
 
 export function handleConnected(host: LifecycleHost) {
@@ -55,7 +62,9 @@ export function handleConnected(host: LifecycleHost) {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
   }
   if (host.tab === "debug") {
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
+    startDebugPolling(
+      host as unknown as Parameters<typeof startDebugPolling>[0],
+    );
   }
 }
 
@@ -92,14 +101,29 @@ export function handleUpdated(
       changed.has("chatLoading") &&
       changed.get("chatLoading") === true &&
       host.chatLoading === false;
-    scheduleChatScroll(
-      host as unknown as Parameters<typeof scheduleChatScroll>[0],
-      forcedByTab || forcedByLoad || !host.chatHasAutoScrolled,
-    );
+    // Skip auto-scroll during streaming if chatAutoScroll is disabled
+    // Always scroll on tab change or when loading completes
+    const isStreamingUpdate =
+      changed.has("chatStream") ||
+      changed.has("chatMessages") ||
+      changed.has("chatToolMessages");
+    const shouldSkipAutoScroll =
+      !host.settings.chatAutoScroll &&
+      isStreamingUpdate &&
+      !forcedByTab &&
+      !forcedByLoad;
+    if (!shouldSkipAutoScroll) {
+      scheduleChatScroll(
+        host as unknown as Parameters<typeof scheduleChatScroll>[0],
+        forcedByTab || forcedByLoad || !host.chatHasAutoScrolled,
+      );
+    }
   }
   if (
     host.tab === "logs" &&
-    (changed.has("logsEntries") || changed.has("logsAutoFollow") || changed.has("tab"))
+    (changed.has("logsEntries") ||
+      changed.has("logsAutoFollow") ||
+      changed.has("tab"))
   ) {
     if (host.logsAutoFollow && host.logsAtBottom) {
       scheduleLogsScroll(

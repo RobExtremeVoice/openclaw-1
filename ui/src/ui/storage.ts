@@ -10,6 +10,7 @@ export type UiSettings = {
   theme: ThemeMode;
   chatFocusMode: boolean;
   chatShowThinking: boolean;
+  chatAutoScroll: boolean; // Auto-scroll chat during agent replies
   splitRatio: number; // Sidebar split ratio (0.4 to 0.7, default 0.6)
   navCollapsed: boolean; // Collapsible sidebar state
   navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
@@ -29,6 +30,7 @@ export function loadSettings(): UiSettings {
     theme: "system",
     chatFocusMode: false,
     chatShowThinking: true,
+    chatAutoScroll: true,
     splitRatio: 0.6,
     navCollapsed: false,
     navGroupsCollapsed: {},
@@ -69,6 +71,10 @@ export function loadSettings(): UiSettings {
         typeof parsed.chatShowThinking === "boolean"
           ? parsed.chatShowThinking
           : defaults.chatShowThinking,
+      chatAutoScroll:
+        typeof parsed.chatAutoScroll === "boolean"
+          ? parsed.chatAutoScroll
+          : defaults.chatAutoScroll,
       splitRatio:
         typeof parsed.splitRatio === "number" &&
         parsed.splitRatio >= 0.4 &&

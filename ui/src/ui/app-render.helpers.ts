@@ -33,14 +33,19 @@ export function renderTab(state: AppViewState, tab: Tab) {
       }}
       title=${titleForTab(tab)}
     >
-      <span class="nav-item__icon" aria-hidden="true">${icons[iconForTab(tab)]}</span>
+      <span class="nav-item__icon" aria-hidden="true"
+        >${icons[iconForTab(tab)]}</span
+      >
       <span class="nav-item__text">${titleForTab(tab)}</span>
     </a>
   `;
 }
 
 export function renderChatControls(state: AppViewState) {
-  const mainSessionKey = resolveMainSessionKey(state.hello, state.sessionsResult);
+  const mainSessionKey = resolveMainSessionKey(
+    state.hello,
+    state.sessionsResult,
+  );
   const sessionOptions = resolveSessionOptions(
     state.sessionKey,
     state.sessionsResult,
@@ -48,11 +53,45 @@ export function renderChatControls(state: AppViewState) {
   );
   const disableThinkingToggle = state.onboarding;
   const disableFocusToggle = state.onboarding;
-  const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
+  const disableAutoScrollToggle = state.onboarding;
+  const showThinking = state.onboarding
+    ? false
+    : state.settings.chatShowThinking;
   const focusActive = state.onboarding ? true : state.settings.chatFocusMode;
+  const autoScrollActive = state.onboarding
+    ? true
+    : state.settings.chatAutoScroll;
   // Refresh icon
-  const refreshIcon = html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>`;
-  const focusIcon = html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3"></path><path d="M20 7V4h-3"></path><path d="M4 17v3h3"></path><path d="M20 17v3h-3"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+  const refreshIcon = html`<svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+    <path d="M21 3v5h-5"></path>
+  </svg>`;
+  const focusIcon = html`<svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M4 7V4h3"></path>
+    <path d="M20 7V4h-3"></path>
+    <path d="M4 17v3h3"></path>
+    <path d="M20 17v3h-3"></path>
+    <circle cx="12" cy="12" r="3"></circle>
+  </svg>`;
+
   return html`
     <div class="chat-controls">
       <label class="field chat-controls__session">
@@ -93,7 +132,9 @@ export function renderChatControls(state: AppViewState) {
         ?disabled=${state.chatLoading || !state.connected}
         @click=${() => {
           state.resetToolStream();
-          void refreshChat(state as unknown as Parameters<typeof refreshChat>[0]);
+          void refreshChat(
+            state as unknown as Parameters<typeof refreshChat>[0],
+          );
         }}
         title="Refresh chat data"
       >
@@ -134,6 +175,23 @@ export function renderChatControls(state: AppViewState) {
       >
         ${focusIcon}
       </button>
+      <button
+        class="btn btn--sm btn--icon ${autoScrollActive ? "active" : ""}"
+        ?disabled=${disableAutoScrollToggle}
+        @click=${() => {
+          if (disableAutoScrollToggle) return;
+          state.applySettings({
+            ...state.settings,
+            chatAutoScroll: !state.settings.chatAutoScroll,
+          });
+        }}
+        aria-pressed=${autoScrollActive}
+        title=${disableAutoScrollToggle
+          ? "Disabled during onboarding"
+          : "Toggle auto-scroll to bottom (keep view at bottom during replies)"}
+      >
+        ${icons.arrowDownToLine}
+      </button>
     </div>
   `;
 }
@@ -147,7 +205,9 @@ function resolveMainSessionKey(
   hello: AppViewState["hello"],
   sessions: SessionsListResult | null,
 ): string | null {
-  const snapshot = hello?.snapshot as { sessionDefaults?: SessionDefaultsSnapshot } | undefined;
+  const snapshot = hello?.snapshot as
+    | { sessionDefaults?: SessionDefaultsSnapshot }
+    | undefined;
   const mainSessionKey = snapshot?.sessionDefaults?.mainSessionKey?.trim();
   if (mainSessionKey) return mainSessionKey;
   const mainKey = snapshot?.sessionDefaults?.mainKey?.trim();
@@ -232,7 +292,9 @@ export function renderThemeToggle(state: AppViewState) {
       <div class="theme-toggle__track" role="group" aria-label="Theme">
         <span class="theme-toggle__indicator"></span>
         <button
-          class="theme-toggle__button ${state.theme === "system" ? "active" : ""}"
+          class="theme-toggle__button ${state.theme === "system"
+            ? "active"
+            : ""}"
           @click=${applyTheme("system")}
           aria-pressed=${state.theme === "system"}
           aria-label="System theme"
@@ -241,7 +303,9 @@ export function renderThemeToggle(state: AppViewState) {
           ${renderMonitorIcon()}
         </button>
         <button
-          class="theme-toggle__button ${state.theme === "light" ? "active" : ""}"
+          class="theme-toggle__button ${state.theme === "light"
+            ? "active"
+            : ""}"
           @click=${applyTheme("light")}
           aria-pressed=${state.theme === "light"}
           aria-label="Light theme"
