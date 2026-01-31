@@ -153,6 +153,63 @@ export async function scanStatus(
         if (!memoryPlugin.enabled) {
           return null;
         }
+
+        // Handle memory-lancedb plugin
+        if (memoryPlugin.slot === "memory-lancedb") {
+          try {
+            const lancedb = await import("@lancedb/lancedb");
+            const path = await import("node:path");
+            const os = await import("node:os");
+            const stateDir =
+              process.env.OPENCLAW_STATE_DIR ||
+              path.default.join(os.default.homedir(), ".openclaw");
+            const dbPath =
+              cfg.plugins?.entries?.["memory-lancedb"]?.config?.dbPath ||
+              path.default.join(stateDir, "memory", "lancedb");
+            const resolvedPath = dbPath.startsWith("~")
+              ? dbPath.replace("~", os.default.homedir())
+              : dbPath;
+            const db = await lancedb.connect(resolvedPath);
+            const tables = await db.tableNames();
+            if (!tables.includes("memories")) {
+              return {
+                agentId: agentStatus.defaultId ?? "main",
+                files: 0,
+                chunks: 0,
+                dirty: false,
+                sources: [],
+                vector: { enabled: true, available: true },
+                fts: { enabled: false, available: false },
+                cache: { enabled: false },
+              };
+            }
+            const table = await db.openTable("memories");
+            const count = await table.countRows();
+            return {
+              agentId: agentStatus.defaultId ?? "main",
+              files: 1,
+              chunks: count,
+              dirty: false,
+              sources: [],
+              vector: { enabled: true, available: true },
+              fts: { enabled: false, available: false },
+              cache: { enabled: false },
+            };
+          } catch {
+            // LanceDB not available or error - return minimal status showing it's enabled but unavailable
+            return {
+              agentId: agentStatus.defaultId ?? "main",
+              files: 0,
+              chunks: 0,
+              dirty: false,
+              sources: [],
+              vector: { enabled: true, available: false },
+              fts: { enabled: false, available: false },
+              cache: { enabled: false },
+            };
+          }
+        }
+
         if (memoryPlugin.slot !== "memory-core") {
           return null;
         }

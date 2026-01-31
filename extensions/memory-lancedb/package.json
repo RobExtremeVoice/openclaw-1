@@ -2,8 +2,10 @@
   "name": "@openclaw/memory-lancedb",
   "version": "2026.1.29",
   "type": "module",
-  "description": "OpenClaw LanceDB-backed long-term memory plugin with auto-recall/capture",
+  "description": "OpenClaw LanceDB-backed long-term memory plugin with LLM-powered auto-capture",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.21.0",
     "@lancedb/lancedb": "^0.23.0",
     "@sinclair/typebox": "0.34.48",
     "openai": "^6.17.0"

@@ -8,11 +8,14 @@
  * - Auto-capture filtering
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+
+import { MEMORY_CATEGORIES } from "./config.js";
+import { parseEvaluationResponse, shouldEvaluate } from "./index.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
 const HAS_OPENAI_KEY = Boolean(process.env.OPENAI_API_KEY);
@@ -281,4 +284,128 @@ describeLive("memory plugin live tests", () => {
 
     expect(recallAfterForget.details?.count).toBe(0);
   }, 60000); // 60s timeout for live API calls
+});
+
+// ============================================================================
+// LLM-based auto-capture unit tests
+// ============================================================================
+
+describe("shouldEvaluate (LLM pre-filter)", () => {
+  it("returns true for normal user messages", () => {
+    expect(shouldEvaluate("I prefer using dark mode in my editor")).toBe(true);
+    expect(shouldEvaluate("My name is John and I work at Acme Corp")).toBe(true);
+    expect(shouldEvaluate("I usually wake up at 6am every day")).toBe(true);
+  });
+
+  it("returns false for messages that are too short", () => {
+    expect(shouldEvaluate("Hi")).toBe(false);
+    expect(shouldEvaluate("Yes")).toBe(false);
+    expect(shouldEvaluate("short msg")).toBe(false);
+  });
+
+  it("returns false for messages that are too long", () => {
+    const longMessage = "a".repeat(1001);
+    expect(shouldEvaluate(longMessage)).toBe(false);
+  });
+
+  it("returns false for messages containing memory recall context", () => {
+    const withMemories = `<relevant-memories>
+User prefers dark mode
+</relevant-memories>
+What theme should I use?`;
+    expect(shouldEvaluate(withMemories)).toBe(false);
+  });
+
+  it("returns false for XML/system-generated content", () => {
+    expect(shouldEvaluate("<tool_call>some content</tool_call>")).toBe(false);
+    expect(shouldEvaluate("<thinking>internal reasoning</thinking>")).toBe(false);
+    expect(shouldEvaluate("<result>output here</result>")).toBe(false);
+  });
+
+  it("returns false for heavy markdown content (AI-generated)", () => {
+    const heavyMarkdown = `Here's a summary:
+**Point 1**: Something
+**Point 2**: Another thing
+**Point 3**: Third item
+**Point 4**: Fourth item
+**Point 5**: Fifth item`;
+    expect(shouldEvaluate(heavyMarkdown)).toBe(false);
+  });
+
+  it("returns true for light markdown content", () => {
+    const lightMarkdown = "I think **dark mode** is better for my eyes";
+    expect(shouldEvaluate(lightMarkdown)).toBe(true);
+  });
+
+  it("handles edge cases around length boundaries", () => {
+    expect(shouldEvaluate("a".repeat(14))).toBe(false);
+    expect(shouldEvaluate("a".repeat(15))).toBe(true);
+    expect(shouldEvaluate("a".repeat(1000))).toBe(true);
+    expect(shouldEvaluate("a".repeat(1001))).toBe(false);
+  });
+});
+
+describe("parseEvaluationResponse", () => {
+  it("parses valid JSON response", () => {
+    const response = '{"capture": true, "category": "preference", "memory": "User likes dark mode"}';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(true);
+    expect(result.category).toBe("preference");
+    expect(result.memory).toBe("User likes dark mode");
+  });
+
+  it("parses JSON wrapped in markdown code blocks", () => {
+    const response = '```json\n{"capture": true, "category": "fact", "memory": "User works at Acme"}\n```';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(true);
+    expect(result.category).toBe("fact");
+    expect(result.memory).toBe("User works at Acme");
+  });
+
+  it("handles capture: false correctly", () => {
+    const response = '{"capture": false, "category": "other"}';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(false);
+    expect(result.category).toBe("other");
+    expect(result.memory).toBeUndefined();
+  });
+
+  it("defaults to other for unknown categories", () => {
+    const response = '{"capture": true, "category": "unknown_category", "memory": "test"}';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(true);
+    expect(result.category).toBe("other");
+  });
+
+  it("validates all known categories", () => {
+    for (const category of MEMORY_CATEGORIES) {
+      const response = `{"capture": true, "category": "${category}", "memory": "test"}`;
+      const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+      expect(result.category).toBe(category);
+    }
+  });
+
+  it("throws on invalid JSON", () => {
+    expect(() => parseEvaluationResponse("not json", MEMORY_CATEGORIES)).toThrow();
+    expect(() => parseEvaluationResponse("{invalid}", MEMORY_CATEGORIES)).toThrow();
+  });
+
+  it("handles JSON with extra whitespace", () => {
+    const response = '  \n  {"capture": true, "category": "decision", "memory": "test"}  \n  ';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(true);
+    expect(result.category).toBe("decision");
+  });
+
+  it("treats non-boolean capture as false", () => {
+    const response = '{"capture": "yes", "category": "fact", "memory": "test"}';
+    const result = parseEvaluationResponse(response, MEMORY_CATEGORIES);
+
+    expect(result.shouldCapture).toBe(false);
+  });
 });

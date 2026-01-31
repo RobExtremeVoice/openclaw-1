@@ -9,6 +9,8 @@
 import { Type } from "@sinclair/typebox";
 import * as lancedb from "@lancedb/lancedb";
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { stringEnum } from "openclaw/plugin-sdk";
@@ -147,66 +149,183 @@ class MemoryDB {
 }
 
 // ============================================================================
-// OpenAI Embeddings
+// LLM Client (Embeddings + Multi-Provider Evaluation)
 // ============================================================================
 
-class Embeddings {
-  private client: OpenAI;
+type LLMProvider = "claude" | "gemini" | "openai" | null;
+
+type LLMLogger = {
+  warn: (message: string) => void;
+};
+
+class LLMClient {
+  private openai: OpenAI;
+  private anthropic: Anthropic | null = null;
+  private gemini: GoogleGenerativeAI | null = null;
+  private llmProvider: LLMProvider = null;
+  private logger: LLMLogger | null = null;
 
   constructor(
     apiKey: string,
-    private model: string,
+    private embeddingModel: string,
+    logger?: LLMLogger,
   ) {
-    this.client = new OpenAI({ apiKey });
+    this.openai = new OpenAI({ apiKey });
+    this.logger = logger ?? null;
+    this.initializeLLMProvider();
+  }
+
+  private initializeLLMProvider(): void {
+    // Priority: Claude > Gemini > OpenAI (since OpenAI is already used for embeddings)
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+    if (anthropicKey) {
+      this.anthropic = new Anthropic({ apiKey: anthropicKey });
+      this.llmProvider = "claude";
+    } else if (geminiKey) {
+      this.gemini = new GoogleGenerativeAI(geminiKey);
+      this.llmProvider = "gemini";
+    } else {
+      // Fall back to OpenAI (already initialized for embeddings)
+      this.llmProvider = "openai";
+    }
   }
 
   async embed(text: string): Promise<number[]> {
-    const response = await this.client.embeddings.create({
-      model: this.model,
+    const response = await this.openai.embeddings.create({
+      model: this.embeddingModel,
       input: text,
     });
     return response.data[0].embedding;
   }
+
+  private buildEvaluationPrompt(text: string): string {
+    // Escape the user text to prevent prompt injection
+    const escapedText = text
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    return `You evaluate conversation messages to decide if they contain information worth remembering long-term about the user.
+
+CAPTURE these types of information:
+- Personal facts (name, location, job, family, pets, etc.)
+- Preferences (likes, dislikes, favorites, how they want things done)
+- Decisions made (technology choices, plans, commitments)
+- Important entities (contacts, accounts, projects they mention)
+- Goals, habits, or recurring topics
+
+DO NOT CAPTURE:
+- Greetings, small talk, or filler
+- Questions without personal context
+- Generic statements not specific to the user
+- Technical explanations or code (unless it reveals a preference)
+- Responses that are clearly from an AI assistant
+
+<user_message>
+${escapedText}
+</user_message>
+
+Respond with JSON only (no markdown, no explanation):
+{"capture": true/false, "category": "preference|fact|decision|entity|other", "memory": "concise restatement if capturing"}`;
+  }
+
+  async evaluateForCapture(text: string): Promise<{ shouldCapture: boolean; category: MemoryCategory; memory?: string }> {
+    if (!this.llmProvider) {
+      return { shouldCapture: false, category: "other" };
+    }
+
+    const prompt = this.buildEvaluationPrompt(text);
+
+    try {
+      let content: string;
+
+      switch (this.llmProvider) {
+        case "claude": {
+          const response = await this.anthropic!.messages.create({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 256,
+            messages: [{ role: "user", content: prompt }],
+          });
+          const textBlock = response.content.find((b) => b.type === "text");
+          content = textBlock?.type === "text" ? textBlock.text : "";
+          break;
+        }
+
+        case "gemini": {
+          const model = this.gemini!.getGenerativeModel({ model: "gemini-2.0-flash" });
+          const result = await model.generateContent(prompt);
+          content = result.response.text().trim();
+          break;
+        }
+
+        case "openai": {
+          const response = await this.openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            max_tokens: 256,
+            messages: [{ role: "user", content: prompt }],
+          });
+          content = response.choices[0]?.message?.content ?? "";
+          break;
+        }
+
+        default:
+          return { shouldCapture: false, category: "other" };
+      }
+
+      const result = parseEvaluationResponse(content, MEMORY_CATEGORIES);
+      return {
+        shouldCapture: result.shouldCapture,
+        category: result.category as MemoryCategory,
+        memory: result.memory,
+      };
+    } catch (err) {
+      this.logger?.warn(`memory-lancedb: LLM evaluation failed: ${String(err)}`);
+      return { shouldCapture: false, category: "other" };
+    }
+  }
+
+  getProvider(): LLMProvider {
+    return this.llmProvider;
+  }
 }
 
 // ============================================================================
-// Rule-based capture filter
+// Basic pre-filters (cheap checks before LLM call)
 // ============================================================================
 
-const MEMORY_TRIGGERS = [
-  /zapamatuj si|pamatuj|remember/i,
-  /preferuji|radši|nechci|prefer/i,
-  /rozhodli jsme|budeme používat/i,
-  /\+\d{10,}/,
-  /[\w.-]+@[\w.-]+\.\w+/,
-  /můj\s+\w+\s+je|je\s+můj/i,
-  /my\s+\w+\s+is|is\s+my/i,
-  /i (like|prefer|hate|love|want|need)/i,
-  /always|never|important/i,
-];
-
-function shouldCapture(text: string): boolean {
-  if (text.length < 10 || text.length > 500) return false;
+/**
+ * Pre-filter to decide if a message should be sent to LLM for evaluation.
+ * Filters out system content, very short/long messages, and AI-generated content.
+ */
+export function shouldEvaluate(text: string): boolean {
+  // Skip very short or very long messages
+  if (text.length < 15 || text.length > 1000) return false;
   // Skip injected context from memory recall
   if (text.includes("<relevant-memories>")) return false;
-  // Skip system-generated content
+  // Skip system-generated content (XML tags)
   if (text.startsWith("<") && text.includes("</")) return false;
-  // Skip agent summary responses (contain markdown formatting)
-  if (text.includes("**") && text.includes("\n-")) return false;
-  // Skip emoji-heavy responses (likely agent output)
-  const emojiCount = (text.match(/[\u{1F300}-\u{1F9FF}]/gu) || []).length;
-  if (emojiCount > 3) return false;
-  return MEMORY_TRIGGERS.some((r) => r.test(text));
+  // Skip heavy markdown (likely AI-generated summaries)
+  if ((text.match(/\*\*/g) || []).length > 4) return false;
+  return true;
 }
 
-function detectCategory(text: string): MemoryCategory {
-  const lower = text.toLowerCase();
-  if (/prefer|radši|like|love|hate|want/i.test(lower)) return "preference";
-  if (/rozhodli|decided|will use|budeme/i.test(lower)) return "decision";
-  if (/\+\d{10,}|@[\w.-]+\.\w+|is called|jmenuje se/i.test(lower))
-    return "entity";
-  if (/is|are|has|have|je|má|jsou/i.test(lower)) return "fact";
-  return "other";
+/**
+ * Parse LLM evaluation response, handling potential markdown code blocks.
+ * Exported for testing.
+ */
+export function parseEvaluationResponse(
+  content: string,
+  validCategories: readonly string[],
+): { shouldCapture: boolean; category: string; memory?: string } {
+  const jsonStr = content.replace(/```json\n?|\n?```/g, "").trim();
+  const parsed = JSON.parse(jsonStr);
+
+  return {
+    shouldCapture: parsed.capture === true,
+    category: validCategories.includes(parsed.category) ? parsed.category : "other",
+    memory: parsed.memory,
+  };
 }
 
 // ============================================================================
@@ -225,10 +344,11 @@ const memoryPlugin = {
     const resolvedDbPath = api.resolvePath(cfg.dbPath!);
     const vectorDim = vectorDimsForModel(cfg.embedding.model ?? "text-embedding-3-small");
     const db = new MemoryDB(resolvedDbPath, vectorDim);
-    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!);
+    const llm = new LLMClient(cfg.embedding.apiKey, cfg.embedding.model!, api.logger);
+    const llmProvider = llm.getProvider();
 
     api.logger.info(
-      `memory-lancedb: plugin registered (db: ${resolvedDbPath}, lazy init)`,
+      `memory-lancedb: plugin registered (db: ${resolvedDbPath}, llm: ${llmProvider ?? "none"})`,
     );
 
     // ========================================================================
@@ -248,7 +368,7 @@ const memoryPlugin = {
         async execute(_toolCallId, params) {
           const { query, limit = 5 } = params as { query: string; limit?: number };
 
-          const vector = await embeddings.embed(query);
+          const vector = await llm.embed(query);
           const results = await db.search(vector, limit, 0.1);
 
           if (results.length === 0) {
@@ -309,7 +429,7 @@ const memoryPlugin = {
             category?: MemoryEntry["category"];
           };
 
-          const vector = await embeddings.embed(text);
+          const vector = await llm.embed(text);
 
           // Check for duplicates
           const existing = await db.search(vector, 1, 0.95);
@@ -359,7 +479,7 @@ const memoryPlugin = {
           }
 
           if (query) {
-            const vector = await embeddings.embed(query);
+            const vector = await llm.embed(query);
             const results = await db.search(vector, 5, 0.7);
 
             if (results.length === 0) {
@@ -435,7 +555,7 @@ const memoryPlugin = {
           .argument("<query>", "Search query")
           .option("--limit <n>", "Max results", "5")
           .action(async (query, opts) => {
-            const vector = await embeddings.embed(query);
+            const vector = await llm.embed(query);
             const results = await db.search(vector, parseInt(opts.limit), 0.3);
             // Strip vectors for output
             const output = results.map((r) => ({
@@ -469,7 +589,7 @@ const memoryPlugin = {
         if (!event.prompt || event.prompt.length < 5) return;
 
         try {
-          const vector = await embeddings.embed(event.prompt);
+          const vector = await llm.embed(event.prompt);
           const results = await db.search(vector, 3, 0.3);
 
           if (results.length === 0) return;
@@ -535,29 +655,37 @@ const memoryPlugin = {
             }
           }
 
-          // Filter for capturable content
-          const toCapture = texts.filter(
-            (text) => text && shouldCapture(text),
+          // Pre-filter texts (cheap checks before LLM evaluation)
+          const candidates = texts.filter(
+            (text) => text && shouldEvaluate(text),
           );
-          if (toCapture.length === 0) return;
+          if (candidates.length === 0) return;
 
-          // Store each capturable piece (limit to 3 per conversation)
+          // Evaluate and store using LLM (limit to 5 candidates per conversation)
           let stored = 0;
-          for (const text of toCapture.slice(0, 3)) {
-            const category = detectCategory(text);
-            const vector = await embeddings.embed(text);
+          for (const text of candidates.slice(0, 5)) {
+            // Ask LLM if this is worth remembering
+            const evaluation = await llm.evaluateForCapture(text);
+            if (!evaluation.shouldCapture) continue;
+
+            // Use the LLM's restatement if provided, otherwise use original
+            const memoryText = evaluation.memory || text;
+            const vector = await llm.embed(memoryText);
 
             // Check for duplicates (high similarity threshold)
-            const existing = await db.search(vector, 1, 0.95);
+            const existing = await db.search(vector, 1, 0.90);
             if (existing.length > 0) continue;
 
             await db.store({
-              text,
+              text: memoryText,
               vector,
               importance: 0.7,
-              category,
+              category: evaluation.category,
             });
             stored++;
+
+            // Limit to 3 stored per conversation to avoid runaway costs
+            if (stored >= 3) break;
           }
 
           if (stored > 0) {
