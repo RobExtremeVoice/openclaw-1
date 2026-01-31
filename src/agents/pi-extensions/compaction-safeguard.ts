@@ -172,26 +172,16 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
 
     const model = ctx.model;
     if (!model) {
-      return {
-        compaction: {
-          summary: fallbackSummary,
-          firstKeptEntryId: preparation.firstKeptEntryId,
-          tokensBefore: preparation.tokensBefore,
-          details: { readFiles, modifiedFiles },
-        },
-      };
+      // ctx.model may be undefined when extensionRunner.initialize() was not called
+      // (e.g. embedded runner mode). Fall through to built-in compaction which has
+      // correct model access via AgentSession.model.
+      return undefined;
     }
 
     const apiKey = await ctx.modelRegistry.getApiKey(model);
     if (!apiKey) {
-      return {
-        compaction: {
-          summary: fallbackSummary,
-          firstKeptEntryId: preparation.firstKeptEntryId,
-          tokensBefore: preparation.tokensBefore,
-          details: { readFiles, modifiedFiles },
-        },
-      };
+      // Fall through to built-in compaction rather than producing an empty summary.
+      return undefined;
     }
 
     try {
