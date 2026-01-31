@@ -1,6 +1,16 @@
+import { readFile } from "node:fs/promises";
+
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 
+import {
+  DEFAULT_INPUT_FILE_MAX_BYTES,
+  DEFAULT_INPUT_FILE_MAX_CHARS,
+  DEFAULT_INPUT_PDF_MAX_PAGES,
+  DEFAULT_INPUT_PDF_MAX_PIXELS,
+  DEFAULT_INPUT_PDF_MIN_TEXT_CHARS,
+  extractPdfContent,
+} from "../media/input-files.js";
 import { detectMime } from "../media/mime.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
@@ -262,6 +272,41 @@ export function createSandboxedEditTool(root: string) {
   return wrapSandboxPathGuard(wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.edit), root);
 }
 
+const PDF_READ_LIMITS = {
+  allowUrl: false,
+  allowedMimes: new Set(["application/pdf"]),
+  maxBytes: DEFAULT_INPUT_FILE_MAX_BYTES,
+  maxChars: DEFAULT_INPUT_FILE_MAX_CHARS,
+  maxRedirects: 0,
+  timeoutMs: 10_000,
+  pdf: {
+    maxPages: DEFAULT_INPUT_PDF_MAX_PAGES,
+    maxPixels: DEFAULT_INPUT_PDF_MAX_PIXELS,
+    minTextChars: DEFAULT_INPUT_PDF_MIN_TEXT_CHARS,
+  },
+};
+
+async function handlePdfRead(filePath: string): Promise<AgentToolResult<unknown>> {
+  const buffer = await readFile(filePath);
+  const { text, images } = await extractPdfContent({ buffer, limits: PDF_READ_LIMITS });
+
+  const content: AgentToolResult<unknown>["content"] = [];
+  if (text) {
+    content.push({ type: "text" as const, text: `PDF content from ${filePath}:\n\n${text}` });
+  }
+  for (const img of images) {
+    content.push(img);
+  }
+  if (content.length === 0) {
+    content.push({
+      type: "text" as const,
+      text: `PDF at ${filePath} contained no extractable content.`,
+    });
+  }
+
+  return { content, details: undefined };
+}
+
 export function createOpenClawReadTool(base: AnyAgentTool): AnyAgentTool {
   const patched = patchToolSchemaForClaudeCompatibility(base);
   return {
@@ -272,14 +317,20 @@ export function createOpenClawReadTool(base: AnyAgentTool): AnyAgentTool {
         normalized ??
         (params && typeof params === "object" ? (params as Record<string, unknown>) : undefined);
       assertRequiredParams(record, CLAUDE_PARAM_GROUPS.read, base.name);
+
+      const filePath = typeof record?.path === "string" ? String(record.path) : "";
+      if (filePath.toLowerCase().endsWith(".pdf")) {
+        return handlePdfRead(filePath);
+      }
+
       const result = (await base.execute(
         toolCallId,
         normalized ?? params,
         signal,
       )) as AgentToolResult<unknown>;
-      const filePath = typeof record?.path === "string" ? String(record.path) : "<unknown>";
-      const normalizedResult = await normalizeReadImageResult(result, filePath);
-      return sanitizeToolResultImages(normalizedResult, `read:${filePath}`);
+      const displayPath = filePath || "<unknown>";
+      const normalizedResult = await normalizeReadImageResult(result, displayPath);
+      return sanitizeToolResultImages(normalizedResult, `read:${displayPath}`);
     },
   };
 }
