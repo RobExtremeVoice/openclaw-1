@@ -18,6 +18,7 @@ import { resolveDefaultModel } from "./directive-handling.js";
 import { resolveReplyDirectives } from "./get-reply-directives.js";
 import { handleInlineActions } from "./get-reply-inline-actions.js";
 import { runPreparedReply } from "./get-reply-run.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { finalizeInboundContext } from "./inbound-context.js";
 import { initSessionState } from "./session.js";
 import { applyResetModelOverride } from "./session-reset-model.js";
@@ -125,6 +126,20 @@ export async function getReplyFromConfig(
     triggerBodyNormalized,
     bodyStripped,
   } = sessionState;
+
+  // Trigger session:start for new sessions
+  if (isNewSession) {
+    const sessionStartEvent = createInternalHookEvent("session", "start", sessionKey, {
+      sessionEntry,
+      sessionId,
+      sessionFile: sessionEntry.sessionFile,
+      commandSource: finalized.Surface ?? finalized.Provider,
+      senderId: finalized.From,
+      isReset: resetTriggered, // True if session started due to /new or /reset
+      cfg,
+    });
+    await triggerInternalHook(sessionStartEvent);
+  }
 
   await applyResetModelOverride({
     cfg,
