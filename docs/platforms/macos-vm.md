@@ -94,7 +94,10 @@ Note: The download can take a while depending on your connection.
 ---
 
 ## 3) Complete Setup Assistant
-
+Run VM with display (VNC window opens)
+```bash
+lume run openclaw
+```
 In the VNC window:
 1. Select language and region
 2. Skip Apple ID (or sign in if you want iMessage later)
@@ -120,9 +123,10 @@ Look for the IP address (usually `192.168.64.x`).
 ## 5) SSH into the VM
 
 ```bash
-ssh youruser@192.168.64.X
+ssh -t youruser@192.168.64.X
 ```
 
+`-t` TTY allocation, which later required for openclaw installation.
 Replace `youruser` with the account you created, and the IP with your VM's IP.
 
 ---
@@ -132,8 +136,7 @@ Replace `youruser` with the account you created, and the IP with your VM's IP.
 Inside the VM:
 
 ```bash
-npm install -g openclaw@latest
-openclaw onboard --install-daemon
+curl -fsSL https://openclaw.ai/install.sh | bash
 ```
 
 Follow the onboarding prompts to set up your model provider (Anthropic, OpenAI, etc.).
