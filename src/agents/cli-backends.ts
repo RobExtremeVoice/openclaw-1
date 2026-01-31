@@ -25,6 +25,29 @@ const CLAUDE_MODEL_ALIASES: Record<string, string> = {
   "claude-haiku-3-5": "haiku",
 };
 
+const OPENAI_MODEL_ALIASES: Record<string, string> = {
+  "gpt-4o": "gpt-4o",
+  "gpt-4": "gpt-4o",
+  "gpt-4o-mini": "gpt-4o-mini",
+  "gpt-4-mini": "gpt-4o-mini",
+  o1: "o1",
+  "o1-mini": "o1-mini",
+  "o1-preview": "o1-preview",
+  "o3-mini": "o3-mini",
+  "gpt-4-turbo": "gpt-4-turbo",
+};
+
+const GEMINI_MODEL_ALIASES: Record<string, string> = {
+  "gemini-2.5-pro": "gemini-2.5-pro",
+  "gemini-2.5-flash": "gemini-2.5-flash",
+  "gemini-2.0-flash": "gemini-2.0-flash",
+  "gemini-2.0": "gemini-2.0-flash",
+  "gemini-pro": "gemini-2.5-pro",
+  "gemini-flash": "gemini-2.5-flash",
+  pro: "gemini-2.5-pro",
+  flash: "gemini-2.5-flash",
+};
+
 const DEFAULT_CLAUDE_BACKEND: CliBackendConfig = {
   command: "claude",
   args: ["-p", "--output-format", "json", "--dangerously-skip-permissions"],
@@ -74,6 +97,42 @@ const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
   serialize: true,
 };
 
+const DEFAULT_OPENAI_CLI_BACKEND: CliBackendConfig = {
+  command: "openai",
+  args: ["-p", "--output-format", "json"],
+  resumeArgs: ["-p", "--output-format", "json", "--resume", "{sessionId}"],
+  output: "json",
+  input: "arg",
+  modelArg: "--model",
+  modelAliases: OPENAI_MODEL_ALIASES,
+  sessionArg: "--session-id",
+  sessionMode: "always",
+  sessionIdFields: ["session_id", "sessionId", "thread_id", "threadId"],
+  systemPromptArg: "--append-system-prompt",
+  systemPromptMode: "append",
+  systemPromptWhen: "first",
+  clearEnv: [],
+  serialize: true,
+};
+
+const DEFAULT_GEMINI_CLI_BACKEND: CliBackendConfig = {
+  command: "gemini",
+  args: ["-p", "--output-format", "json"],
+  resumeArgs: ["-p", "--output-format", "json", "--resume", "{sessionId}"],
+  output: "json",
+  input: "arg",
+  modelArg: "--model",
+  modelAliases: GEMINI_MODEL_ALIASES,
+  sessionArg: "--session-id",
+  sessionMode: "always",
+  sessionIdFields: ["session_id", "sessionId"],
+  systemPromptArg: "--append-system-prompt",
+  systemPromptMode: "append",
+  systemPromptWhen: "first",
+  clearEnv: [],
+  serialize: true,
+};
+
 function normalizeBackendKey(key: string): string {
   return normalizeProviderId(key);
 }
@@ -107,6 +166,8 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
+    normalizeBackendKey("openai-cli"),
+    normalizeBackendKey("gemini-cli"),
   ]);
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
@@ -131,6 +192,18 @@ export function resolveCliBackendConfig(
   }
   if (normalized === "codex-cli") {
     const merged = mergeBackendConfig(DEFAULT_CODEX_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) return null;
+    return { id: normalized, config: { ...merged, command } };
+  }
+  if (normalized === "openai-cli") {
+    const merged = mergeBackendConfig(DEFAULT_OPENAI_CLI_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) return null;
+    return { id: normalized, config: { ...merged, command } };
+  }
+  if (normalized === "gemini-cli") {
+    const merged = mergeBackendConfig(DEFAULT_GEMINI_CLI_BACKEND, override);
     const command = merged.command?.trim();
     if (!command) return null;
     return { id: normalized, config: { ...merged, command } };
