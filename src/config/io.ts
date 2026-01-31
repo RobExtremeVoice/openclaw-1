@@ -300,6 +300,7 @@ export function detectDuplicateKeys(raw: string): DuplicateKeyWarning[] {
 
   skipWs();
   if (raw[i] === "{") parseObj();
+  else if (raw[i] === "[") parseArr();
   return warnings;
 }
 
