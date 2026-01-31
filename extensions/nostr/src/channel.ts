@@ -344,7 +344,8 @@ export const nostrPlugin: ChannelPlugin<ResolvedNostrAccount> = {
           const prefixContext = createReplyPrefixContext({ cfg, agentId: route.agentId });
 
           // Create the reply dispatcher
-          const { dispatcher, replyOptions, markDispatchIdle } =
+          // Note: markDispatchIdle is handled internally by the dispatcher
+          const { dispatcher, replyOptions } =
             runtime.channel.reply.createReplyDispatcherWithTyping({
               responsePrefix: prefixContext.responsePrefix,
               responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
@@ -367,7 +368,7 @@ export const nostrPlugin: ChannelPlugin<ResolvedNostrAccount> = {
             });
 
           // Dispatch the reply
-          const { queuedFinal, counts } = await runtime.channel.reply.dispatchReplyFromConfig({
+          await runtime.channel.reply.dispatchReplyFromConfig({
             ctx: ctxPayload,
             cfg,
             dispatcher,

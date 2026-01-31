@@ -52,7 +52,10 @@ const CIRCUIT_BREAKER_RESET_MS = 30000; // 30 seconds before half-open
 const HEALTH_WINDOW_MS = 60000; // 1 minute window for health stats
 
 // Typing indicator configuration (NIP-01 ephemeral events)
-const TYPING_KIND = 20001; // Community convention for typing indicators
+// Kind 20001 is a community convention for typing indicators (not yet a formal NIP).
+// Using 20xxx range as it's reserved for ephemeral events per NIP-16.
+// Content is NIP-04 encrypted for privacy consistency with DMs.
+const TYPING_KIND = 20001;
 const TYPING_TTL_SEC = 30; // 30 second expiration
 const TYPING_THROTTLE_MS = 5000; // Max 1 event per 5 seconds per recipient
 
