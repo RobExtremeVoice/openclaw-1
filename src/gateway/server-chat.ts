@@ -177,6 +177,7 @@ export function createAgentEventHandler({
     seq: number,
     jobState: "done" | "error",
     error?: unknown,
+    usage?: Record<string, unknown>,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
     chatRunState.buffers.delete(clientRunId);
@@ -194,6 +195,7 @@ export function createAgentEventHandler({
               timestamp: Date.now(),
             }
           : undefined,
+        usage: usage,
       };
       // Suppress webchat broadcast for heartbeat runs when showOk is false
       if (!shouldSuppressHeartbeatBroadcast(clientRunId)) {
@@ -284,6 +286,7 @@ export function createAgentEventHandler({
             evt.seq,
             lifecyclePhase === "error" ? "error" : "done",
             evt.data?.error,
+            evt.data?.usage as Record<string, unknown> | undefined,
           );
         } else {
           emitChatFinal(
@@ -292,6 +295,7 @@ export function createAgentEventHandler({
             evt.seq,
             lifecyclePhase === "error" ? "error" : "done",
             evt.data?.error,
+            evt.data?.usage as Record<string, unknown> | undefined,
           );
         }
       } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
