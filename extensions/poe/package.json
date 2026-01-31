@@ -1,0 +1,11 @@
+{
+  "name": "@openclaw/poe",
+  "version": "2026.1.29",
+  "type": "module",
+  "description": "OpenClaw Poe provider plugin",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

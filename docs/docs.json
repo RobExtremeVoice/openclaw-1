@@ -110,6 +110,10 @@
       "destination": "/providers/openrouter"
     },
     {
+      "source": "/poe",
+      "destination": "/providers/poe"
+    },
+    {
       "source": "/opencode",
       "destination": "/providers/opencode"
     },
@@ -1037,6 +1041,7 @@
           "providers/minimax",
           "providers/vercel-ai-gateway",
           "providers/openrouter",
+          "providers/poe",
           "providers/synthetic",
           "providers/opencode",
           "providers/glm",
