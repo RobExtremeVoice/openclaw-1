@@ -83,10 +83,18 @@ export function getEffectiveTrustScore(db: DatabaseSync, chunkId: string): numbe
  * Re-ranks search results by trust score.
  * Higher trust scores float to the top while maintaining relevance ordering.
  */
+/** Result type with added trust scoring fields */
+export type TrustWeightedResult<T> = T & {
+  /** Combined score after trust weighting */
+  combinedScore: number;
+  /** Trust score from provenance */
+  trustScore: number;
+};
+
 export function trustWeightedRerank<T extends { chunkId: string; score: number }>(
   results: T[],
   options: ScorerOptions & { trustWeight?: number },
-): T[] {
+): TrustWeightedResult<T>[] {
   const { db, trustWeight = 0.3 } = options;
   const relevanceWeight = 1 - trustWeight;
 

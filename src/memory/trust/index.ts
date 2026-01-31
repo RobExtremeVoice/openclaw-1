@@ -41,4 +41,5 @@ export {
   updateTrustScore,
   type TrustFactors,
   type ScorerOptions,
+  type TrustWeightedResult,
 } from "./scorer.js";
