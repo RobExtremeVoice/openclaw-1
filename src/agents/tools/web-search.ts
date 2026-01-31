@@ -18,10 +18,12 @@ import {
 } from "./web-shared.js";
 
 const SEARCH_PROVIDERS = ["brave", "perplexity"] as const;
+const BRAVE_AUTH_STYLES = ["x-subscription-token", "bearer"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
-const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
+const DEFAULT_BRAVE_BASE_URL = "https://api.search.brave.com";
+const BRAVE_SEARCH_PATH = "/res/v1/web/search";
 const DEFAULT_PERPLEXITY_BASE_URL = "https://openrouter.ai/api/v1";
 const PERPLEXITY_DIRECT_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_PERPLEXITY_MODEL = "perplexity/sonar-pro";
@@ -126,6 +128,23 @@ function resolveSearchApiKey(search?: WebSearchConfig): string | undefined {
     search && "apiKey" in search && typeof search.apiKey === "string" ? search.apiKey.trim() : "";
   const fromEnv = (process.env.BRAVE_API_KEY ?? "").trim();
   return fromConfig || fromEnv || undefined;
+}
+
+function resolveBraveBaseUrl(search?: WebSearchConfig): string {
+  const fromConfig =
+    search && "baseUrl" in search && typeof search.baseUrl === "string"
+      ? search.baseUrl.trim()
+      : "";
+  return fromConfig || DEFAULT_BRAVE_BASE_URL;
+}
+
+function resolveBraveAuthStyle(search?: WebSearchConfig): (typeof BRAVE_AUTH_STYLES)[number] {
+  const raw =
+    search && "authStyle" in search && typeof search.authStyle === "string"
+      ? search.authStyle.trim().toLowerCase()
+      : "";
+  if (raw === "bearer") return "bearer";
+  return "x-subscription-token";
 }
 
 function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
@@ -361,6 +380,8 @@ async function runWebSearch(params: {
   search_lang?: string;
   ui_lang?: string;
   freshness?: string;
+  braveBaseUrl?: string;
+  braveAuthStyle?: (typeof BRAVE_AUTH_STYLES)[number];
   perplexityBaseUrl?: string;
   perplexityModel?: string;
 }): Promise<Record<string, unknown>> {
@@ -401,7 +422,8 @@ async function runWebSearch(params: {
     throw new Error("Unsupported web search provider.");
   }
 
-  const url = new URL(BRAVE_SEARCH_ENDPOINT);
+  const baseUrl = params.braveBaseUrl ?? DEFAULT_BRAVE_BASE_URL;
+  const url = new URL(BRAVE_SEARCH_PATH, baseUrl);
   url.searchParams.set("q", params.query);
   url.searchParams.set("count", String(params.count));
   if (params.country) {
@@ -417,11 +439,16 @@ async function runWebSearch(params: {
     url.searchParams.set("freshness", params.freshness);
   }
 
+  // Build auth header based on configured style (default: X-Subscription-Token for Brave)
+  const authStyle = params.braveAuthStyle ?? "x-subscription-token";
+
   const res = await fetch(url.toString(), {
     method: "GET",
     headers: {
       Accept: "application/json",
-      "X-Subscription-Token": params.apiKey,
+      ...(authStyle === "bearer"
+        ? { Authorization: `Bearer ${params.apiKey}` }
+        : { "X-Subscription-Token": params.apiKey }),
     },
     signal: withTimeout(undefined, params.timeoutSeconds * 1000),
   });
@@ -518,6 +545,8 @@ export function createWebSearchTool(options?: {
         search_lang,
         ui_lang,
         freshness,
+        braveBaseUrl: resolveBraveBaseUrl(search),
+        braveAuthStyle: resolveBraveAuthStyle(search),
         perplexityBaseUrl: resolvePerplexityBaseUrl(
           perplexityConfig,
           perplexityAuth?.source,
@@ -533,5 +562,7 @@ export function createWebSearchTool(options?: {
 export const __testing = {
   inferPerplexityBaseUrlFromApiKey,
   resolvePerplexityBaseUrl,
+  resolveBraveBaseUrl,
+  resolveBraveAuthStyle,
   normalizeFreshness,
 } as const;

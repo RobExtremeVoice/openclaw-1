@@ -340,6 +340,10 @@ export type ToolsConfig = {
       provider?: "brave" | "perplexity";
       /** Brave Search API key (optional; defaults to BRAVE_API_KEY env var). */
       apiKey?: string;
+      /** Brave Search base URL (optional; defaults to https://api.search.brave.com). */
+      baseUrl?: string;
+      /** Auth header style: "x-subscription-token" (Brave default) or "bearer" (for proxies). */
+      authStyle?: "x-subscription-token" | "bearer";
       /** Default search results count (1-10). */
       maxResults?: number;
       /** Timeout in seconds for search requests. */
