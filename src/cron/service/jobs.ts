@@ -25,6 +25,9 @@ export function assertSupportedJobSpec(job: Pick<CronJob, "sessionTarget" | "pay
   if (job.sessionTarget === "isolated" && job.payload.kind !== "agentTurn") {
     throw new Error('isolated cron jobs require payload.kind="agentTurn"');
   }
+  if (job.sessionTarget === "direct" && job.payload.kind !== "message") {
+    throw new Error('direct cron jobs require payload.kind="message"');
+  }
 }
 
 export function findJobOrThrow(state: CronServiceState, id: string) {
@@ -131,6 +134,17 @@ function mergeCronPayload(existing: CronPayload, patch: CronPayloadPatch): CronP
     return { kind: "systemEvent", text };
   }
 
+  if (patch.kind === "message") {
+    if (existing.kind !== "message") {
+      return buildPayloadFromPatch(patch);
+    }
+    const next: Extract<CronPayload, { kind: "message" }> = { ...existing };
+    if (typeof patch.text === "string") next.text = patch.text;
+    if (typeof patch.channel === "string") next.channel = patch.channel;
+    if (typeof patch.to === "string") next.to = patch.to;
+    return next;
+  }
+
   if (existing.kind !== "agentTurn") {
     return buildPayloadFromPatch(patch);
   }
@@ -155,6 +169,21 @@ function buildPayloadFromPatch(patch: CronPayloadPatch): CronPayload {
       throw new Error('cron.update payload.kind="systemEvent" requires text');
     }
     return { kind: "systemEvent", text: patch.text };
+  }
+
+  if (patch.kind === "message") {
+    if (typeof patch.text !== "string" || patch.text.length === 0) {
+      throw new Error('cron.update payload.kind="message" requires text');
+    }
+    if (typeof patch.channel !== "string" || patch.channel.length === 0) {
+      throw new Error('cron.update payload.kind="message" requires channel');
+    }
+    return {
+      kind: "message",
+      text: patch.text,
+      channel: patch.channel,
+      to: patch.to,
+    };
   }
 
   if (typeof patch.message !== "string" || patch.message.length === 0) {

@@ -190,6 +190,40 @@ export async function executeJob(
       return;
     }
 
+    // Handle direct message delivery (no agent involved)
+    if (job.sessionTarget === "direct") {
+      if (job.payload.kind !== "message") {
+        await finish("skipped", 'direct job requires payload.kind="message"');
+        return;
+      }
+      if (!state.deps.sendDirectMessage) {
+        await finish("error", "sendDirectMessage not configured");
+        return;
+      }
+      const { text, channel, to } = job.payload;
+      if (!text?.trim()) {
+        await finish("skipped", "message payload requires non-empty text");
+        return;
+      }
+      const channelId =
+        channel === "last" ? undefined : (channel as import("../../channels/plugins/types.js").ChannelId);
+      if (!channelId) {
+        await finish("error", 'direct message requires explicit channel (not "last")');
+        return;
+      }
+      const result = await state.deps.sendDirectMessage({
+        channel: channelId,
+        text,
+        to,
+      });
+      if (result.ok) {
+        await finish("ok", undefined, `Sent to ${channelId}${to ? `:${to}` : ""}`);
+      } else {
+        await finish("error", result.error ?? "message send failed");
+      }
+      return;
+    }
+
     if (job.payload.kind !== "agentTurn") {
       await finish("skipped", "isolated job requires payload.kind=agentTurn");
       return;

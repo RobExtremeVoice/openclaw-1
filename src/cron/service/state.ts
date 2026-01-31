@@ -1,4 +1,5 @@
 import type { HeartbeatRunResult } from "../../infra/heartbeat-wake.js";
+import type { ChannelId } from "../../channels/plugins/types.js";
 import type { CronJob, CronJobCreate, CronJobPatch, CronStoreFile } from "../types.js";
 
 export type CronEvent = {
@@ -19,6 +20,18 @@ export type Logger = {
   error: (obj: unknown, msg?: string) => void;
 };
 
+export type SendDirectMessageParams = {
+  channel: ChannelId;
+  text: string;
+  to?: string;
+};
+
+export type SendDirectMessageResult = {
+  ok: boolean;
+  error?: string;
+  messageId?: string;
+};
+
 export type CronServiceDeps = {
   nowMs?: () => number;
   log: Logger;
@@ -34,6 +47,11 @@ export type CronServiceDeps = {
     outputText?: string;
     error?: string;
   }>;
+  /**
+   * Send a message directly to a channel without involving an agent.
+   * Used by the "message" payload kind.
+   */
+  sendDirectMessage?: (params: SendDirectMessageParams) => Promise<SendDirectMessageResult>;
   onEvent?: (evt: CronEvent) => void;
 };
 

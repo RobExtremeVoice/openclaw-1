@@ -5,7 +5,7 @@ export type CronSchedule =
   | { kind: "every"; everyMs: number; anchorMs?: number }
   | { kind: "cron"; expr: string; tz?: string };
 
-export type CronSessionTarget = "main" | "isolated";
+export type CronSessionTarget = "main" | "isolated" | "direct";
 export type CronWakeMode = "next-heartbeat" | "now";
 
 export type CronMessageChannel = ChannelId | "last";
@@ -24,6 +24,15 @@ export type CronPayload =
       channel?: CronMessageChannel;
       to?: string;
       bestEffortDeliver?: boolean;
+    }
+  | {
+      kind: "message";
+      /** The text to send directly to the channel. */
+      text: string;
+      /** The channel to send to (e.g., "telegram", "discord"). */
+      channel: CronMessageChannel;
+      /** Optional target id for DMs or specific channels. */
+      to?: string;
     };
 
 export type CronPayloadPatch =
@@ -39,6 +48,12 @@ export type CronPayloadPatch =
       channel?: CronMessageChannel;
       to?: string;
       bestEffortDeliver?: boolean;
+    }
+  | {
+      kind: "message";
+      text?: string;
+      channel?: CronMessageChannel;
+      to?: string;
     };
 
 export type CronIsolation = {

@@ -36,7 +36,9 @@ export function inferLegacyName(job: {
       ? job.payload.text
       : job?.payload?.kind === "agentTurn" && typeof job.payload.message === "string"
         ? job.payload.message
-        : "";
+        : job?.payload?.kind === "message" && typeof job.payload.text === "string"
+          ? job.payload.text
+          : "";
   const firstLine =
     text
       .split("\n")
@@ -55,5 +57,6 @@ export function inferLegacyName(job: {
 
 export function normalizePayloadToSystemText(payload: CronPayload) {
   if (payload.kind === "systemEvent") return payload.text.trim();
+  if (payload.kind === "message") return payload.text.trim();
   return payload.message.trim();
 }

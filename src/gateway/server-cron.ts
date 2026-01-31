@@ -5,13 +5,16 @@ import { resolveAgentMainSessionKey } from "../config/sessions.js";
 import { runCronIsolatedAgentTurn } from "../cron/isolated-agent.js";
 import { appendCronRunLog, resolveCronRunLogPath } from "../cron/run-log.js";
 import { CronService } from "../cron/service.js";
+import type { SendDirectMessageParams, SendDirectMessageResult } from "../cron/service/state.js";
 import { resolveCronStorePath } from "../cron/store.js";
 import { runHeartbeatOnce } from "../infra/heartbeat-runner.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
+import { runMessageAction } from "../infra/outbound/message-action-runner.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { getChildLogger } from "../logging.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
+import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "./protocol/client-info.js";
 
 export type GatewayCronState = {
   cron: CronService;
@@ -74,6 +77,45 @@ export function buildGatewayCronService(params: {
         sessionKey: `cron:${job.id}`,
         lane: "cron",
       });
+    },
+    sendDirectMessage: async (
+      msgParams: SendDirectMessageParams,
+    ): Promise<SendDirectMessageResult> => {
+      const runtimeConfig = loadConfig();
+      try {
+        const result = await runMessageAction({
+          cfg: runtimeConfig,
+          action: "send",
+          params: {
+            channel: msgParams.channel,
+            message: msgParams.text,
+            to: msgParams.to,
+          },
+          gateway: {
+            clientName: GATEWAY_CLIENT_IDS.GATEWAY_CLIENT,
+            clientDisplayName: "cron",
+            mode: GATEWAY_CLIENT_MODES.BACKEND,
+          },
+        });
+        if (result.kind === "send" && result.sendResult) {
+          const msgResult = result.sendResult.result;
+          const messageId =
+            msgResult && typeof msgResult === "object" && "messageId" in msgResult
+              ? (msgResult as { messageId?: string }).messageId
+              : undefined;
+          return {
+            ok: true,
+            messageId,
+          };
+        }
+        return { ok: true };
+      } catch (err) {
+        cronLogger.error({ err: String(err) }, "cron: direct message send failed");
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     },
     log: getChildLogger({ module: "cron", storePath }),
     onEvent: (evt) => {
