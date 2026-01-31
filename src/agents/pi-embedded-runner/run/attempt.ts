@@ -633,6 +633,8 @@ export async function runEmbeddedAttempt(
         onAssistantMessageStart: params.onAssistantMessageStart,
         onAgentEvent: params.onAgentEvent,
         enforceFinalTag: params.enforceFinalTag,
+        provider: params.provider,
+        modelId: params.modelId,
       });
 
       const {
