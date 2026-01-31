@@ -96,6 +96,7 @@ Status: stable.
 - Web UI: auto-expand the chat compose textarea while typing (with sensible max height). (#2950) Thanks @shivamraut101.
 - Web UI: refresh sessions after queued /new or /reset commands once the run completes.
 - Gateway: prevent crashes on transient network errors (fetch failures, timeouts, DNS). Added fatal error detection to only exit on truly critical errors. Fixes #2895, #2879, #2873. (#2980) Thanks @elliotsecops.
+- Gateway: add error handling for Tailscale cleanup in shutdown sequence to prevent interruption.
 - Agents: guard channel tool listActions to avoid plugin crashes. (#2859) Thanks @mbelinky.
 - Discord: stop resolveDiscordTarget from passing directory params into messaging target parsers. Fixes #3167. Thanks @thewilloftheshadow.
 - Discord: avoid resolving bare channel names to user DMs when a username matches. Thanks @thewilloftheshadow.
