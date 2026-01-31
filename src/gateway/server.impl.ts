@@ -70,8 +70,9 @@ import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
+import { formatUncaughtError } from "../infra/errors.js";
 
-export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
+export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js"; 
 
 ensureOpenClawCliOnPath();
 
@@ -88,6 +89,25 @@ const logHooks = log.child("hooks");
 const logPlugins = log.child("plugins");
 const logWsControl = log.child("ws");
 const canvasRuntime = runtimeForLogger(logCanvas);
+
+
+process.on("unhandledRejection", (reason) => {
+  try {
+    log.error("Unhandled promise rejection", { error: formatUncaughtError(reason) });
+  } catch (e) {
+    // Fallback: ensure we don't throw from the handler
+    log.error("Unhandled promise rejection (formatting failed)", { error: String(reason) });
+  }
+});
+
+process.on("uncaughtException", (err) => {
+  try {
+    log.error("Uncaught exception", { error: formatUncaughtError(err) });
+  } catch (e) {
+    log.error("Uncaught exception (formatting failed)", { error: String(err) });
+  }
+});
+
 
 export type GatewayServer = {
   close: (opts?: { reason?: string; restartExpectedMs?: number | null }) => Promise<void>;
