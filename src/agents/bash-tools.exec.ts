@@ -19,6 +19,7 @@ import {
   resolveExecApprovals,
   resolveExecApprovalsFromFile,
 } from "../infra/exec-approvals.js";
+import { checkPreExecApproval } from "../infra/pre-exec-hooks.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { buildNodeShellCommand } from "../infra/node-shell.js";
 import {
@@ -799,6 +800,22 @@ export function createExecTool(
 
       if (!params.command) {
         throw new Error("Provide a command to start.");
+      }
+
+      // Pre-exec hooks check (workspace-level command validation)
+      const workspaceDir = defaults?.cwd || process.cwd();
+      const preExecResult = await checkPreExecApproval({
+        workspaceDir,
+        toolName: "exec",
+        command: params.command,
+        workdir: params.workdir,
+        env: params.env,
+      });
+      if (!preExecResult.allowed) {
+        const hookInfo = preExecResult.hookName ? ` (hook: ${preExecResult.hookName})` : "";
+        throw new Error(
+          `Command blocked by pre-exec hook${hookInfo}: ${preExecResult.reason || "denied"}`
+        );
       }
 
       const maxOutput = DEFAULT_MAX_OUTPUT;
