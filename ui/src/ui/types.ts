@@ -344,6 +344,7 @@ export type GatewaySessionRow = {
   key: string;
   kind: "direct" | "group" | "global" | "unknown";
   label?: string;
+  icon?: string;
   displayName?: string;
   surface?: string;
   subject?: string;
