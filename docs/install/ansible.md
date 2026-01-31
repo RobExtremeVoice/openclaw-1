@@ -8,19 +8,23 @@ read_when:
 
 # Ansible Installation
 
-The recommended way to deploy OpenClaw to production servers is via **[openclaw-ansible](https://github.com/openclaw/openclaw-ansible)** — an automated installer with security-first architecture.
+> ⚠️ **Note**: The Ansible playbook is currently being updated for OpenClaw compatibility. The existing playbook uses the old Clawdbot CLI and may require manual adjustments to work with the new `openclaw` CLI. Contributions welcome!
+
+The automated installation is available via **[openclaw/clawdbot-ansible](https://github.com/openclaw/clawdbot-ansible)** — an automated installer with security-first architecture.
 
 ## Quick Start
 
 One-command install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-ansible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openclaw/clawdbot-ansible/main/install.sh | bash
 ```
 
-> **📦 Full guide: [github.com/openclaw/openclaw-ansible](https://github.com/openclaw/openclaw-ansible)**
+> **📦 Full guide: [github.com/openclaw/clawdbot-ansible](https://github.com/openclaw/clawdbot-ansible)**
 >
-> The openclaw-ansible repo is the source of truth for Ansible deployment. This page is a quick overview.
+> The clawdbot-ansible repo is the source of truth for Ansible deployment. This page is a quick overview.
+>
+> **⚠️ The playbook currently uses the `clawdbot` CLI and may need updates to work with `openclaw`.**
 
 ## What You Get
 
@@ -117,8 +121,8 @@ If you prefer manual control over the automation:
 sudo apt update && sudo apt install -y ansible git
 
 # 2. Clone repository
-git clone https://github.com/openclaw/openclaw-ansible.git
-cd openclaw-ansible
+git clone https://github.com/openclaw/clawdbot-ansible.git
+cd clawdbot-ansible
 
 # 3. Install Ansible collections
 ansible-galaxy collection install -r requirements.yml
@@ -130,6 +134,8 @@ ansible-galaxy collection install -r requirements.yml
 # ansible-playbook playbook.yml --ask-become-pass
 ```
 
+> **Note**: You may need to update the playbook references from `clawdbot` to `openclaw` in the configuration files.
+
 ## Updating OpenClaw
 
 The Ansible installer sets up OpenClaw for manual updates. See [Updating](/install/updating) for the standard update flow.
@@ -137,7 +143,7 @@ The Ansible installer sets up OpenClaw for manual updates. See [Updating](/insta
 To re-run the Ansible playbook (e.g., for configuration changes):
 
 ```bash
-cd openclaw-ansible
+cd clawdbot-ansible
 ./run-playbook.sh
 ```
 
@@ -193,13 +199,13 @@ openclaw channels login
 ## Advanced Configuration
 
 For detailed security architecture and troubleshooting:
-- [Security Architecture](https://github.com/openclaw/openclaw-ansible/blob/main/docs/security.md)
-- [Technical Details](https://github.com/openclaw/openclaw-ansible/blob/main/docs/architecture.md)
-- [Troubleshooting Guide](https://github.com/openclaw/openclaw-ansible/blob/main/docs/troubleshooting.md)
+- [Security Architecture](https://github.com/openclaw/clawdbot-ansible/blob/main/docs/security.md)
+- [Technical Details](https://github.com/openclaw/clawdbot-ansible/blob/main/docs/architecture.md)
+- [Troubleshooting Guide](https://github.com/openclaw/clawdbot-ansible/blob/main/docs/troubleshooting.md)
 
 ## Related
 
-- [openclaw-ansible](https://github.com/openclaw/openclaw-ansible) — full deployment guide
+- [clawdbot-ansible](https://github.com/openclaw/clawdbot-ansible) — full deployment guide
 - [Docker](/install/docker) — containerized gateway setup
 - [Sandboxing](/gateway/sandboxing) — agent sandbox configuration
 - [Multi-Agent Sandbox & Tools](/multi-agent-sandbox-tools) — per-agent isolation
