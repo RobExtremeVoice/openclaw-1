@@ -20,6 +20,7 @@ import {
   resolveWebCredsBackupPath,
   resolveWebCredsPath,
 } from "./auth-store.js";
+import { MakeWASocketReturn } from "../types/whiskeysockets-baileys.js";
 
 export {
   getWebAuthAgeMs,
@@ -106,7 +107,7 @@ export async function createWaSocket(
   maybeRestoreCredsFromBackup(authDir);
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
   const { version } = await fetchLatestBaileysVersion();
-  const sock = makeWASocket({
+  const sock: MakeWASocketReturn = makeWASocket({
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),

@@ -60,6 +60,7 @@ export type {
 export type { ChannelConfigSchema, ChannelPlugin } from "../channels/plugins/types.plugin.js";
 export type {
   OpenClawPluginApi,
+  OpenClawPluginDefinition,
   OpenClawPluginService,
   OpenClawPluginServiceContext,
 } from "../plugins/types.js";

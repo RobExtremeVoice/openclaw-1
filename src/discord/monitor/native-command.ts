@@ -461,7 +461,7 @@ export function createDiscordNativeCommand(params: {
         preferFollowUp: false,
       });
     }
-  })();
+  })() as Command;
 }
 
 async function dispatchDiscordCommandInteraction(params: {
