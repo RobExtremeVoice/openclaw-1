@@ -116,6 +116,15 @@ export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRep
     }
 
     const assistant = msg as Extract<AgentMessage, { role: "assistant" }>;
+
+    // If the assistant message has an error stop reason, it might be filtered out
+    // by the provider on subsequent requests (e.g. Anthropic content filtering).
+    // We drop it to avoid orphaning any tool results that would be added below.
+    if ((assistant as any).stopReason === "error") {
+      changed = true;
+      continue;
+    }
+
     const toolCalls = extractToolCallsFromAssistant(assistant);
     if (toolCalls.length === 0) {
       out.push(msg);
