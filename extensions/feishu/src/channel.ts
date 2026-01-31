@@ -66,14 +66,14 @@ async function resolveFeishuClient(cfg: OpenClawConfig, accountId?: string | nul
 function resolveFileType(
   contentType?: string,
 ): "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream" {
-  if (!contentType) return "stream";
+  if (!contentType) { return "stream"; }
   const lower = contentType.toLowerCase();
-  if (lower.includes("pdf")) return "pdf";
-  if (lower.includes("word")) return "doc";
-  if (lower.includes("excel") || lower.includes("spreadsheet")) return "xls";
-  if (lower.includes("powerpoint") || lower.includes("presentation")) return "ppt";
-  if (lower.startsWith("video/")) return "mp4";
-  if (lower.startsWith("audio/")) return "opus";
+  if (lower.includes("pdf")) { return "pdf"; }
+  if (lower.includes("word")) { return "doc"; }
+  if (lower.includes("excel") || lower.includes("spreadsheet")) { return "xls"; }
+  if (lower.includes("powerpoint") || lower.includes("presentation")) { return "ppt"; }
+  if (lower.startsWith("video/")) { return "mp4"; }
+  if (lower.startsWith("audio/")) { return "opus"; }
   return "stream";
 }
 
@@ -132,11 +132,11 @@ async function processFeishuInboundMessage(params: {
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }) {
   const { ctx, cfg, runtime, statusSink } = params;
-  if (!ctx) return;
+  if (!ctx) { return; }
   const core = getFeishuRuntime();
   const isGroup = ctx.chatType === "group";
   const rawBody = ctx.text?.trim() || (ctx.media?.length ? "<media:attachment>" : "");
-  if (!rawBody) return;
+  if (!rawBody) { return; }
 
   const route = core.channel.routing.resolveAgentRoute({
     cfg,
@@ -629,7 +629,7 @@ export const feishuPlugin: ChannelPlugin = {
     deliveryMode: "direct",
     chunker: (text: any) => {
       const limit = 4000;
-      if (text.length <= limit) return [text];
+      if (text.length <= limit) { return [text]; }
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += limit) {
         chunks.push(text.slice(i, i + limit));
