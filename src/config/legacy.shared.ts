@@ -41,16 +41,12 @@ export const mergeMissing = (target: Record<string, unknown>, source: Record<str
   }
 };
 
-const AUDIO_TRANSCRIPTION_CLI_ALLOWLIST = new Set(["whisper"]);
-
 export const mapLegacyAudioTranscription = (value: unknown): Record<string, unknown> | null => {
   const transcriber = getRecord(value);
   const command = Array.isArray(transcriber?.command) ? transcriber?.command : null;
   if (!command || command.length === 0) return null;
   const rawExecutable = String(command[0] ?? "").trim();
   if (!rawExecutable) return null;
-  const executableName = rawExecutable.split(/[\\/]/).pop() ?? rawExecutable;
-  if (!AUDIO_TRANSCRIPTION_CLI_ALLOWLIST.has(executableName)) return null;
 
   const args = command.slice(1).map((part) => String(part));
   const timeoutSeconds =
