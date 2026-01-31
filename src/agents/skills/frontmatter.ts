@@ -10,6 +10,7 @@ import type {
   SkillEntry,
   SkillInstallSpec,
   SkillInvocationPolicy,
+  SkillPermissionManifest,
 } from "./types.js";
 
 export function parseFrontmatter(content: string): ParsedSkillFrontmatter {
@@ -170,4 +171,66 @@ export function resolveSkillInvocationPolicy(
 
 export function resolveSkillKey(skill: Skill, entry?: SkillEntry): string {
   return entry?.metadata?.skillKey ?? skill.name;
+}
+
+/**
+ * Parse sensitive data flags from permission manifest.
+ */
+function parseSensitiveDataFlags(
+  raw: unknown,
+): SkillPermissionManifest["sensitive_data"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const obj = raw as Record<string, unknown>;
+  return {
+    credentials: obj.credentials === true,
+    personal_info: obj.personal_info === true,
+    financial: obj.financial === true,
+  };
+}
+
+/**
+ * Parse permission manifest from skill frontmatter metadata.
+ */
+export function parsePermissionManifest(
+  frontmatter: ParsedSkillFrontmatter,
+): SkillPermissionManifest | undefined {
+  const raw = getFrontmatterValue(frontmatter, "metadata");
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON5.parse(raw) as Record<string, unknown>;
+    const metadataRawCandidates = [MANIFEST_KEY, ...LEGACY_MANIFEST_KEYS];
+    let openclawMeta: Record<string, unknown> | undefined;
+
+    for (const key of metadataRawCandidates) {
+      const candidate = parsed[key];
+      if (candidate && typeof candidate === "object") {
+        openclawMeta = candidate as Record<string, unknown>;
+        break;
+      }
+    }
+
+    if (!openclawMeta) return undefined;
+
+    const permissions = openclawMeta.permissions as Record<string, unknown> | undefined;
+    if (!permissions) return undefined;
+
+    return {
+      version: 1,
+      filesystem: normalizeStringList(permissions.filesystem),
+      network: normalizeStringList(permissions.network),
+      env: normalizeStringList(permissions.env),
+      exec: normalizeStringList(permissions.exec),
+      declared_purpose:
+        typeof permissions.declared_purpose === "string" ? permissions.declared_purpose : undefined,
+      elevated: typeof permissions.elevated === "boolean" ? permissions.elevated : undefined,
+      system_config:
+        typeof permissions.system_config === "boolean" ? permissions.system_config : undefined,
+      sensitive_data: parseSensitiveDataFlags(permissions.sensitive_data),
+      security_notes:
+        typeof permissions.security_notes === "string" ? permissions.security_notes : undefined,
+    };
+  } catch {
+    return undefined;
+  }
 }
