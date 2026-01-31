@@ -66,7 +66,9 @@ Use this when fetching external APIs in skills to protect against prompt injecti
           content = await fetchUrl(opts.url);
           sourceLabel = opts.source || opts.url;
         } catch (err) {
-          defaultRuntime.error(`Error fetching URL: ${err}`);
+          defaultRuntime.error(
+            `Error fetching URL: ${err instanceof Error ? err.message : String(err)}`,
+          );
           process.exit(1);
         }
       } else if (opts.stdin || !process.stdin.isTTY) {
@@ -79,7 +81,9 @@ Use this when fetching external APIs in skills to protect against prompt injecti
       // Detect suspicious patterns
       const suspiciousPatterns = detectSuspiciousPatterns(content);
       if (suspiciousPatterns.length > 0) {
-        const warn = rich ? theme.warn("⚠️  SUSPICIOUS PATTERNS DETECTED:") : "WARNING: SUSPICIOUS PATTERNS DETECTED:";
+        const warn = rich
+          ? theme.warn("⚠️  SUSPICIOUS PATTERNS DETECTED:")
+          : "WARNING: SUSPICIOUS PATTERNS DETECTED:";
         defaultRuntime.error(warn);
         for (const pattern of suspiciousPatterns) {
           defaultRuntime.error(`  - ${pattern}`);
