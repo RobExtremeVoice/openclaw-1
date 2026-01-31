@@ -65,7 +65,7 @@ export async function readPromptTokensFromSessionLog(
   if (!sessionId) {
     return undefined;
   }
-  const agentId = sessionEntry ? undefined : resolveAgentIdFromSessionKey(sessionKey);
+  const agentId = sessionEntry?.sessionFile ? undefined : resolveAgentIdFromSessionKey(sessionKey);
   const logPath = resolveSessionFilePath(
     sessionId,
     sessionEntry,

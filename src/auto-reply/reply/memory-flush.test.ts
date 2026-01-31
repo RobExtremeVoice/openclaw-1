@@ -14,6 +14,7 @@ import {
   readPromptTokensFromSessionLog,
   resolveEffectivePromptTokens,
 } from "./agent-runner-memory.js";
+import { resolveSessionTranscriptPath } from "../../config/sessions.js";
 
 describe("memory flush settings", () => {
   it("defaults to enabled with fallback prompt and system prompt", () => {
@@ -200,6 +201,37 @@ describe("memory flush transcript fallback", () => {
     const total = await readPromptTokensFromSessionLog("session", sessionEntry);
 
     expect(total).toBe(10);
+  });
+
+  it("derives the agent transcript path when sessionFile is missing", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-flush-agent-"));
+    const previousStateDir = process.env.OPENCLAW_STATE_DIR;
+    process.env.OPENCLAW_STATE_DIR = tmp;
+    try {
+      const agentId = "alpha";
+      const sessionId = "session";
+      const logPath = resolveSessionTranscriptPath(sessionId, agentId);
+      await fs.mkdir(path.dirname(logPath), { recursive: true });
+      await fs.writeFile(logPath, JSON.stringify({ usage: { total: 12 } }), "utf-8");
+
+      const sessionEntry = {
+        sessionId,
+        updatedAt: Date.now(),
+      };
+      const total = await readPromptTokensFromSessionLog(
+        sessionId,
+        sessionEntry,
+        `agent:${agentId}:main`,
+      );
+
+      expect(total).toBe(12);
+    } finally {
+      if (previousStateDir === undefined) {
+        delete process.env.OPENCLAW_STATE_DIR;
+      } else {
+        process.env.OPENCLAW_STATE_DIR = previousStateDir;
+      }
+    }
   });
 });
 
