@@ -3,11 +3,7 @@ import { html, nothing } from "lit";
 import { formatToolDetail, resolveToolDisplay } from "../tool-display";
 import { icons } from "../icons";
 import type { ToolCard } from "../types/chat-types";
-import { TOOL_INLINE_THRESHOLD } from "./constants";
-import {
-  formatToolOutputForSidebar,
-  getTruncatedPreview,
-} from "./tool-helpers";
+import { formatToolOutputForSidebar } from "./tool-helpers";
 import { isToolResultMessage } from "./message-normalizer";
 import { extractTextCached } from "./message-extract";
 
@@ -75,14 +71,9 @@ export function renderToolCardSidebar(
       }
     : undefined;
 
-  const isShort = hasText && (card.text?.length ?? 0) <= TOOL_INLINE_THRESHOLD;
-  const showCollapsed = hasText && !isShort;
-  const showInline = hasText && isShort;
-  const isEmpty = !hasText;
-
   return html`
-    <div
-      class="chat-tool-card ${canClick ? "chat-tool-card--clickable" : ""}"
+    <span
+      class="chat-tool-chip ${canClick ? "chat-tool-chip--clickable" : ""}"
       @click=${handleClick}
       role=${canClick ? "button" : nothing}
       tabindex=${canClick ? "0" : nothing}
@@ -93,30 +84,14 @@ export function renderToolCardSidebar(
             handleClick?.();
           }
         : nothing}
+      title=${detail ?? display.label}
     >
-      <div class="chat-tool-card__header">
-        <div class="chat-tool-card__title">
-          <span class="chat-tool-card__icon">${icons[display.icon]}</span>
-          <span>${display.label}</span>
-        </div>
-        ${canClick
-          ? html`<span class="chat-tool-card__action">${hasText ? "View" : ""} ${icons.check}</span>`
-          : nothing}
-        ${isEmpty && !canClick ? html`<span class="chat-tool-card__status">${icons.check}</span>` : nothing}
-      </div>
+      <span class="chat-tool-chip__icon">${icons[display.icon]}</span>
+      <span class="chat-tool-chip__label">${display.label}</span>
       ${detail
-        ? html`<div class="chat-tool-card__detail">${detail}</div>`
+        ? html`<span class="chat-tool-chip__detail">${detail}</span>`
         : nothing}
-      ${isEmpty
-        ? html`<div class="chat-tool-card__status-text muted">Completed</div>`
-        : nothing}
-      ${showCollapsed
-        ? html`<div class="chat-tool-card__preview mono">${getTruncatedPreview(card.text!)}</div>`
-        : nothing}
-      ${showInline
-        ? html`<div class="chat-tool-card__inline mono">${card.text}</div>`
-        : nothing}
-    </div>
+    </span>
   `;
 }
 

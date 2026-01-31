@@ -6,6 +6,7 @@ import type { ChatAttachment, ChatQueueItem } from "../ui-types";
 import type { ChatItem, MessageGroup } from "../types/chat-types";
 import { icons } from "../icons";
 import {
+  isToolResultMessage,
   normalizeMessage,
   normalizeRoleForGrouping,
 } from "../chat/message-normalizer";
@@ -14,6 +15,7 @@ import {
   renderReadingIndicatorGroup,
   renderStreamingGroup,
 } from "../chat/grouped-render";
+import { extractToolCards } from "../chat/tool-cards";
 import { renderMarkdownSidebar } from "./markdown-sidebar";
 import "../components/resizable-divider";
 
@@ -395,7 +397,16 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
     const role = normalizeRoleForGrouping(normalized.role);
     const timestamp = normalized.timestamp || Date.now();
 
-    if (!currentGroup || currentGroup.role !== role) {
+    // Fold chip-only tool results into the preceding assistant group
+    // so consecutive tool calls render inline instead of as separate groups.
+    const isChipOnly =
+      role === "tool" &&
+      currentGroup?.role === "assistant" &&
+      isChipOnlyMessage(item.message);
+
+    if (isChipOnly) {
+      currentGroup!.messages.push({ message: item.message, key: item.key });
+    } else if (!currentGroup || currentGroup.role !== role) {
       if (currentGroup) result.push(currentGroup);
       currentGroup = {
         kind: "group",
@@ -432,12 +443,6 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   }
   for (let i = historyStart; i < history.length; i++) {
     const msg = history[i];
-    const normalized = normalizeMessage(msg);
-
-    if (!props.showThinking && normalized.role.toLowerCase() === "toolresult") {
-      continue;
-    }
-
     items.push({
       kind: "message",
       key: messageKey(msg, i),
@@ -469,6 +474,17 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   }
 
   return groupMessages(items);
+}
+
+/** A tool-result message that should render as compact chips. */
+function isChipOnlyMessage(message: unknown): boolean {
+  if (!isToolResultMessage(message)) {
+    const m = message as Record<string, unknown>;
+    const role = typeof m.role === "string" ? m.role.toLowerCase() : "";
+    if (role !== "toolresult" && role !== "tool_result") return false;
+  }
+  const cards = extractToolCards(message);
+  return cards.length > 0;
 }
 
 function messageKey(message: unknown, index: number): string {

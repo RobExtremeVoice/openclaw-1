@@ -2,6 +2,7 @@ import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
 import type { AssistantIdentity } from "../assistant-identity";
+import { icons } from "../icons";
 import { toSanitizedMarkdownHtml } from "../markdown";
 import type { MessageGroup } from "../types/chat-types";
 import { renderCopyAsMarkdownButton } from "./copy-as-markdown";
@@ -139,17 +140,7 @@ export function renderMessageGroup(
         avatar: opts.assistantAvatar ?? null,
       })}
       <div class="chat-group-messages">
-        ${group.messages.map((item, index) =>
-          renderGroupedMessage(
-            item.message,
-            {
-              isStreaming:
-                group.isStreaming && index === group.messages.length - 1,
-              showReasoning: opts.showReasoning,
-            },
-            opts.onOpenSidebar,
-          ),
-        )}
+        ${renderGroupedMessages(group, opts)}
         <div class="chat-group-footer">
           <span class="chat-sender-name">${who}</span>
           <span class="chat-group-timestamp">${timestamp}</span>
@@ -224,6 +215,100 @@ function renderMessageImages(images: ImageBlock[]) {
   `;
 }
 
+/** Check if a message will render as chip-only (no bubble/markdown). */
+/** A message that renders only as compact chip(s) — no text bubble. */
+function isChipOnlyMessage(message: unknown): boolean {
+  const m = message as Record<string, unknown>;
+  const role = typeof m.role === "string" ? m.role : "unknown";
+
+  const cards = extractToolCards(message);
+  if (cards.length === 0) return false;
+
+  const isToolResult =
+    isToolResultMessage(message) ||
+    role.toLowerCase() === "toolresult" ||
+    role.toLowerCase() === "tool_result" ||
+    typeof m.toolCallId === "string" ||
+    typeof m.tool_call_id === "string";
+  if (isToolResult) return true;
+
+  // Assistant message with only tool_calls (no text content)
+  if (role === "assistant") {
+    const text = extractTextCached(message);
+    return !text?.trim();
+  }
+
+  return false;
+}
+
+/**
+ * Render all messages in a group, batching consecutive chip-only messages
+ * into a single flex row so they display inline.
+ */
+function renderGroupedMessages(
+  group: MessageGroup,
+  opts: {
+    onOpenSidebar?: (content: string) => void;
+    showReasoning: boolean;
+  },
+) {
+  const results: unknown[] = [];
+  let chipBatch: unknown[] = [];
+  let chipCount = 0;
+
+  const flushChips = () => {
+    if (chipBatch.length === 0) return;
+    const count = chipCount;
+    const chips = chipBatch;
+    results.push(
+      html`<details class="chat-tool-collapse">
+        <summary class="chat-tool-collapse__summary">
+          ${icons.wrench}
+          <span>${count} tool call${count !== 1 ? "s" : ""}</span>
+        </summary>
+        <div class="chat-tool-chips">${chips}</div>
+      </details>`,
+    );
+    chipBatch = [];
+    chipCount = 0;
+  };
+
+  for (let i = 0; i < group.messages.length; i++) {
+    const item = group.messages[i];
+    if (isChipOnlyMessage(item.message)) {
+      const cards = extractToolCards(item.message);
+      chipCount += cards.length;
+      chipBatch.push(
+        renderGroupedMessage(
+          item.message,
+          {
+            isStreaming:
+              group.isStreaming && i === group.messages.length - 1,
+            showReasoning: opts.showReasoning,
+          },
+          opts.onOpenSidebar,
+        ),
+      );
+    } else {
+      flushChips();
+      results.push(
+        renderGroupedMessage(
+          item.message,
+          {
+            isStreaming:
+              group.isStreaming && i === group.messages.length - 1,
+            showReasoning: opts.showReasoning,
+          },
+          opts.onOpenSidebar,
+        ),
+      );
+    }
+  }
+
+  flushChips();
+  return results;
+}
+
 function renderGroupedMessage(
   message: unknown,
   opts: { isStreaming: boolean; showReasoning: boolean },
@@ -264,13 +349,24 @@ function renderGroupedMessage(
     .filter(Boolean)
     .join(" ");
 
-  if (!markdown && hasToolCards && isToolResult) {
+  // Tool-result messages always render as compact chips (text via sidebar)
+  if (hasToolCards && isToolResult) {
     return html`${toolCards.map((card) =>
       renderToolCardSidebar(card, onOpenSidebar),
     )}`;
   }
 
-  if (!markdown && !hasToolCards && !hasImages) return nothing;
+  // Assistant messages with text: suppress tool_call chips (result chips follow).
+  // Assistant messages with ONLY tool_calls (no text): render as chips.
+  const isAssistantCallOnly = role === "assistant" && hasToolCards && !markdown;
+  if (isAssistantCallOnly) {
+    return html`${toolCards.map((card) =>
+      renderToolCardSidebar(card, onOpenSidebar),
+    )}`;
+  }
+  const showInlineChips = hasToolCards && role !== "assistant";
+
+  if (!markdown && !showInlineChips && !hasImages) return nothing;
 
   return html`
     <div class="${bubbleClasses}">
@@ -284,7 +380,11 @@ function renderGroupedMessage(
       ${markdown
         ? html`<div class="chat-text">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`
         : nothing}
-      ${toolCards.map((card) => renderToolCardSidebar(card, onOpenSidebar))}
+      ${showInlineChips
+        ? html`<div class="chat-tool-chips">${toolCards.map((card) =>
+            renderToolCardSidebar(card, onOpenSidebar),
+          )}</div>`
+        : nothing}
     </div>
   `;
 }
