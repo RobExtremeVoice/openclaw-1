@@ -107,6 +107,7 @@ crypto/prepaid).
       search: {
         enabled: true,
         provider: "perplexity",
+        proxy: "http://127.0.0.1:7890", // optional
         perplexity: {
           // API key (optional if OPENROUTER_API_KEY or PERPLEXITY_API_KEY is set)
           apiKey: "sk-or-v1-...",
@@ -160,7 +161,8 @@ Search the web using your configured provider.
         apiKey: "BRAVE_API_KEY_HERE", // optional if BRAVE_API_KEY is set
         maxResults: 5,
         timeoutSeconds: 30,
-        cacheTtlMinutes: 15
+        cacheTtlMinutes: 15,
+        proxy: "http://127.0.0.1:7890" // optional
       }
     }
   }
