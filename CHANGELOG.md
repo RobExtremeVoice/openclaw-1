@@ -74,11 +74,15 @@ Status: stable.
 - **BREAKING:** Gateway auth mode "none" is removed; gateway now requires token/password (Tailscale Serve identity still allowed).
 
 ### Fixes
+- Infra: resolve Control UI assets for npm global installs. (#4909) Thanks @YuriNachos.
+- Gateway: prevent blank token prompts from storing "undefined". (#4873) Thanks @Hisleren.
 - Telegram: use undici fetch for per-account proxy dispatcher. (#4456) Thanks @spiceoogway.
 - Telegram: fix HTML nesting for overlapping styles and links. (#4578) Thanks @ThanhNguyxn.
+- Telegram: resolve per-account bot token configs with normalized account IDs. (#5055) Thanks @jasonsschin.
 - Telegram: avoid silent empty replies by tracking normalization skips before fallback. (#3796)
 - Telegram: accept numeric messageId/chatId in react action and honor channelId fallback. (#4533) Thanks @Ayush10.
 - Telegram: scope native skill commands to bound agent per bot. (#4360) Thanks @robhparker.
+- Telegram: fall back to session origin thread id for delivery context when missing. (#4911) Thanks @yevhen.
 - Mentions: honor mentionPatterns even when explicit mentions are present. (#3303) Thanks @HirokiKobayashi-R.
 - Discord: restore username directory lookup in target resolution. (#3131) Thanks @bonald.
 - Agents: align MiniMax base URL test expectation with default provider config. (#3131) Thanks @bonald.
@@ -90,6 +94,7 @@ Status: stable.
 - TTS: read OPENAI_TTS_BASE_URL at runtime instead of module load to honor config.env. (#3341) Thanks @hclsys.
 - macOS: auto-scroll to bottom when sending a new message while scrolled up. (#2471) Thanks @kennyklee.
 - Web UI: auto-expand the chat compose textarea while typing (with sensible max height). (#2950) Thanks @shivamraut101.
+- Web UI: refresh sessions after queued /new or /reset commands once the run completes.
 - Gateway: prevent crashes on transient network errors (fetch failures, timeouts, DNS). Added fatal error detection to only exit on truly critical errors. Fixes #2895, #2879, #2873. (#2980) Thanks @elliotsecops.
 - Agents: guard channel tool listActions to avoid plugin crashes. (#2859) Thanks @mbelinky.
 - Discord: stop resolveDiscordTarget from passing directory params into messaging target parsers. Fixes #3167. Thanks @thewilloftheshadow.
