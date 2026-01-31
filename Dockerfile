@@ -20,6 +20,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ui/package.json ./ui/package.json
 COPY patches ./patches
 COPY scripts ./scripts
+# Ensure startup script is executable
+RUN chmod +x scripts/render-start.sh
 
 RUN pnpm install --frozen-lockfile
 
@@ -36,4 +38,6 @@ ENV NODE_ENV=production
 # This reduces the attack surface by preventing container escape via root privileges
 USER node
 
-CMD ["node", "dist/index.js"]
+# Default CMD runs the gateway via render-start.sh (creates config, binds to PORT, uses OPENCLAW_* / CLAWDBOT_* env).
+# Render and other providers can override with dockerCommand; if not set, this ensures the gateway starts instead of CLI help.
+CMD ["/bin/sh", "scripts/render-start.sh"]
