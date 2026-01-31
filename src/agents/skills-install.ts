@@ -118,6 +118,33 @@ function buildInstallCommand(
       }
       return { argv: ["brew", "install", spec.formula] };
     }
+    case "apt": {
+      if (!spec.package) return { argv: null, error: "missing apt package" };
+      // Note: sudo handling may need to be configurable or elevated separately
+      return { argv: ["sudo", "apt-get", "install", "-y", spec.package] };
+    }
+    case "winget": {
+      if (!spec.package) return { argv: null, error: "missing winget package" };
+      return {
+        argv: [
+          "winget",
+          "install",
+          "--accept-package-agreements",
+          "--accept-source-agreements",
+          "-e",
+          "--id",
+          spec.package,
+        ],
+      };
+    }
+    case "choco": {
+      if (!spec.package) return { argv: null, error: "missing choco package" };
+      return { argv: ["choco", "install", "-y", spec.package] };
+    }
+    case "scoop": {
+      if (!spec.package) return { argv: null, error: "missing scoop package" };
+      return { argv: ["scoop", "install", spec.package] };
+    }
     case "node": {
       if (!spec.package) {
         return { argv: null, error: "missing node package" };
@@ -385,6 +412,42 @@ export async function installSkill(params: SkillInstallRequest): Promise<SkillIn
     return {
       ok: false,
       message: "brew not installed",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
+  if (spec.kind === "apt" && !hasBinary("apt-get") && !hasBinary("apt")) {
+    return {
+      ok: false,
+      message: "apt not available (requires Debian/Ubuntu)",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
+  if (spec.kind === "winget" && !hasBinary("winget")) {
+    return {
+      ok: false,
+      message: "winget not installed (requires Windows 10/11)",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
+  if (spec.kind === "choco" && !hasBinary("choco")) {
+    return {
+      ok: false,
+      message: "chocolatey not installed (visit chocolatey.org)",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
+  if (spec.kind === "scoop" && !hasBinary("scoop")) {
+    return {
+      ok: false,
+      message: "scoop not installed (visit scoop.sh)",
       stdout: "",
       stderr: "",
       code: null,
