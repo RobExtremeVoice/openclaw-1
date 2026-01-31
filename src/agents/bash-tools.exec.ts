@@ -134,6 +134,7 @@ export type ExecToolDefaults = {
   messageProvider?: string;
   notifyOnExit?: boolean;
   cwd?: string;
+  pty?: boolean;
 };
 
 export type { BashSandboxConfig } from "./bash-tools.shared.js";
@@ -1351,7 +1352,7 @@ export function createExecTool(
                 env,
                 sandbox: undefined,
                 containerWorkdir: null,
-                usePty: params.pty === true && !sandbox,
+                usePty: (params.pty ?? defaults?.pty) === true && !sandbox,
                 warnings,
                 maxOutput,
                 pendingMaxOutput,
@@ -1441,7 +1442,7 @@ export function createExecTool(
       const effectiveTimeout =
         typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec;
       const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
-      const usePty = params.pty === true && !sandbox;
+      const usePty = (params.pty ?? defaults?.pty) === true && !sandbox;
       const run = await runExecProcess({
         command: params.command,
         workdir,
