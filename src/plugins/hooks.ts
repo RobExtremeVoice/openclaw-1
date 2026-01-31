@@ -13,6 +13,9 @@ import type {
   PluginHookAgentEndEvent,
   PluginHookBeforeAgentStartEvent,
   PluginHookBeforeAgentStartResult,
+  PluginHookResolveRoomKeyEvent,
+  PluginHookResolveRoomKeyContext,
+  PluginHookResolveRoomKeyResult,
   PluginHookBeforeCompactionEvent,
   PluginHookBeforeToolCallEvent,
   PluginHookBeforeToolCallResult,
@@ -194,6 +197,25 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
           acc?.prependContext && next.prependContext
             ? `${acc.prependContext}\n\n${next.prependContext}`
             : (next.prependContext ?? acc?.prependContext),
+      }),
+    );
+  }
+
+  /**
+   * Run resolve_room_key hook.
+   * Allows plugins to deterministically refine the canonical room key.
+   * This key should be used for both transcript identity and FIFO lane ordering.
+   */
+  async function runResolveRoomKey(
+    event: PluginHookResolveRoomKeyEvent,
+    ctx: PluginHookResolveRoomKeyContext,
+  ): Promise<PluginHookResolveRoomKeyResult | undefined> {
+    return runModifyingHook<"resolve_room_key", PluginHookResolveRoomKeyResult>(
+      "resolve_room_key",
+      event,
+      ctx,
+      (acc, next) => ({
+        roomKey: next.roomKey ?? acc?.roomKey,
       }),
     );
   }
@@ -442,6 +464,7 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
   return {
     // Agent hooks
     runBeforeAgentStart,
+    runResolveRoomKey,
     runAgentEnd,
     runBeforeCompaction,
     runAfterCompaction,
