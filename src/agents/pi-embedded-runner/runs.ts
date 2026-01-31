@@ -137,4 +137,15 @@ export function clearActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueu
   }
 }
 
+export function forceClearActiveEmbeddedRun(sessionId: string) {
+  if (ACTIVE_EMBEDDED_RUNS.has(sessionId)) {
+    ACTIVE_EMBEDDED_RUNS.delete(sessionId);
+    logSessionStateChange({ sessionId, state: "idle", reason: "timeout_force_cleared" });
+    diag.warn(
+      `run force cleared after timeout: sessionId=${sessionId} totalActive=${ACTIVE_EMBEDDED_RUNS.size}`,
+    );
+    notifyEmbeddedRunEnded(sessionId);
+  }
+}
+
 export type { EmbeddedPiQueueHandle };

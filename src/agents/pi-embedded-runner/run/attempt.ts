@@ -74,6 +74,7 @@ import {
   clearActiveEmbeddedRun,
   type EmbeddedPiQueueHandle,
   setActiveEmbeddedRun,
+  forceClearActiveEmbeddedRun,
 } from "../runs.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
@@ -658,6 +659,7 @@ export async function runEmbeddedAttempt(
 
       let abortWarnTimer: NodeJS.Timeout | undefined;
       const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
+      let forceCleanupTimer: NodeJS.Timeout | undefined;
       const abortTimer = setTimeout(
         () => {
           if (!isProbeSession) {
@@ -678,6 +680,11 @@ export async function runEmbeddedAttempt(
               }
             }, 10_000);
           }
+          // Force-clear active run entry after grace period to prevent session from
+          // being permanently stuck when the run fails to clean up after abort.
+          forceCleanupTimer = setTimeout(() => {
+            forceClearActiveEmbeddedRun(params.sessionId);
+          }, 30_000);
         },
         Math.max(1, params.timeoutMs),
       );
@@ -860,6 +867,9 @@ export async function runEmbeddedAttempt(
         clearTimeout(abortTimer);
         if (abortWarnTimer) {
           clearTimeout(abortWarnTimer);
+        }
+        if (forceCleanupTimer) {
+          clearTimeout(forceCleanupTimer);
         }
         unsubscribe();
         clearActiveEmbeddedRun(params.sessionId, queueHandle);
