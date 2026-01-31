@@ -16,17 +16,38 @@ if (initialBuild.status !== 0) {
   process.exit(initialBuild.status ?? 1);
 }
 
-const compilerProcess = spawn("pnpm", ["tsdown", '--watch', 'src/'], {
+const compilerProcess = spawn("pnpm", ["tsc", '-p', 'tsconfig.json', '--noEmit', 'false', '--watch'], {
   cwd,
   env,
   stdio: "inherit",
 });
 
-const nodeProcess = spawn(process.execPath, ["--watch", "openclaw.mjs", ...args], {
-  cwd,
-  env,
-  stdio: "inherit",
-});
+let nodeProcess = null;
+let restartTimer = null;
+
+function spawnNode() {
+  nodeProcess = spawn(process.execPath, ["--watch", "openclaw.mjs", ...args], {
+    cwd,
+    env,
+    stdio: "inherit",
+  });
+
+  nodeProcess.on("exit", (code, signal) => {
+    if (signal || exiting) {
+      return;
+    }
+    // If the build is mid-refresh, node can exit on missing modules. Retry.
+    if (restartTimer) {
+      clearTimeout(restartTimer);
+    }
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      spawnNode();
+    }, 250);
+  });
+}
+
+spawnNode();
 
 let exiting = false;
 
@@ -35,7 +56,11 @@ function cleanup(code = 0) {
     return;
   }
   exiting = true;
-  nodeProcess.kill("SIGTERM");
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+  nodeProcess?.kill("SIGTERM");
   compilerProcess.kill("SIGTERM");
   process.exit(code);
 }
@@ -45,13 +70,6 @@ process.on("SIGTERM", () => cleanup(143));
 
 compilerProcess.on("exit", (code) => {
   if (exiting) {
-    return;
-  }
-  cleanup(code ?? 1);
-});
-
-nodeProcess.on("exit", (code, signal) => {
-  if (signal || exiting) {
     return;
   }
   cleanup(code ?? 1);
