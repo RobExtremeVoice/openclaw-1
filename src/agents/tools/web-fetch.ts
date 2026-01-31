@@ -8,6 +8,7 @@ import {
   SsrFBlockedError,
 } from "../../infra/net/ssrf.js";
 import type { Dispatcher } from "undici";
+import { ProxyAgent } from "undici";
 import { stringEnum } from "../schema/typebox.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
@@ -94,6 +95,12 @@ function resolveFetchReadabilityEnabled(fetch?: WebFetchConfig): boolean {
   return true;
 }
 
+function resolveFetchProxy(fetch?: WebFetchConfig): string | undefined {
+  if (!fetch || typeof fetch !== "object") return undefined;
+  const proxy = "proxy" in fetch && typeof fetch.proxy === "string" ? fetch.proxy.trim() : "";
+  return proxy || undefined;
+}
+
 function resolveFirecrawlConfig(fetch?: WebFetchConfig): FirecrawlFetchConfig {
   if (!fetch || typeof fetch !== "object") return undefined;
   const firecrawl = "firecrawl" in fetch ? fetch.firecrawl : undefined;
@@ -173,25 +180,37 @@ async function fetchWithRedirects(params: {
   maxRedirects: number;
   timeoutSeconds: number;
   userAgent: string;
+  proxy?: string;
 }): Promise<{ response: Response; finalUrl: string; dispatcher: Dispatcher }> {
   const signal = withTimeout(undefined, params.timeoutSeconds * 1000);
   const visited = new Set<string>();
   let currentUrl = params.url;
   let redirectCount = 0;
 
+  // Create proxy dispatcher if configured
+  const proxyDispatcher = params.proxy ? new ProxyAgent(params.proxy) : null;
+
   while (true) {
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(currentUrl);
     } catch {
+      if (proxyDispatcher) await closeDispatcher(proxyDispatcher);
       throw new Error("Invalid URL: must be http or https");
     }
     if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      if (proxyDispatcher) await closeDispatcher(proxyDispatcher);
       throw new Error("Invalid URL: must be http or https");
     }
 
-    const pinned = await resolvePinnedHostname(parsedUrl.hostname);
-    const dispatcher = createPinnedDispatcher(pinned);
+    // Use proxy dispatcher if available, otherwise use pinned dispatcher for SSRF protection
+    let dispatcher: Dispatcher;
+    if (proxyDispatcher) {
+      dispatcher = proxyDispatcher;
+    } else {
+      const pinned = await resolvePinnedHostname(parsedUrl.hostname);
+      dispatcher = createPinnedDispatcher(pinned);
+    }
     let res: Response;
     try {
       res = await fetch(parsedUrl.toString(), {
@@ -206,29 +225,35 @@ async function fetchWithRedirects(params: {
         dispatcher,
       } as RequestInit);
     } catch (err) {
-      await closeDispatcher(dispatcher);
+      // Only close non-proxy dispatchers on error; proxy dispatcher is reused
+      if (!proxyDispatcher) await closeDispatcher(dispatcher);
+      else await closeDispatcher(proxyDispatcher);
       throw err;
     }
 
     if (isRedirectStatus(res.status)) {
       const location = res.headers.get("location");
       if (!location) {
-        await closeDispatcher(dispatcher);
+        if (!proxyDispatcher) await closeDispatcher(dispatcher);
+        else await closeDispatcher(proxyDispatcher);
         throw new Error(`Redirect missing location header (${res.status})`);
       }
       redirectCount += 1;
       if (redirectCount > params.maxRedirects) {
-        await closeDispatcher(dispatcher);
+        if (!proxyDispatcher) await closeDispatcher(dispatcher);
+        else await closeDispatcher(proxyDispatcher);
         throw new Error(`Too many redirects (limit: ${params.maxRedirects})`);
       }
       const nextUrl = new URL(location, parsedUrl).toString();
       if (visited.has(nextUrl)) {
-        await closeDispatcher(dispatcher);
+        if (!proxyDispatcher) await closeDispatcher(dispatcher);
+        else await closeDispatcher(proxyDispatcher);
         throw new Error("Redirect loop detected");
       }
       visited.add(nextUrl);
       void res.body?.cancel();
-      await closeDispatcher(dispatcher);
+      // Only close pinned dispatcher on redirect; proxy dispatcher is reused
+      if (!proxyDispatcher) await closeDispatcher(dispatcher);
       currentUrl = nextUrl;
       continue;
     }
@@ -338,6 +363,7 @@ async function runWebFetch(params: {
   cacheTtlMs: number;
   userAgent: string;
   readabilityEnabled: boolean;
+  proxy?: string;
   firecrawlEnabled: boolean;
   firecrawlApiKey?: string;
   firecrawlBaseUrl: string;
@@ -373,6 +399,7 @@ async function runWebFetch(params: {
       maxRedirects: params.maxRedirects,
       timeoutSeconds: params.timeoutSeconds,
       userAgent: params.userAgent,
+      proxy: params.proxy,
     });
     res = result.response;
     finalUrl = result.finalUrl;
@@ -576,6 +603,7 @@ export function createWebFetchTool(options?: {
   const fetch = resolveFetchConfig(options?.config);
   if (!resolveFetchEnabled({ fetch, sandboxed: options?.sandboxed })) return null;
   const readabilityEnabled = resolveFetchReadabilityEnabled(fetch);
+  const proxy = resolveFetchProxy(fetch);
   const firecrawl = resolveFirecrawlConfig(fetch);
   const firecrawlApiKey = resolveFirecrawlApiKey(firecrawl);
   const firecrawlEnabled = resolveFirecrawlEnabled({ firecrawl, apiKey: firecrawlApiKey });
@@ -609,6 +637,7 @@ export function createWebFetchTool(options?: {
         cacheTtlMs: resolveCacheTtlMs(fetch?.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
         userAgent,
         readabilityEnabled,
+        proxy,
         firecrawlEnabled,
         firecrawlApiKey,
         firecrawlBaseUrl,
