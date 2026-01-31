@@ -39,7 +39,11 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+    network_mode: "service:openclaw-gateway" # Run CLI in the same network namespace as the gateway so CLI can reach it via localhost (127.0.0.1) and avoid localhost/Docker DNS issues
     stdin_open: true
     tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
+    # CLI container must be started after the gateway container
+    depends_on:
+      - openclaw-gateway
