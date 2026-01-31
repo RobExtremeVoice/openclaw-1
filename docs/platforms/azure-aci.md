@@ -101,12 +101,14 @@ Resource Group (rg-{environment})
 
 ### Container resources
 
-Default: 1 CPU, 2 GB RAM. Override in Bicep params:
+Default: 1 CPU, 2 GB RAM. To change, edit the defaults in `infra/azure/main.bicep`:
 
-```bash
-azd env set CONTAINER_CPU 2
-azd env set CONTAINER_MEMORY 4
+```bicep
+param containerCpu int = 2      // default: 1
+param containerMemory int = 4   // default: 2
 ```
+
+Then redeploy with `azd up`.
 
 ## Management
 
