@@ -2,6 +2,7 @@
 summary: "Security considerations and threat model for running an AI gateway with shell access"
 read_when:
   - Adding features that widen access or automation
+title: "Security"
 ---
 
 # Security 🔒
@@ -225,7 +226,7 @@ Details: [Configuration](/gateway/configuration) and [Groups](/concepts/groups)
 
 Prompt injection is when an attacker crafts a message that manipulates the model into doing something unsafe (“ignore your instructions”, “dump your filesystem”, “follow this link and run commands”, etc.).
 
-Even with strong system prompts, **prompt injection is not solved**. What helps in practice:
+Even with strong system prompts, **prompt injection is not solved**. System prompt guardrails are soft guidance only; hard enforcement comes from tool policy, exec approvals, sandboxing, and channel allowlists (and operators can disable these by design). What helps in practice:
 
 - Keep inbound DMs locked down (pairing/allowlists).
 - Prefer mention gating in groups; avoid “always-on” bots in public rooms.
