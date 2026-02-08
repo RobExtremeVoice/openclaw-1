@@ -6,7 +6,7 @@ import {
   isVersionManagedNodePath,
   resolveSystemNodePath,
 } from "./runtime-paths.js";
-import { getMinimalServicePathParts } from "./service-env.js";
+import { getMinimalServicePathPartsFromEnv } from "./service-env.js";
 import { resolveSystemdUserUnitPath } from "./systemd.js";
 
 export type GatewayServiceCommand = {
@@ -67,21 +67,35 @@ function parseSystemdUnit(content: string): {
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith("#") || line.startsWith(";")) continue;
-    if (line.startsWith("[")) continue;
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith("#") || line.startsWith(";")) {
+      continue;
+    }
+    if (line.startsWith("[")) {
+      continue;
+    }
     const idx = line.indexOf("=");
-    if (idx <= 0) continue;
+    if (idx <= 0) {
+      continue;
+    }
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
-    if (!value) continue;
+    if (!value) {
+      continue;
+    }
     if (key === "After") {
       for (const entry of value.split(/\s+/)) {
-        if (entry) after.add(entry);
+        if (entry) {
+          after.add(entry);
+        }
       }
     } else if (key === "Wants") {
       for (const entry of value.split(/\s+/)) {
-        if (entry) wants.add(entry);
+        if (entry) {
+          wants.add(entry);
+        }
       }
     } else if (key === "RestartSec") {
       restartSec = value;
@@ -92,9 +106,13 @@ function parseSystemdUnit(content: string): {
 }
 
 function isRestartSecPreferred(value: string | undefined): boolean {
-  if (!value) return false;
+  if (!value) {
+    return false;
+  }
   const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) return false;
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
   return Math.abs(parsed - 5) < 0.01;
 }
 
@@ -170,7 +188,9 @@ async function auditLaunchdPlist(
 }
 
 function auditGatewayCommand(programArguments: string[] | undefined, issues: ServiceConfigIssue[]) {
-  if (!programArguments || programArguments.length === 0) return;
+  if (!programArguments || programArguments.length === 0) {
+    return;
+  }
   if (!hasGatewaySubcommand(programArguments)) {
     issues.push({
       code: SERVICE_AUDIT_CODES.gatewayCommandMissing,
@@ -206,9 +226,12 @@ function normalizePathEntry(entry: string, platform: NodeJS.Platform): string {
 function auditGatewayServicePath(
   command: GatewayServiceCommand,
   issues: ServiceConfigIssue[],
+  env: Record<string, string | undefined>,
   platform: NodeJS.Platform,
 ) {
-  if (platform === "win32") return;
+  if (platform === "win32") {
+    return;
+  }
   const servicePath = command?.environment?.PATH;
   if (!servicePath) {
     issues.push({
@@ -219,15 +242,16 @@ function auditGatewayServicePath(
     return;
   }
 
-  const expected = getMinimalServicePathParts({ platform });
+  const expected = getMinimalServicePathPartsFromEnv({ platform, env });
   const parts = servicePath
     .split(getPathModule(platform).delimiter)
     .map((entry) => entry.trim())
     .filter(Boolean);
-  const normalizedParts = parts.map((entry) => normalizePathEntry(entry, platform));
+  const normalizedParts = new Set(parts.map((entry) => normalizePathEntry(entry, platform)));
+  const normalizedExpected = new Set(expected.map((entry) => normalizePathEntry(entry, platform)));
   const missing = expected.filter((entry) => {
     const normalized = normalizePathEntry(entry, platform);
-    return !normalizedParts.includes(normalized);
+    return !normalizedParts.has(normalized);
   });
   if (missing.length > 0) {
     issues.push({
@@ -239,6 +263,9 @@ function auditGatewayServicePath(
 
   const nonMinimal = parts.filter((entry) => {
     const normalized = normalizePathEntry(entry, platform);
+    if (normalizedExpected.has(normalized)) {
+      return false;
+    }
     return (
       normalized.includes("/.nvm/") ||
       normalized.includes("/.fnm/") ||
@@ -271,7 +298,9 @@ async function auditGatewayRuntime(
   platform: NodeJS.Platform,
 ) {
   const execPath = command?.programArguments?.[0];
-  if (!execPath) return;
+  if (!execPath) {
+    return;
+  }
 
   if (isBunRuntime(execPath)) {
     issues.push({
@@ -283,7 +312,9 @@ async function auditGatewayRuntime(
     return;
   }
 
-  if (!isNodeRuntime(execPath)) return;
+  if (!isNodeRuntime(execPath)) {
+    return;
+  }
 
   if (isVersionManagedNodePath(execPath, platform)) {
     issues.push({
@@ -315,7 +346,7 @@ export async function auditGatewayServiceConfig(params: {
   const platform = params.platform ?? process.platform;
 
   auditGatewayCommand(params.command?.programArguments, issues);
-  auditGatewayServicePath(params.command, issues, platform);
+  auditGatewayServicePath(params.command, issues, params.env, platform);
   await auditGatewayRuntime(params.env, params.command, issues, platform);
 
   if (platform === "linux") {

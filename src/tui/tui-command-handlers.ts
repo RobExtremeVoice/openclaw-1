@@ -228,7 +228,9 @@ export function createCommandHandlers(context: CommandHandlerContext) {
 
   const handleCommand = async (raw: string) => {
     const { name, args } = parseCommand(raw);
-    if (!name) return;
+    if (!name) {
+      return;
+    }
     switch (name) {
       case "help":
         chatLog.addSystem(
@@ -247,7 +249,9 @@ export function createCommandHandlers(context: CommandHandlerContext) {
           }
           if (status && typeof status === "object") {
             const lines = formatStatusSummary(status as GatewayStatusSummary);
-            for (const line of lines) chatLog.addSystem(line);
+            for (const line of lines) {
+              chatLog.addSystem(line);
+            }
             break;
           }
           chatLog.addSystem("status: unknown response");
@@ -408,6 +412,12 @@ export function createCommandHandlers(context: CommandHandlerContext) {
       case "new":
       case "reset":
         try {
+          // Clear token counts immediately to avoid stale display (#1523)
+          state.sessionInfo.inputTokens = null;
+          state.sessionInfo.outputTokens = null;
+          state.sessionInfo.totalTokens = null;
+          tui.requestRender();
+
           await client.resetSession(state.currentSessionKey);
           chatLog.addSystem(`session ${state.currentSessionKey} reset`);
           await loadHistory();
@@ -428,7 +438,7 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         process.exit(0);
         break;
       default:
-        chatLog.addSystem(`unknown command: /${name}`);
+        await sendMessage(raw);
         break;
     }
     tui.requestRender();

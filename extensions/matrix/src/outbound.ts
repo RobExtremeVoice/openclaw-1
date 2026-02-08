@@ -1,4 +1,4 @@
-import type { ChannelOutboundAdapter } from "clawdbot/plugin-sdk";
+import type { ChannelOutboundAdapter } from "openclaw/plugin-sdk";
 
 import { getMatrixRuntime } from "./runtime.js";
 import { sendMessageMatrix, sendPollMatrix } from "./matrix/send.js";
@@ -6,6 +6,7 @@ import { sendMessageMatrix, sendPollMatrix } from "./matrix/send.js";
 export const matrixOutbound: ChannelOutboundAdapter = {
   deliveryMode: "direct",
   chunker: (text, limit) => getMatrixRuntime().channel.text.chunkMarkdownText(text, limit),
+  chunkerMode: "markdown",
   textChunkLimit: 4000,
   sendText: async ({ to, text, deps, replyToId, threadId }) => {
     const send = deps?.sendMatrix ?? sendMessageMatrix;

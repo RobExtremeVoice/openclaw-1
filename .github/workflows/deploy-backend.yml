@@ -1,0 +1,63 @@
+name: Build and Deploy Backend (dev)
+
+on:
+  push:
+    branches: [ main ]   # ajuste se o deploy dev usar outra branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write    # necessário pro OIDC (assumeRole)
+      contents: read
+
+    env:
+      AWS_REGION: us-east-1
+      AWS_ACCOUNT_ID: "325899476381"
+      ECR_REPOSITORY: app_backend_openclaw
+      ECS_CLUSTER: app-openclawinthecloud-dev-cluster
+      ECS_SERVICE: app-openclawinthecloud-dev-backend-service
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::325899476381:role/GithubActionsDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        working-directory: ./Infra/backend   # <-- AJUSTE se o Dockerfile estiver em outro lugar
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+          echo "Building image $IMAGE_URI"
+
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+          # Também atualizar a tag 'latest'
+          LATEST_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          docker tag $IMAGE_URI $LATEST_URI
+          docker push $LATEST_URI
+
+          echo "image=$LATEST_URI" >> $GITHUB_OUTPUT
+
+      - name: Force new ECS deployment
+        env:
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+        run: |
+          aws ecs update-service \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ env.ECS_SERVICE }}" \
+            --force-new-deployment

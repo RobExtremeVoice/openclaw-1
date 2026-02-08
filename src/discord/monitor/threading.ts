@@ -14,6 +14,7 @@ export type DiscordThreadChannel = {
   name?: string | null;
   parentId?: string | null;
   parent?: { id?: string; name?: string };
+  ownerId?: string | null;
 };
 
 export type DiscordThreadStarter = {
@@ -30,6 +31,10 @@ type DiscordThreadParentInfo = {
 
 const DISCORD_THREAD_STARTER_CACHE = new Map<string, DiscordThreadStarter>();
 
+export function __resetDiscordThreadStarterCacheForTest() {
+  DISCORD_THREAD_STARTER_CACHE.clear();
+}
+
 function isDiscordThreadType(type: ChannelType | undefined): boolean {
   return (
     type === ChannelType.PublicThread ||
@@ -43,7 +48,9 @@ export function resolveDiscordThreadChannel(params: {
   message: DiscordMessageEvent["message"];
   channelInfo: import("./message-utils.js").DiscordChannelInfo | null;
 }): DiscordThreadChannel | null {
-  if (!params.isGuildMessage) return null;
+  if (!params.isGuildMessage) {
+    return null;
+  }
   const { message, channelInfo } = params;
   const channel = "channel" in message ? (message as { channel?: unknown }).channel : undefined;
   const isThreadChannel =
@@ -52,13 +59,18 @@ export function resolveDiscordThreadChannel(params: {
     "isThread" in channel &&
     typeof (channel as { isThread?: unknown }).isThread === "function" &&
     (channel as { isThread: () => boolean }).isThread();
-  if (isThreadChannel) return channel as unknown as DiscordThreadChannel;
-  if (!isDiscordThreadType(channelInfo?.type)) return null;
+  if (isThreadChannel) {
+    return channel as unknown as DiscordThreadChannel;
+  }
+  if (!isDiscordThreadType(channelInfo?.type)) {
+    return null;
+  }
   return {
     id: message.channelId,
     name: channelInfo?.name ?? undefined,
     parentId: channelInfo?.parentId ?? undefined,
     parent: undefined,
+    ownerId: channelInfo?.ownerId ?? undefined,
   };
 }
 
@@ -70,7 +82,9 @@ export async function resolveDiscordThreadParentInfo(params: {
   const { threadChannel, channelInfo, client } = params;
   const parentId =
     threadChannel.parentId ?? threadChannel.parent?.id ?? channelInfo?.parentId ?? undefined;
-  if (!parentId) return {};
+  if (!parentId) {
+    return {};
+  }
   let parentName = threadChannel.parent?.name;
   const parentInfo = await resolveDiscordChannelInfo(client, parentId);
   parentName = parentName ?? parentInfo?.name;
@@ -87,13 +101,17 @@ export async function resolveDiscordThreadStarter(params: {
 }): Promise<DiscordThreadStarter | null> {
   const cacheKey = params.channel.id;
   const cached = DISCORD_THREAD_STARTER_CACHE.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   try {
     const parentType = params.parentType;
     const isForumParent =
       parentType === ChannelType.GuildForum || parentType === ChannelType.GuildMedia;
     const messageChannelId = isForumParent ? params.channel.id : params.parentId;
-    if (!messageChannelId) return null;
+    if (!messageChannelId) {
+      return null;
+    }
     const starter = (await params.client.rest.get(
       Routes.channelMessage(messageChannelId, params.channel.id),
     )) as {
@@ -107,9 +125,13 @@ export async function resolveDiscordThreadStarter(params: {
       };
       timestamp?: string | null;
     };
-    if (!starter) return null;
+    if (!starter) {
+      return null;
+    }
     const text = starter.content?.trim() ?? starter.embeds?.[0]?.description?.trim() ?? "";
-    if (!text) return null;
+    if (!text) {
+      return null;
+    }
     const author =
       starter.member?.nick ??
       starter.member?.displayName ??
@@ -136,10 +158,16 @@ export function resolveDiscordReplyTarget(opts: {
   replyToId?: string;
   hasReplied: boolean;
 }): string | undefined {
-  if (opts.replyToMode === "off") return undefined;
+  if (opts.replyToMode === "off") {
+    return undefined;
+  }
   const replyToId = opts.replyToId?.trim();
-  if (!replyToId) return undefined;
-  if (opts.replyToMode === "all") return replyToId;
+  if (!replyToId) {
+    return undefined;
+  }
+  if (opts.replyToMode === "all") {
+    return replyToId;
+  }
   return opts.hasReplied ? undefined : replyToId;
 }
 
@@ -177,9 +205,13 @@ export function resolveDiscordAutoThreadContext(params: {
   createdThreadId?: string | null;
 }): DiscordAutoThreadContext | null {
   const createdThreadId = String(params.createdThreadId ?? "").trim();
-  if (!createdThreadId) return null;
+  if (!createdThreadId) {
+    return null;
+  }
   const messageChannelId = params.messageChannelId.trim();
-  if (!messageChannelId) return null;
+  if (!messageChannelId) {
+    return null;
+  }
 
   const threadSessionKey = buildAgentSessionKey({
     agentId: params.agentId,
@@ -256,9 +288,15 @@ export async function maybeCreateDiscordAutoThread(params: {
   baseText: string;
   combinedBody: string;
 }): Promise<string | undefined> {
-  if (!params.isGuildMessage) return undefined;
-  if (!params.channelConfig?.autoThread) return undefined;
-  if (params.threadChannel) return undefined;
+  if (!params.isGuildMessage) {
+    return undefined;
+  }
+  if (!params.channelConfig?.autoThread) {
+    return undefined;
+  }
+  if (params.threadChannel) {
+    return undefined;
+  }
   try {
     const threadName = sanitizeDiscordThreadName(
       params.baseText || params.combinedBody || "Thread",

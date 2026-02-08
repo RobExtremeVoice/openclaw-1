@@ -17,8 +17,8 @@ function isBun(): boolean {
 
 function prefersSips(): boolean {
   return (
-    process.env.CLAWDBOT_IMAGE_BACKEND === "sips" ||
-    (process.env.CLAWDBOT_IMAGE_BACKEND !== "sharp" && isBun() && process.platform === "darwin")
+    process.env.OPENCLAW_IMAGE_BACKEND === "sips" ||
+    (process.env.OPENCLAW_IMAGE_BACKEND !== "sharp" && isBun() && process.platform === "darwin")
   );
 }
 
@@ -69,7 +69,9 @@ function readJpegExifOrientation(buffer: Buffer): number | null {
         buffer[exifStart + 5] === 0
       ) {
         const tiffStart = exifStart + 6;
-        if (buffer.length < tiffStart + 8) return null;
+        if (buffer.length < tiffStart + 8) {
+          return null;
+        }
 
         // Check byte order (II = little-endian, MM = big-endian)
         const byteOrder = buffer.toString("ascii", tiffStart, tiffStart + 2);
@@ -83,12 +85,16 @@ function readJpegExifOrientation(buffer: Buffer): number | null {
         // Read IFD0 offset
         const ifd0Offset = readU32(tiffStart + 4);
         const ifd0Start = tiffStart + ifd0Offset;
-        if (buffer.length < ifd0Start + 2) return null;
+        if (buffer.length < ifd0Start + 2) {
+          return null;
+        }
 
         const numEntries = readU16(ifd0Start);
         for (let i = 0; i < numEntries; i++) {
           const entryOffset = ifd0Start + 2 + i * 12;
-          if (buffer.length < entryOffset + 12) break;
+          if (buffer.length < entryOffset + 12) {
+            break;
+          }
 
           const tag = readU16(entryOffset);
           // Orientation tag = 0x0112
@@ -120,7 +126,7 @@ function readJpegExifOrientation(buffer: Buffer): number | null {
 }
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdbot-img-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-img-"));
   try {
     return await fn(dir);
   } finally {
@@ -142,11 +148,17 @@ async function sipsMetadataFromBuffer(buffer: Buffer): Promise<ImageMetadata | n
     );
     const w = stdout.match(/pixelWidth:\s*([0-9]+)/);
     const h = stdout.match(/pixelHeight:\s*([0-9]+)/);
-    if (!w?.[1] || !h?.[1]) return null;
+    if (!w?.[1] || !h?.[1]) {
+      return null;
+    }
     const width = Number.parseInt(w[1], 10);
     const height = Number.parseInt(h[1], 10);
-    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
-    if (width <= 0 || height <= 0) return null;
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
     return { width, height };
   });
 }
@@ -204,8 +216,12 @@ export async function getImageMetadata(buffer: Buffer): Promise<ImageMetadata | 
     const meta = await sharp(buffer).metadata();
     const width = Number(meta.width ?? 0);
     const height = Number(meta.height ?? 0);
-    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
-    if (width <= 0 || height <= 0) return null;
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
     return { width, height };
   } catch {
     return null;
@@ -337,6 +353,108 @@ export async function convertHeicToJpeg(buffer: Buffer): Promise<Buffer> {
   }
   const sharp = await loadSharp();
   return await sharp(buffer).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+}
+
+/**
+ * Checks if an image has an alpha channel (transparency).
+ * Returns true if the image has alpha, false otherwise.
+ */
+export async function hasAlphaChannel(buffer: Buffer): Promise<boolean> {
+  try {
+    const sharp = await loadSharp();
+    const meta = await sharp(buffer).metadata();
+    // Check if the image has an alpha channel
+    // PNG color types with alpha: 4 (grayscale+alpha), 6 (RGBA)
+    // Sharp reports this via 'channels' (4 = RGBA) or 'hasAlpha'
+    return meta.hasAlpha || meta.channels === 4;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resizes an image to PNG format, preserving alpha channel (transparency).
+ * Falls back to sharp only (no sips fallback for PNG with alpha).
+ */
+export async function resizeToPng(params: {
+  buffer: Buffer;
+  maxSide: number;
+  compressionLevel?: number;
+  withoutEnlargement?: boolean;
+}): Promise<Buffer> {
+  const sharp = await loadSharp();
+  // Compression level 6 is a good balance (0=fastest, 9=smallest)
+  const compressionLevel = params.compressionLevel ?? 6;
+
+  return await sharp(params.buffer)
+    .rotate() // Auto-rotate based on EXIF if present
+    .resize({
+      width: params.maxSide,
+      height: params.maxSide,
+      fit: "inside",
+      withoutEnlargement: params.withoutEnlargement !== false,
+    })
+    .png({ compressionLevel })
+    .toBuffer();
+}
+
+export async function optimizeImageToPng(
+  buffer: Buffer,
+  maxBytes: number,
+): Promise<{
+  buffer: Buffer;
+  optimizedSize: number;
+  resizeSide: number;
+  compressionLevel: number;
+}> {
+  // Try a grid of sizes/compression levels until under the limit.
+  // PNG uses compression levels 0-9 (higher = smaller but slower).
+  const sides = [2048, 1536, 1280, 1024, 800];
+  const compressionLevels = [6, 7, 8, 9];
+  let smallest: {
+    buffer: Buffer;
+    size: number;
+    resizeSide: number;
+    compressionLevel: number;
+  } | null = null;
+
+  for (const side of sides) {
+    for (const compressionLevel of compressionLevels) {
+      try {
+        const out = await resizeToPng({
+          buffer,
+          maxSide: side,
+          compressionLevel,
+          withoutEnlargement: true,
+        });
+        const size = out.length;
+        if (!smallest || size < smallest.size) {
+          smallest = { buffer: out, size, resizeSide: side, compressionLevel };
+        }
+        if (size <= maxBytes) {
+          return {
+            buffer: out,
+            optimizedSize: size,
+            resizeSide: side,
+            compressionLevel,
+          };
+        }
+      } catch {
+        // Continue trying other size/compression combinations.
+      }
+    }
+  }
+
+  if (smallest) {
+    return {
+      buffer: smallest.buffer,
+      optimizedSize: smallest.size,
+      resizeSide: smallest.resizeSide,
+      compressionLevel: smallest.compressionLevel,
+    };
+  }
+
+  throw new Error("Failed to optimize PNG image");
 }
 
 /**

@@ -23,12 +23,17 @@ export async function runDaemonUninstall(opts: DaemonLifecycleOptions = {}) {
       notLoadedText: string;
     };
   }) => {
-    if (!json) return;
+    if (!json) {
+      return;
+    }
     emitDaemonActionJson({ action: "uninstall", ...payload });
   };
   const fail = (message: string) => {
-    if (json) emit({ ok: false, error: message });
-    else defaultRuntime.error(message);
+    if (json) {
+      emit({ ok: false, error: message });
+    } else {
+      defaultRuntime.error(message);
+    }
     defaultRuntime.exit(1);
   };
 
@@ -38,6 +43,19 @@ export async function runDaemonUninstall(opts: DaemonLifecycleOptions = {}) {
   }
 
   const service = resolveGatewayService();
+  let loaded = false;
+  try {
+    loaded = await service.isLoaded({ env: process.env });
+  } catch {
+    loaded = false;
+  }
+  if (loaded) {
+    try {
+      await service.stop({ env: process.env, stdout });
+    } catch {
+      // Best-effort stop; final loaded check gates success.
+    }
+  }
   try {
     await service.uninstall({ env: process.env, stdout });
   } catch (err) {
@@ -45,11 +63,15 @@ export async function runDaemonUninstall(opts: DaemonLifecycleOptions = {}) {
     return;
   }
 
-  let loaded = false;
+  loaded = false;
   try {
     loaded = await service.isLoaded({ env: process.env });
   } catch {
     loaded = false;
+  }
+  if (loaded) {
+    fail("Gateway service still loaded after uninstall.");
+    return;
   }
   emit({
     ok: true,
@@ -74,12 +96,17 @@ export async function runDaemonStart(opts: DaemonLifecycleOptions = {}) {
       notLoadedText: string;
     };
   }) => {
-    if (!json) return;
+    if (!json) {
+      return;
+    }
     emitDaemonActionJson({ action: "start", ...payload });
   };
   const fail = (message: string, hints?: string[]) => {
-    if (json) emit({ ok: false, error: message, hints });
-    else defaultRuntime.error(message);
+    if (json) {
+      emit({ ok: false, error: message, hints });
+    } else {
+      defaultRuntime.error(message);
+    }
     defaultRuntime.exit(1);
   };
 
@@ -150,12 +177,17 @@ export async function runDaemonStop(opts: DaemonLifecycleOptions = {}) {
       notLoadedText: string;
     };
   }) => {
-    if (!json) return;
+    if (!json) {
+      return;
+    }
     emitDaemonActionJson({ action: "stop", ...payload });
   };
   const fail = (message: string) => {
-    if (json) emit({ ok: false, error: message });
-    else defaultRuntime.error(message);
+    if (json) {
+      emit({ ok: false, error: message });
+    } else {
+      defaultRuntime.error(message);
+    }
     defaultRuntime.exit(1);
   };
 
@@ -220,12 +252,17 @@ export async function runDaemonRestart(opts: DaemonLifecycleOptions = {}): Promi
       notLoadedText: string;
     };
   }) => {
-    if (!json) return;
+    if (!json) {
+      return;
+    }
     emitDaemonActionJson({ action: "restart", ...payload });
   };
   const fail = (message: string, hints?: string[]) => {
-    if (json) emit({ ok: false, error: message, hints });
-    else defaultRuntime.error(message);
+    if (json) {
+      emit({ ok: false, error: message, hints });
+    } else {
+      defaultRuntime.error(message);
+    }
     defaultRuntime.exit(1);
   };
 

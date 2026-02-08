@@ -5,7 +5,9 @@ import { applyAuthProfileConfig } from "./onboard-auth.js";
 export async function applyAuthChoiceGitHubCopilot(
   params: ApplyAuthChoiceParams,
 ): Promise<ApplyAuthChoiceResult | null> {
-  if (params.authChoice !== "github-copilot") return null;
+  if (params.authChoice !== "github-copilot") {
+    return null;
+  }
 
   let nextConfig = params.config;
 
@@ -35,7 +37,7 @@ export async function applyAuthChoiceGitHubCopilot(
   nextConfig = applyAuthProfileConfig(nextConfig, {
     profileId: "github-copilot:github",
     provider: "github-copilot",
-    mode: "oauth",
+    mode: "token",
   });
 
   if (params.setDefaultModel) {

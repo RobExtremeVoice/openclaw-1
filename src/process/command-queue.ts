@@ -27,7 +27,9 @@ const lanes = new Map<string, LaneState>();
 
 function getLaneState(lane: string): LaneState {
   const existing = lanes.get(lane);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
   const created: LaneState = {
     lane,
     queue: [],
@@ -41,7 +43,9 @@ function getLaneState(lane: string): LaneState {
 
 function drainLane(lane: string) {
   const state = getLaneState(lane);
-  if (state.draining) return;
+  if (state.draining) {
+    return;
+  }
   state.draining = true;
 
   const pump = () => {
@@ -68,9 +72,12 @@ function drainLane(lane: string) {
           entry.resolve(result);
         } catch (err) {
           state.active -= 1;
-          diag.error(
-            `lane task error: lane=${lane} durationMs=${Date.now() - startTime} error="${String(err)}"`,
-          );
+          const isProbeLane = lane.startsWith("auth-probe:") || lane.startsWith("session:probe-");
+          if (!isProbeLane) {
+            diag.error(
+              `lane task error: lane=${lane} durationMs=${Date.now() - startTime} error="${String(err)}"`,
+            );
+          }
           pump();
           entry.reject(err);
         }
@@ -127,7 +134,9 @@ export function enqueueCommand<T>(
 export function getQueueSize(lane: string = CommandLane.Main) {
   const resolved = lane.trim() || CommandLane.Main;
   const state = lanes.get(resolved);
-  if (!state) return 0;
+  if (!state) {
+    return 0;
+  }
   return state.queue.length + state.active;
 }
 
@@ -142,7 +151,9 @@ export function getTotalQueueSize() {
 export function clearCommandLane(lane: string = CommandLane.Main) {
   const cleaned = lane.trim() || CommandLane.Main;
   const state = lanes.get(cleaned);
-  if (!state) return 0;
+  if (!state) {
+    return 0;
+  }
   const removed = state.queue.length;
   state.queue.length = 0;
   return removed;

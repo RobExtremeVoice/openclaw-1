@@ -1,4 +1,5 @@
 import { loadConfig } from "../config/config.js";
+import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
 import { mediaKindFromMime } from "../media/constants.js";
 import { saveMediaBuffer } from "../media/store.js";
 import { loadWebMedia } from "../web/media.js";
@@ -33,7 +34,9 @@ type SignalTarget =
 
 function parseTarget(raw: string): SignalTarget {
   let value = raw.trim();
-  if (!value) throw new Error("Signal recipient is required");
+  if (!value) {
+    throw new Error("Signal recipient is required");
+  }
   const lower = value.toLowerCase();
   if (lower.startsWith("signal:")) {
     value = value.slice("signal:".length).trim();
@@ -71,15 +74,21 @@ function buildTargetParams(
   allow: SignalTargetAllowlist,
 ): SignalTargetParams | null {
   if (target.type === "recipient") {
-    if (!allow.recipient) return null;
+    if (!allow.recipient) {
+      return null;
+    }
     return { recipient: [target.recipient] };
   }
   if (target.type === "group") {
-    if (!allow.group) return null;
+    if (!allow.group) {
+      return null;
+    }
     return { groupId: target.groupId };
   }
   if (target.type === "username") {
-    if (!allow.username) return null;
+    if (!allow.username) {
+      return null;
+    }
     return { username: [target.username] };
   }
   return null;
@@ -138,7 +147,9 @@ export async function sendMessageSignal(
   let textStyles: SignalTextStyleRange[] = [];
   const textMode = opts.textMode ?? "markdown";
   const maxBytes = (() => {
-    if (typeof opts.maxBytes === "number") return opts.maxBytes;
+    if (typeof opts.maxBytes === "number") {
+      return opts.maxBytes;
+    }
     if (typeof accountInfo.config.mediaMaxMb === "number") {
       return accountInfo.config.mediaMaxMb * 1024 * 1024;
     }
@@ -164,7 +175,12 @@ export async function sendMessageSignal(
     if (textMode === "plain") {
       textStyles = opts.textStyles ?? [];
     } else {
-      const formatted = markdownToSignalText(message);
+      const tableMode = resolveMarkdownTableMode({
+        cfg,
+        channel: "signal",
+        accountId: accountInfo.accountId,
+      });
+      const formatted = markdownToSignalText(message, { tableMode });
       message = formatted.text;
       textStyles = formatted.styles;
     }
@@ -180,7 +196,9 @@ export async function sendMessageSignal(
       (style) => `${style.start}:${style.length}:${style.style}`,
     );
   }
-  if (account) params.account = account;
+  if (account) {
+    params.account = account;
+  }
   if (attachments && attachments.length > 0) {
     params.attachments = attachments;
   }
@@ -215,10 +233,16 @@ export async function sendTypingSignal(
     recipient: true,
     group: true,
   });
-  if (!targetParams) return false;
+  if (!targetParams) {
+    return false;
+  }
   const params: Record<string, unknown> = { ...targetParams };
-  if (account) params.account = account;
-  if (opts.stop) params.stop = true;
+  if (account) {
+    params.account = account;
+  }
+  if (opts.stop) {
+    params.stop = true;
+  }
   await signalRpcRequest("sendTyping", params, {
     baseUrl,
     timeoutMs: opts.timeoutMs,
@@ -231,18 +255,24 @@ export async function sendReadReceiptSignal(
   targetTimestamp: number,
   opts: SignalRpcOpts & { type?: SignalReceiptType } = {},
 ): Promise<boolean> {
-  if (!Number.isFinite(targetTimestamp) || targetTimestamp <= 0) return false;
+  if (!Number.isFinite(targetTimestamp) || targetTimestamp <= 0) {
+    return false;
+  }
   const { baseUrl, account } = resolveSignalRpcContext(opts);
   const targetParams = buildTargetParams(parseTarget(to), {
     recipient: true,
   });
-  if (!targetParams) return false;
+  if (!targetParams) {
+    return false;
+  }
   const params: Record<string, unknown> = {
     ...targetParams,
     targetTimestamp,
     type: opts.type ?? "read",
   };
-  if (account) params.account = account;
+  if (account) {
+    params.account = account;
+  }
   await signalRpcRequest("sendReceipt", params, {
     baseUrl,
     timeoutMs: opts.timeoutMs,

@@ -6,6 +6,7 @@ import type {
   ChannelUiMetaEntry,
   ChannelsStatusSnapshot,
   DiscordStatus,
+  GoogleChatStatus,
   IMessageStatus,
   NostrProfile,
   NostrStatus,
@@ -14,14 +15,11 @@ import type {
   TelegramStatus,
   WhatsAppStatus,
 } from "../types";
-import type {
-  ChannelKey,
-  ChannelsChannelData,
-  ChannelsProps,
-} from "./channels.types";
+import type { ChannelKey, ChannelsChannelData, ChannelsProps } from "./channels.types";
 import { channelEnabled, renderChannelAccountCount } from "./channels.shared";
 import { renderChannelConfigSection } from "./channels.config";
 import { renderDiscordCard } from "./channels.discord";
+import { renderGoogleChatCard } from "./channels.googlechat";
 import { renderIMessageCard } from "./channels.imessage";
 import { renderNostrCard } from "./channels.nostr";
 import { renderSignalCard } from "./channels.signal";
@@ -31,13 +29,10 @@ import { renderWhatsAppCard } from "./channels.whatsapp";
 
 export function renderChannels(props: ChannelsProps) {
   const channels = props.snapshot?.channels as Record<string, unknown> | null;
-  const whatsapp = (channels?.whatsapp ?? undefined) as
-    | WhatsAppStatus
-    | undefined;
-  const telegram = (channels?.telegram ?? undefined) as
-    | TelegramStatus
-    | undefined;
+  const whatsapp = (channels?.whatsapp ?? undefined) as WhatsAppStatus | undefined;
+  const telegram = (channels?.telegram ?? undefined) as TelegramStatus | undefined;
   const discord = (channels?.discord ?? null) as DiscordStatus | null;
+  const googlechat = (channels?.googlechat ?? null) as GoogleChatStatus | null;
   const slack = (channels?.slack ?? null) as SlackStatus | null;
   const signal = (channels?.signal ?? null) as SignalStatus | null;
   const imessage = (channels?.imessage ?? null) as IMessageStatus | null;
@@ -61,6 +56,7 @@ export function renderChannels(props: ChannelsProps) {
           whatsapp,
           telegram,
           discord,
+          googlechat,
           slack,
           signal,
           imessage,
@@ -78,11 +74,13 @@ export function renderChannels(props: ChannelsProps) {
         </div>
         <div class="muted">${props.lastSuccessAt ? formatAgo(props.lastSuccessAt) : "n/a"}</div>
       </div>
-      ${props.lastError
-        ? html`<div class="callout danger" style="margin-top: 12px;">
+      ${
+        props.lastError
+          ? html`<div class="callout danger" style="margin-top: 12px;">
             ${props.lastError}
           </div>`
-        : nothing}
+          : nothing
+      }
       <pre class="code-block" style="margin-top: 12px;">
 ${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : "No snapshot yet."}
       </pre>
@@ -97,18 +95,11 @@ function resolveChannelOrder(snapshot: ChannelsStatusSnapshot | null): ChannelKe
   if (snapshot?.channelOrder?.length) {
     return snapshot.channelOrder;
   }
-  return ["whatsapp", "telegram", "discord", "slack", "signal", "imessage", "nostr"];
+  return ["whatsapp", "telegram", "discord", "googlechat", "slack", "signal", "imessage", "nostr"];
 }
 
-function renderChannel(
-  key: ChannelKey,
-  props: ChannelsProps,
-  data: ChannelsChannelData,
-) {
-  const accountCountLabel = renderChannelAccountCount(
-    key,
-    data.channelAccounts,
-  );
+function renderChannel(key: ChannelKey, props: ChannelsProps, data: ChannelsChannelData) {
+  const accountCountLabel = renderChannelAccountCount(key, data.channelAccounts);
   switch (key) {
     case "whatsapp":
       return renderWhatsAppCard({
@@ -127,6 +118,12 @@ function renderChannel(
       return renderDiscordCard({
         props,
         discord: data.discord,
+        accountCountLabel,
+      });
+    case "googlechat":
+      return renderGoogleChatCard({
+        props,
+        googlechat: data.googlechat,
         accountCountLabel,
       });
     case "slack":
@@ -199,13 +196,14 @@ function renderGenericChannelCard(
       <div class="card-sub">Channel status and configuration.</div>
       ${accountCountLabel}
 
-      ${accounts.length > 0
-        ? html`
+      ${
+        accounts.length > 0
+          ? html`
             <div class="account-card-list">
               ${accounts.map((account) => renderGenericAccount(account))}
             </div>
           `
-        : html`
+          : html`
             <div class="status-list" style="margin-top: 16px;">
               <div>
                 <span class="label">Configured</span>
@@ -220,13 +218,16 @@ function renderGenericChannelCard(
                 <span>${connected == null ? "n/a" : connected ? "Yes" : "No"}</span>
               </div>
             </div>
-          `}
+          `
+      }
 
-      ${lastError
-        ? html`<div class="callout danger" style="margin-top: 12px;">
+      ${
+        lastError
+          ? html`<div class="callout danger" style="margin-top: 12px;">
             ${lastError}
           </div>`
-        : nothing}
+          : nothing
+      }
 
       ${renderChannelConfigSection({ channelId: key, props })}
     </div>
@@ -240,10 +241,7 @@ function resolveChannelMetaMap(
   return Object.fromEntries(snapshot.channelMeta.map((entry) => [entry.id, entry]));
 }
 
-function resolveChannelLabel(
-  snapshot: ChannelsStatusSnapshot | null,
-  key: string,
-): string {
+function resolveChannelLabel(snapshot: ChannelsStatusSnapshot | null, key: string): string {
   const meta = resolveChannelMetaMap(snapshot)[key];
   return meta?.label ?? snapshot?.channelLabels?.[key] ?? key;
 }
@@ -297,13 +295,15 @@ function renderGenericAccount(account: ChannelAccountSnapshot) {
           <span class="label">Last inbound</span>
           <span>${account.lastInboundAt ? formatAgo(account.lastInboundAt) : "n/a"}</span>
         </div>
-        ${account.lastError
-          ? html`
+        ${
+          account.lastError
+            ? html`
               <div class="account-card-error">
                 ${account.lastError}
               </div>
             `
-          : nothing}
+            : nothing
+        }
       </div>
     </div>
   `;

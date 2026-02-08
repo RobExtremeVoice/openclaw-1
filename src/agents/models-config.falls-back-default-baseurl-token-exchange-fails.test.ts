@@ -2,14 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
-import type { ClawdbotConfig } from "../config/config.js";
-import { DEFAULT_GITHUB_COPILOT_BASE_URL } from "../providers/github-copilot-utils.js";
+import type { OpenClawConfig } from "../config/config.js";
 
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  return withTempHomeBase(fn, { prefix: "clawdbot-models-" });
+  return withTempHomeBase(fn, { prefix: "openclaw-models-" });
 }
 
-const _MODELS_CONFIG: ClawdbotConfig = {
+const _MODELS_CONFIG: OpenClawConfig = {
   models: {
     providers: {
       "custom-proxy": {
@@ -44,7 +43,7 @@ describe("models-config", () => {
     process.env.HOME = previousHome;
   });
 
-  it("uses default baseUrl when env token is present", async () => {
+  it("falls back to default baseUrl when token exchange fails", async () => {
     await withTempHome(async () => {
       const previous = process.env.COPILOT_GITHUB_TOKEN;
       process.env.COPILOT_GITHUB_TOKEN = "gh-token";
@@ -52,24 +51,29 @@ describe("models-config", () => {
       try {
         vi.resetModules();
 
-        const { ensureClawdbotModelsJson } = await import("./models-config.js");
-        const { resolveClawdbotAgentDir } = await import("./agent-paths.js");
+        vi.doMock("../providers/github-copilot-token.js", () => ({
+          DEFAULT_COPILOT_API_BASE_URL: "https://api.default.test",
+          resolveCopilotApiToken: vi.fn().mockRejectedValue(new Error("boom")),
+        }));
 
-        await ensureClawdbotModelsJson({ models: { providers: {} } });
+        const { ensureOpenClawModelsJson } = await import("./models-config.js");
+        const { resolveOpenClawAgentDir } = await import("./agent-paths.js");
 
-        const agentDir = resolveClawdbotAgentDir();
+        await ensureOpenClawModelsJson({ models: { providers: {} } });
+
+        const agentDir = resolveOpenClawAgentDir();
         const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
         const parsed = JSON.parse(raw) as {
           providers: Record<string, { baseUrl?: string }>;
         };
 
-        expect(parsed.providers["github-copilot"]?.baseUrl).toBe(DEFAULT_GITHUB_COPILOT_BASE_URL);
+        expect(parsed.providers["github-copilot"]?.baseUrl).toBe("https://api.default.test");
       } finally {
         process.env.COPILOT_GITHUB_TOKEN = previous;
       }
     });
   });
-  it("normalizes enterprise URL when deriving base URL", async () => {
+  it("uses agentDir override auth profiles for copilot injection", async () => {
     await withTempHome(async (home) => {
       const previous = process.env.COPILOT_GITHUB_TOKEN;
       const previousGh = process.env.GH_TOKEN;
@@ -90,12 +94,9 @@ describe("models-config", () => {
               version: 1,
               profiles: {
                 "github-copilot:github": {
-                  type: "oauth",
+                  type: "token",
                   provider: "github-copilot",
-                  refresh: "gh-profile-token",
-                  access: "gh-profile-token",
-                  expires: 0,
-                  enterpriseUrl: "https://company.ghe.com/",
+                  token: "gh-profile-token",
                 },
               },
             },
@@ -104,25 +105,42 @@ describe("models-config", () => {
           ),
         );
 
-        const { ensureClawdbotModelsJson } = await import("./models-config.js");
+        vi.doMock("../providers/github-copilot-token.js", () => ({
+          DEFAULT_COPILOT_API_BASE_URL: "https://api.individual.githubcopilot.com",
+          resolveCopilotApiToken: vi.fn().mockResolvedValue({
+            token: "copilot",
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            source: "mock",
+            baseUrl: "https://api.copilot.example",
+          }),
+        }));
 
-        await ensureClawdbotModelsJson({ models: { providers: {} } }, agentDir);
+        const { ensureOpenClawModelsJson } = await import("./models-config.js");
+
+        await ensureOpenClawModelsJson({ models: { providers: {} } }, agentDir);
 
         const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
         const parsed = JSON.parse(raw) as {
           providers: Record<string, { baseUrl?: string }>;
         };
 
-        expect(parsed.providers["github-copilot"]?.baseUrl).toBe(
-          "https://copilot-api.company.ghe.com",
-        );
+        expect(parsed.providers["github-copilot"]?.baseUrl).toBe("https://api.copilot.example");
       } finally {
-        if (previous === undefined) delete process.env.COPILOT_GITHUB_TOKEN;
-        else process.env.COPILOT_GITHUB_TOKEN = previous;
-        if (previousGh === undefined) delete process.env.GH_TOKEN;
-        else process.env.GH_TOKEN = previousGh;
-        if (previousGithub === undefined) delete process.env.GITHUB_TOKEN;
-        else process.env.GITHUB_TOKEN = previousGithub;
+        if (previous === undefined) {
+          delete process.env.COPILOT_GITHUB_TOKEN;
+        } else {
+          process.env.COPILOT_GITHUB_TOKEN = previous;
+        }
+        if (previousGh === undefined) {
+          delete process.env.GH_TOKEN;
+        } else {
+          process.env.GH_TOKEN = previousGh;
+        }
+        if (previousGithub === undefined) {
+          delete process.env.GITHUB_TOKEN;
+        } else {
+          process.env.GITHUB_TOKEN = previousGithub;
+        }
       }
     });
   });

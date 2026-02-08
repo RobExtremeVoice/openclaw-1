@@ -2,14 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
-import type { ClawdbotConfig } from "../config/config.js";
-import { DEFAULT_GITHUB_COPILOT_BASE_URL } from "../providers/github-copilot-utils.js";
+import type { OpenClawConfig } from "../config/config.js";
 
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  return withTempHomeBase(fn, { prefix: "clawdbot-models-" });
+  return withTempHomeBase(fn, { prefix: "openclaw-models-" });
 }
 
-const _MODELS_CONFIG: ClawdbotConfig = {
+const _MODELS_CONFIG: OpenClawConfig = {
   models: {
     providers: {
       "custom-proxy": {
@@ -81,23 +80,41 @@ describe("models-config", () => {
           ),
         );
 
-        const { ensureClawdbotModelsJson } = await import("./models-config.js");
+        const resolveCopilotApiToken = vi.fn().mockResolvedValue({
+          token: "copilot",
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          source: "mock",
+          baseUrl: "https://api.copilot.example",
+        });
 
-        await ensureClawdbotModelsJson({ models: { providers: {} } }, agentDir);
+        vi.doMock("../providers/github-copilot-token.js", () => ({
+          DEFAULT_COPILOT_API_BASE_URL: "https://api.individual.githubcopilot.com",
+          resolveCopilotApiToken,
+        }));
 
-        const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
-        const parsed = JSON.parse(raw) as {
-          providers: Record<string, { baseUrl?: string }>;
-        };
+        const { ensureOpenClawModelsJson } = await import("./models-config.js");
 
-        expect(parsed.providers["github-copilot"]?.baseUrl).toBe(DEFAULT_GITHUB_COPILOT_BASE_URL);
+        await ensureOpenClawModelsJson({ models: { providers: {} } }, agentDir);
+
+        expect(resolveCopilotApiToken).toHaveBeenCalledWith(
+          expect.objectContaining({ githubToken: "alpha-token" }),
+        );
       } finally {
-        if (previous === undefined) delete process.env.COPILOT_GITHUB_TOKEN;
-        else process.env.COPILOT_GITHUB_TOKEN = previous;
-        if (previousGh === undefined) delete process.env.GH_TOKEN;
-        else process.env.GH_TOKEN = previousGh;
-        if (previousGithub === undefined) delete process.env.GITHUB_TOKEN;
-        else process.env.GITHUB_TOKEN = previousGithub;
+        if (previous === undefined) {
+          delete process.env.COPILOT_GITHUB_TOKEN;
+        } else {
+          process.env.COPILOT_GITHUB_TOKEN = previous;
+        }
+        if (previousGh === undefined) {
+          delete process.env.GH_TOKEN;
+        } else {
+          process.env.GH_TOKEN = previousGh;
+        }
+        if (previousGithub === undefined) {
+          delete process.env.GITHUB_TOKEN;
+        } else {
+          process.env.GITHUB_TOKEN = previousGithub;
+        }
       }
     });
   });
@@ -109,10 +126,20 @@ describe("models-config", () => {
       try {
         vi.resetModules();
 
-        const { ensureClawdbotModelsJson } = await import("./models-config.js");
-        const { resolveClawdbotAgentDir } = await import("./agent-paths.js");
+        vi.doMock("../providers/github-copilot-token.js", () => ({
+          DEFAULT_COPILOT_API_BASE_URL: "https://api.individual.githubcopilot.com",
+          resolveCopilotApiToken: vi.fn().mockResolvedValue({
+            token: "copilot",
+            expiresAt: Date.now() + 60 * 60 * 1000,
+            source: "mock",
+            baseUrl: "https://api.copilot.example",
+          }),
+        }));
 
-        await ensureClawdbotModelsJson({
+        const { ensureOpenClawModelsJson } = await import("./models-config.js");
+        const { resolveOpenClawAgentDir } = await import("./agent-paths.js");
+
+        await ensureOpenClawModelsJson({
           models: {
             providers: {
               "github-copilot": {
@@ -124,7 +151,7 @@ describe("models-config", () => {
           },
         });
 
-        const agentDir = resolveClawdbotAgentDir();
+        const agentDir = resolveOpenClawAgentDir();
         const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
         const parsed = JSON.parse(raw) as {
           providers: Record<string, { baseUrl?: string }>;

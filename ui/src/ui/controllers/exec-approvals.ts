@@ -9,6 +9,7 @@ export type ExecApprovalsDefaults = {
 };
 
 export type ExecApprovalsAllowlistEntry = {
+  id?: string;
   pattern: string;
   lastUsedAt?: number;
   lastUsedCommand?: string;
@@ -33,9 +34,7 @@ export type ExecApprovalsSnapshot = {
   file: ExecApprovalsFile;
 };
 
-export type ExecApprovalsTarget =
-  | { kind: "gateway" }
-  | { kind: "node"; nodeId: string };
+export type ExecApprovalsTarget = { kind: "gateway" } | { kind: "node"; nodeId: string };
 
 export type ExecApprovalsState = {
   client: GatewayBrowserClient | null;
@@ -119,10 +118,7 @@ export async function saveExecApprovals(
       state.lastError = "Exec approvals hash missing; reload and retry.";
       return;
     }
-    const file =
-      state.execApprovalsForm ??
-      state.execApprovalsSnapshot?.file ??
-      {};
+    const file = state.execApprovalsForm ?? state.execApprovalsSnapshot?.file ?? {};
     const rpc = resolveExecApprovalsSaveRpc(target, { file, baseHash });
     if (!rpc) {
       state.lastError = "Select a node before saving exec approvals.";

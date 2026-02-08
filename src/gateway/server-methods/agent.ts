@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { agentCommand } from "../../commands/agent.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import { loadConfig } from "../../config/config.js";
+import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
 import {
   resolveAgentIdFromSessionKey,
   resolveExplicitAgentSessionKey,
@@ -26,8 +27,6 @@ import {
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { parseMessageWithAttachments } from "../chat-attachments.js";
 import {
-  type AgentIdentityParams,
-  type AgentWaitParams,
   ErrorCodes,
   errorShape,
   formatValidationErrors,
@@ -44,7 +43,7 @@ import type { GatewayRequestHandlers } from "./types.js";
 
 export const agentHandlers: GatewayRequestHandlers = {
   agent: async ({ params, respond, context }) => {
-    const p = params as Record<string, unknown>;
+    const p = params;
     if (!validateAgentParams(p)) {
       respond(
         false,
@@ -76,6 +75,9 @@ export const agentHandlers: GatewayRequestHandlers = {
       accountId?: string;
       replyAccountId?: string;
       threadId?: string;
+      groupId?: string;
+      groupChannel?: string;
+      groupSpace?: string;
       lane?: string;
       extraSystemPrompt?: string;
       idempotencyKey: string;
@@ -85,6 +87,15 @@ export const agentHandlers: GatewayRequestHandlers = {
     };
     const cfg = loadConfig();
     const idem = request.idempotencyKey;
+    const groupIdRaw = typeof request.groupId === "string" ? request.groupId.trim() : "";
+    const groupChannelRaw =
+      typeof request.groupChannel === "string" ? request.groupChannel.trim() : "";
+    const groupSpaceRaw = typeof request.groupSpace === "string" ? request.groupSpace.trim() : "";
+    let resolvedGroupId: string | undefined = groupIdRaw || undefined;
+    let resolvedGroupChannel: string | undefined = groupChannelRaw || undefined;
+    let resolvedGroupSpace: string | undefined = groupSpaceRaw || undefined;
+    let spawnedByValue =
+      typeof request.spawnedBy === "string" ? request.spawnedBy.trim() : undefined;
     const cached = context.dedupe.get(`agent:${idem}`);
     if (cached) {
       respond(cached.ok, cached.payload, cached.error, {
@@ -126,6 +137,13 @@ export const agentHandlers: GatewayRequestHandlers = {
         return;
       }
     }
+
+    // Inject timestamp into messages that don't already have one.
+    // Channel messages (Discord, Telegram, etc.) get timestamps via envelope
+    // formatting in a separate code path — they never reach this handler.
+    // See: https://github.com/moltbot/moltbot/issues/3658
+    message = injectTimestamp(message, timestampOptsFromConfig(cfg));
+
     const isKnownGatewayChannel = (value: string): boolean => isGatewayMessageChannel(value);
     const channelHints = [request.channel, request.replyChannel]
       .filter((value): value is string => typeof value === "string")
@@ -198,7 +216,25 @@ export const agentHandlers: GatewayRequestHandlers = {
       const now = Date.now();
       const sessionId = entry?.sessionId ?? randomUUID();
       const labelValue = request.label?.trim() || entry?.label;
-      const spawnedByValue = request.spawnedBy?.trim() || entry?.spawnedBy;
+      spawnedByValue = spawnedByValue || entry?.spawnedBy;
+      let inheritedGroup:
+        | { groupId?: string; groupChannel?: string; groupSpace?: string }
+        | undefined;
+      if (spawnedByValue && (!resolvedGroupId || !resolvedGroupChannel || !resolvedGroupSpace)) {
+        try {
+          const parentEntry = loadSessionEntry(spawnedByValue)?.entry;
+          inheritedGroup = {
+            groupId: parentEntry?.groupId,
+            groupChannel: parentEntry?.groupChannel,
+            groupSpace: parentEntry?.space,
+          };
+        } catch {
+          inheritedGroup = undefined;
+        }
+      }
+      resolvedGroupId = resolvedGroupId || inheritedGroup?.groupId;
+      resolvedGroupChannel = resolvedGroupChannel || inheritedGroup?.groupChannel;
+      resolvedGroupSpace = resolvedGroupSpace || inheritedGroup?.groupSpace;
       const deliveryFields = normalizeSessionDeliveryFields(entry);
       const nextEntry: SessionEntry = {
         sessionId,
@@ -217,6 +253,12 @@ export const agentHandlers: GatewayRequestHandlers = {
         providerOverride: entry?.providerOverride,
         label: labelValue,
         spawnedBy: spawnedByValue,
+        channel: entry?.channel ?? request.channel?.trim(),
+        groupId: resolvedGroupId ?? entry?.groupId,
+        groupChannel: resolvedGroupChannel ?? entry?.groupChannel,
+        space: resolvedGroupSpace ?? entry?.space,
+        cliSessionIds: entry?.cliSessionIds,
+        claudeCliSessionId: entry?.claudeCliSessionId,
       };
       sessionEntry = nextEntry;
       const sendPolicy = resolveSendPolicy({
@@ -326,8 +368,15 @@ export const agentHandlers: GatewayRequestHandlers = {
         runContext: {
           messageChannel: resolvedChannel,
           accountId: resolvedAccountId,
+          groupId: resolvedGroupId,
+          groupChannel: resolvedGroupChannel,
+          groupSpace: resolvedGroupSpace,
           currentThreadTs: resolvedThreadId != null ? String(resolvedThreadId) : undefined,
         },
+        groupId: resolvedGroupId,
+        groupChannel: resolvedGroupChannel,
+        groupSpace: resolvedGroupSpace,
+        spawnedBy: spawnedByValue,
         timeout: request.timeout?.toString(),
         bestEffortDeliver,
         messageChannel: resolvedChannel,
@@ -387,7 +436,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const p = params as AgentIdentityParams;
+    const p = params;
     const agentIdRaw = typeof p.agentId === "string" ? p.agentId.trim() : "";
     const sessionKeyRaw = typeof p.sessionKey === "string" ? p.sessionKey.trim() : "";
     let agentId = agentIdRaw ? normalizeAgentId(agentIdRaw) : undefined;
@@ -428,7 +477,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const p = params as AgentWaitParams;
+    const p = params;
     const runId = p.runId.trim();
     const timeoutMs =
       typeof p.timeoutMs === "number" && Number.isFinite(p.timeoutMs)

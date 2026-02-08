@@ -66,7 +66,9 @@ export async function agentCommand(
   deps: CliDeps = createDefaultDeps(),
 ) {
   const body = (opts.message ?? "").trim();
-  if (!body) throw new Error("Message (--message) is required");
+  if (!body) {
+    throw new Error("Message (--message) is required");
+  }
   if (!opts.to && !opts.sessionId && !opts.sessionKey && !opts.agentId) {
     throw new Error("Pass --to <E.164>, --session-id, or --agent to choose a session");
   }
@@ -78,7 +80,7 @@ export async function agentCommand(
     const knownAgents = listAgentIds(cfg);
     if (!knownAgents.includes(agentIdOverride)) {
       throw new Error(
-        `Unknown agent id "${agentIdOverrideRaw}". Use "${formatCliCommand("clawdbot agents list")}" to see configured agents.`,
+        `Unknown agent id "${agentIdOverrideRaw}". Use "${formatCliCommand("openclaw agents list")}" to see configured agents.`,
       );
     }
   }
@@ -217,8 +219,11 @@ export async function agentCommand(
         sessionEntry ?? { sessionId, updatedAt: Date.now() };
       const next: SessionEntry = { ...entry, sessionId, updatedAt: Date.now() };
       if (thinkOverride) {
-        if (thinkOverride === "off") delete next.thinkingLevel;
-        else next.thinkingLevel = thinkOverride;
+        if (thinkOverride === "off") {
+          delete next.thinkingLevel;
+        } else {
+          next.thinkingLevel = thinkOverride;
+        }
       }
       applyVerboseOverride(next, verboseOverride);
       sessionStore[sessionKey] = next;
@@ -377,10 +382,12 @@ export async function agentCommand(
         runContext.messageChannel,
         opts.replyChannel ?? opts.channel,
       );
+      const spawnedBy = opts.spawnedBy ?? sessionEntry?.spawnedBy;
       const fallbackResult = await runWithModelFallback({
         cfg,
         provider,
         model,
+        agentDir,
         fallbacksOverride: resolveAgentModelFallbacksOverride(cfg, sessionAgentId),
         run: (providerOverride, modelOverride) => {
           if (isCliProvider(providerOverride, cfg)) {
@@ -412,6 +419,10 @@ export async function agentCommand(
             agentAccountId: runContext.accountId,
             messageTo: opts.replyTo ?? opts.to,
             messageThreadId: opts.threadId,
+            groupId: runContext.groupId,
+            groupChannel: runContext.groupChannel,
+            groupSpace: runContext.groupSpace,
+            spawnedBy,
             currentChannelId: runContext.currentChannelId,
             currentThreadTs: runContext.currentThreadTs,
             replyToMode: runContext.replyToMode,

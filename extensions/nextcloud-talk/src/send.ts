@@ -34,7 +34,9 @@ function resolveCredentials(
 
 function normalizeRoomToken(to: string): string {
   const trimmed = to.trim();
-  if (!trimmed) throw new Error("Room token is required for Nextcloud Talk sends");
+  if (!trimmed) {
+    throw new Error("Room token is required for Nextcloud Talk sends");
+  }
 
   let normalized = trimmed;
   if (normalized.startsWith("nextcloud-talk:")) {
@@ -47,7 +49,9 @@ function normalizeRoomToken(to: string): string {
     normalized = normalized.slice("room:".length).trim();
   }
 
-  if (!normalized) throw new Error("Room token is required for Nextcloud Talk sends");
+  if (!normalized) {
+    throw new Error("Room token is required for Nextcloud Talk sends");
+  }
   return normalized;
 }
 
@@ -71,8 +75,18 @@ export async function sendMessageNextcloudTalk(
     throw new Error("Message must be non-empty for Nextcloud Talk sends");
   }
 
+  const tableMode = getNextcloudTalkRuntime().channel.text.resolveMarkdownTableMode({
+    cfg,
+    channel: "nextcloud-talk",
+    accountId: account.accountId,
+  });
+  const message = getNextcloudTalkRuntime().channel.text.convertMarkdownTables(
+    text.trim(),
+    tableMode,
+  );
+
   const body: Record<string, unknown> = {
-    message: text.trim(),
+    message,
   };
   if (opts.replyTo) {
     body.replyTo = opts.replyTo;

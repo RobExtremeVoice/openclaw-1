@@ -1,6 +1,6 @@
 import type { OAuthCredentials } from "@mariozechner/pi-ai";
 
-import type { ClawdbotConfig } from "../../config/config.js";
+import type { OpenClawConfig } from "../../config/config.js";
 
 export type ApiKeyCredential = {
   type: "api_key";
@@ -12,14 +12,13 @@ export type ApiKeyCredential = {
 export type TokenCredential = {
   /**
    * Static bearer-style token (often OAuth access token / PAT).
-   * Not refreshable by clawdbot (unlike `type: "oauth"`).
+   * Not refreshable by OpenClaw (unlike `type: "oauth"`).
    */
   type: "token";
   provider: string;
   token: string;
   /** Optional expiry timestamp (ms since epoch). */
   expires?: number;
-  enterpriseUrl?: string;
   email?: string;
 };
 
@@ -66,7 +65,7 @@ export type AuthProfileStore = {
 };
 
 export type AuthProfileIdRepairResult = {
-  config: ClawdbotConfig;
+  config: OpenClawConfig;
   changes: string[];
   migrated: boolean;
   fromProfileId?: string;

@@ -1,4 +1,5 @@
 import { chunkMarkdownIR, markdownToIR, type MarkdownLinkSpan } from "../markdown/ir.js";
+import type { MarkdownTableMode } from "../config/types.base.js";
 import { renderMarkdownWithMarkers } from "../markdown/render.js";
 
 // Escape special characters for Slack mrkdwn format.
@@ -10,7 +11,9 @@ function escapeSlackMrkdwnSegment(text: string): string {
 const SLACK_ANGLE_TOKEN_RE = /<[^>\n]+>/g;
 
 function isAllowedSlackAngleToken(token: string): boolean {
-  if (!token.startsWith("<") || !token.endsWith(">")) return false;
+  if (!token.startsWith("<") || !token.endsWith(">")) {
+    return false;
+  }
   const inner = token.slice(1, -1);
   return (
     inner.startsWith("@") ||
@@ -67,13 +70,17 @@ function escapeSlackMrkdwnText(text: string): string {
 
 function buildSlackLink(link: MarkdownLinkSpan, text: string) {
   const href = link.href.trim();
-  if (!href) return null;
+  if (!href) {
+    return null;
+  }
   const label = text.slice(link.start, link.end);
   const trimmedLabel = label.trim();
   const comparableHref = href.startsWith("mailto:") ? href.slice("mailto:".length) : href;
   const useMarkup =
     trimmedLabel.length > 0 && trimmedLabel !== href && trimmedLabel !== comparableHref;
-  if (!useMarkup) return null;
+  if (!useMarkup) {
+    return null;
+  }
   const safeHref = escapeSlackMrkdwnSegment(href);
   return {
     start: link.start,
@@ -83,12 +90,20 @@ function buildSlackLink(link: MarkdownLinkSpan, text: string) {
   };
 }
 
-export function markdownToSlackMrkdwn(markdown: string): string {
+type SlackMarkdownOptions = {
+  tableMode?: MarkdownTableMode;
+};
+
+export function markdownToSlackMrkdwn(
+  markdown: string,
+  options: SlackMarkdownOptions = {},
+): string {
   const ir = markdownToIR(markdown ?? "", {
     linkify: false,
     autolink: false,
     headingStyle: "bold",
     blockquotePrefix: "> ",
+    tableMode: options.tableMode,
   });
   return renderMarkdownWithMarkers(ir, {
     styleMarkers: {
@@ -103,12 +118,17 @@ export function markdownToSlackMrkdwn(markdown: string): string {
   });
 }
 
-export function markdownToSlackMrkdwnChunks(markdown: string, limit: number): string[] {
+export function markdownToSlackMrkdwnChunks(
+  markdown: string,
+  limit: number,
+  options: SlackMarkdownOptions = {},
+): string[] {
   const ir = markdownToIR(markdown ?? "", {
     linkify: false,
     autolink: false,
     headingStyle: "bold",
     blockquotePrefix: "> ",
+    tableMode: options.tableMode,
   });
   const chunks = chunkMarkdownIR(ir, limit);
   return chunks.map((chunk) =>
